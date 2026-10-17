@@ -166,7 +166,7 @@ mod tests {
     }
 
     fn how(exe: &str, os: &str, arch: &str) -> Install {
-        update_for("0.8.0", "v0.9.0", &assets(), exe, os, arch).unwrap().how
+        update_for("0.8.1", "v0.9.0", &assets(), exe, os, arch).unwrap().how
     }
 
     fn cmd(text: &str) -> Install {
@@ -177,11 +177,11 @@ mod tests {
 
     #[test]
     fn only_newer_versions_count() {
-        assert_eq!(update_for("0.8.0", "v0.8.0", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        assert_eq!(update_for("0.8.0", "v0.7.7", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        assert_eq!(update_for("0.8.0", "garbage", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        assert_eq!(update_for("0.8.0", NO_RELEASE, &[], "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        let update = update_for("0.8.0", "v0.10.0", &assets(), "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
+        assert_eq!(update_for("0.8.1", "v0.8.1", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        assert_eq!(update_for("0.8.1", "v0.7.7", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        assert_eq!(update_for("0.8.1", "garbage", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        assert_eq!(update_for("0.8.1", NO_RELEASE, &[], "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        let update = update_for("0.8.1", "v0.10.0", &assets(), "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
         assert_eq!(update.version, "0.10.0", "numbers, not text: 10 > 8");
         assert!(version("1.2.3-beta") == Some((1, 2, 3)) && version("v2") == Some((2, 0, 0)));
     }
@@ -223,9 +223,9 @@ mod tests {
         assert_eq!(how("/usr/bin/tubevibe", "freebsd", "x86_64"), cmd(CARGO));
         // A release without the .deb: the tarball; without any file: build it.
         let only_tar = vec!["tubevibe-x86_64-linux.tar.gz".to_string()];
-        let update = update_for("0.8.0", "v0.9.0", &only_tar, "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
+        let update = update_for("0.8.1", "v0.9.0", &only_tar, "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
         assert!(matches!(update.how, Install::Command(c) if c.contains("tar xz -C /usr/bin")));
-        let update = update_for("0.8.0", "v0.9.0", &[], "/home/u/.local/bin/tubevibe", "linux", "x86_64").unwrap();
+        let update = update_for("0.8.1", "v0.9.0", &[], "/home/u/.local/bin/tubevibe", "linux", "x86_64").unwrap();
         assert_eq!(update.how, cmd(CARGO));
     }
 

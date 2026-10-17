@@ -334,8 +334,14 @@ redraw and action is logged with its timing.
 
 ## Support
 
-If tubevibe is useful to you, the **About** page (Acerca de) lists donation
-addresses. They live in [`donate.toml`](donate.toml).
+The **About** page (Acerca de) lists donation addresses; they live in
+[`donate.toml`](donate.toml).
+
+> **These addresses belong to polblancoo, the original tubetui developer:
+> donations go to him, not to the tubevibe fork maintainer (mortbrew).**
+>
+> *Estas direcciones son de polblancoo, el desarrollador original de tubetui:
+> las donaciones van para él, no para el mantenedor del fork tubevibe (mortbrew).*
 
 ## Disclaimer
 
