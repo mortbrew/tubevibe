@@ -302,8 +302,8 @@ polblancoo; this fork now carries its own name.
   it is pointed at the copy.
 - **Debug log**: `TUBEVIBE_DEBUG=/path/to/log`; `TUBETUI_DEBUG` still works.
 - **Packaging files** (`.desktop`, Windows installer script, release workflow,
-  Debian metadata) use the new name. The update check (`src/update.rs`) is
-  unchanged and still asks the original project's releases.
+  Debian metadata) use the new name. The update check (`src/update.rs`)
+  still asked the original project's releases at this point (see below).
 - **Settings line up**: values start in one column whatever the icon. Some
   emoji (🖼, 🗣, 🖱, 🎞, 🏷, 👁, ⏯, ⬆) are drawn one or two cells wide
   depending on the terminal, which pushed their row's value over; they were
@@ -313,3 +313,33 @@ polblancoo; this fork now carries its own name.
   its value. The same kind of symbol was replaced where it starts a column
   elsewhere: the progress mark in lists (▸), the downloads' progress and
   cancelled marks (⇩, ✕) and the system check's warnings (!).
+
+## Releases from this fork, version 0.8.0 (`releases`)
+
+- **Version 0.8.0.**
+- **Update check** asks this fork's releases
+  (`api.github.com/repos/mortbrew/tubevibe/releases/latest`, User-Agent
+  `tubevibe/<version>`) once a day and says *"⬆ tubevibe X available"*. No
+  release published yet (GitHub answers 404) is quietly no news, and is
+  remembered for the day like any answer. The About page's command fits how
+  it was installed:
+  - the `.deb` (`/usr/bin/tubevibe`): `curl -LO …/tubevibe_amd64.deb && sudo apt install ./tubevibe_amd64.deb`;
+  - an archive (Linux x86_64 / ARM64, macOS Apple Silicon):
+    `curl -fsSL …/tubevibe-<arch>-<os>.tar.gz | tar xz -C <folder it runs from> --strip-components=1 tubevibe/tubevibe`;
+  - Windows: the installer's link;
+  - built in a clone (`…/target/release/tubevibe`):
+    `cd <clone> && git pull && git checkout vX && cargo build --release`;
+  - `cargo install` or anything else:
+    `cargo install --locked --git https://github.com/mortbrew/tubevibe --tag vX`
+    (`cargo install tubevibe` is not suggested: it is not on crates.io).
+- **Release workflow** (`.github/workflows/release.yml`), on every `v*` tag (or
+  run by hand for an existing tag): creates the GitHub release and adds
+  `tubevibe-x86_64-linux.tar.gz`, `tubevibe-aarch64-linux.tar.gz` (new),
+  `tubevibe_amd64.deb`, `tubevibe-x86_64-windows.zip`,
+  `tubevibe-x86_64-windows-setup.exe` and `tubevibe-aarch64-macos.tar.gz`.
+  It needs no secrets. The Windows installer has its own id, so it doesn't
+  replace an installed tubetui.
+- **install.sh** installs the latest release's program into `~/.local/bin`
+  (`TUBEVIBE_BIN_DIR` to change it), or builds it with
+  `cargo install --git https://github.com/mortbrew/tubevibe` where there is no
+  release file for the machine (or with `TUBEVIBE_FROM_SOURCE=1`).

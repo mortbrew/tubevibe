@@ -14,10 +14,10 @@
 #endif
 
 [Setup]
-AppId={{8C5E2F4B-7D1A-4E3B-9A6C-2B7F0D1E5A93}
+AppId={{B0AF9F4D-AF4F-4D9F-A3F8-3620150B8170}
 AppName=tubevibe
 AppVersion={#AppVersion}
-AppPublisher=polblancoo
+AppPublisher=mortbrew
 AppPublisherURL=https://github.com/mortbrew/tubevibe
 AppSupportURL=https://github.com/mortbrew/tubevibe/issues
 DefaultDirName={autopf}\tubevibe
