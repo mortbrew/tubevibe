@@ -670,6 +670,58 @@ pub fn watch(id: &str, cookies: Option<&Path>) -> Result<Watch, YoutubeError> {
     Ok(watch)
 }
 
+/// Id of my YouTube "Watch later" playlist.
+pub const WATCH_LATER: &str = "WL";
+
+/// Whether `video_id` is in my YouTube Watch later, as the "Save to playlist"
+/// dialog of the website asks it.
+pub fn in_watch_later(cookies: &Path, video_id: &str) -> Result<bool, YoutubeError> {
+    let reply = InnerTube::new(cookies)?.call("playlist/get_add_to_playlist", json!({ "videoIds": [video_id] }))?;
+    contains_video(&reply, WATCH_LATER)
+        .ok_or_else(|| YoutubeError::Http("no Watch later in YouTube's answer (login stale?)".into()))
+}
+
+/// In a `playlist/get_add_to_playlist` answer: whether `playlist` has the
+/// video asked about (`None`: the playlist is not there).
+pub fn contains_video(reply: &Value, playlist: &str) -> Option<bool> {
+    let mut found = None;
+    walk(reply, &mut |map| {
+        if let Some(option) = map.get("playlistAddToOptionRenderer")
+            && option["playlistId"] == playlist
+            && found.is_none()
+        {
+            found = option["containsSelectedVideos"].as_str().map(|c| c != "NONE");
+        }
+    });
+    found
+}
+
+/// Adds `video_id` to my YouTube Watch later, or (`add` false) takes it out.
+pub fn edit_watch_later(cookies: &Path, video_id: &str, add: bool) -> Result<(), YoutubeError> {
+    let reply =
+        InnerTube::new(cookies)?.call("browse/edit_playlist", edit_playlist_body(WATCH_LATER, video_id, add))?;
+    edit_result(&reply).map_err(YoutubeError::Http)
+}
+
+/// The `browse/edit_playlist` request adding or removing one video. Removing
+/// by video id spares the per-entry `setVideoId` a plain removal needs.
+pub fn edit_playlist_body(playlist: &str, video_id: &str, add: bool) -> Value {
+    let action = if add {
+        json!({ "action": "ACTION_ADD_VIDEO", "addedVideoId": video_id })
+    } else {
+        json!({ "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID", "removedVideoId": video_id })
+    };
+    json!({ "playlistId": playlist, "actions": [action] })
+}
+
+/// A `browse/edit_playlist` answer: done, unless YouTube says otherwise.
+pub fn edit_result(reply: &Value) -> Result<(), String> {
+    match reply["status"].as_str() {
+        None | Some("STATUS_SUCCEEDED") => Ok(()),
+        Some(status) => Err(status.to_owned()),
+    }
+}
+
 /// Deletes one of my playlists, for good.
 pub fn delete_playlist(cookies: &Path, id: &str) -> Result<(), YoutubeError> {
     InnerTube::new(cookies)?.call("playlist/delete", json!({ "playlistId": id }))?;
@@ -1610,5 +1662,33 @@ mod tests {
         assert_eq!(compact(950), "950");
         assert_eq!(compact(12_345), "12 k");
         assert_eq!(compact(1_234_567), "1,2 M");
+    }
+
+    #[test]
+    fn save_dialog_tells_whether_watch_later_has_the_video() {
+        let option = |id: &str, contains: &str| json!({ "playlistAddToOptionRenderer": { "playlistId": id, "containsSelectedVideos": contains } });
+        let reply =
+            |options: Vec<Value>| json!({ "contents": [{ "addToPlaylistRenderer": { "playlists": options } }] });
+        assert_eq!(contains_video(&reply(vec![option("PLx", "ALL"), option("WL", "NONE")]), "WL"), Some(false));
+        assert_eq!(contains_video(&reply(vec![option("WL", "ALL")]), "WL"), Some(true));
+        assert_eq!(contains_video(&reply(vec![option("PLx", "ALL")]), "WL"), None);
+    }
+
+    #[test]
+    fn watch_later_edits_add_by_id_and_remove_by_id() {
+        assert_eq!(
+            edit_playlist_body("WL", "abc", true),
+            json!({ "playlistId": "WL", "actions": [{ "action": "ACTION_ADD_VIDEO", "addedVideoId": "abc" }] })
+        );
+        assert_eq!(
+            edit_playlist_body("WL", "abc", false),
+            json!({
+                "playlistId": "WL",
+                "actions": [{ "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID", "removedVideoId": "abc" }]
+            })
+        );
+        assert_eq!(edit_result(&json!({ "status": "STATUS_SUCCEEDED" })), Ok(()));
+        assert_eq!(edit_result(&json!({})), Ok(()));
+        assert_eq!(edit_result(&json!({ "status": "STATUS_FAILED" })), Err("STATUS_FAILED".into()));
     }
 }
