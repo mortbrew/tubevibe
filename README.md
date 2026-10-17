@@ -58,6 +58,11 @@ Every video opens in its own tab.
   (thumbnail, subscribers, views, likes, date) and **Up next**: `Tab` moves
   into it, `Enter` opens one in a new tab. Closing the video keeps the tab
   with its details and Up next; `Enter` plays it again where you left it
+- **Look before playing** (tubevibe default, `autoplay = false`): `Enter` on a
+  video opens its tab with the details and Up next but plays nothing; `Enter`
+  (or `space`) in the tab starts it, resuming where you left it. Sound only
+  (`a`) and your own files still play at once. `autoplay = true` (Settings →
+  *Enter on a video*) brings back playing straight away
 - A **progress bar** under the video (played, downloaded, rest) and its
   volume, resolution and codec on top
 - **Mouse**: click to select, double click to open, wheel to scroll (on the
@@ -188,6 +193,7 @@ removes it from your YouTube Watch later (after asking); in **Downloads** it can
 the download (or forgets a finished one). In **My videos**
 and **My music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
+In a video tab that is not playing yet (or closed), `Enter` or `space` plays it.
 While watching: `space` pause, `←→` seek, `↑↓` volume, `m` mute, `j`
 subtitles, `i` original / subtitles / dubbed, `o` language, `v` quality
 (360p–1440p), `b` codec (H.264 / VP9 / AV1 / any), `f` fullscreen, `.` `,`
@@ -235,6 +241,7 @@ language = "subtitles"   # subtitles | original | dubbed
 sub_lang = "es"          # subtitles and dubbing language
 background_audio = true  # keep listening while browsing
 sponsorblock = true      # skip sponsors, self promotion and "subscribe!" reminders
+autoplay = false         # Enter opens the video's tab; Enter again plays (true: play at once)
 
 [media]
 video_dirs = ["~/Videos"]

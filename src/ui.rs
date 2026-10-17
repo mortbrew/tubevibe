@@ -63,7 +63,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 17],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 29],
+    pub settings: [&'static str; 30],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -95,8 +95,8 @@ impl Icons {
 const EMOJI: Icons = Icons {
     sections: ["🏠", "🎯", "🧭", "📺", "🕒", "📜", "📚", "⭐", "💡", "🔎", "📡", "📼", "🎵", "📥", "🔧", "💜", "🚪"],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "🗣", "😀", "🖼", "🖱", "🎞", "✨", "🌊", "💥", "📼",
-        "🎵", "📁", "🏷", "🩺", "👁", "🩳", "🔔", "⭐", "⬆", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "⏯", "🗣", "😀", "🖼", "🖱", "🎞", "✨", "🌊", "💥",
+        "📼", "🎵", "📁", "🏷", "🩺", "👁", "🩳", "🔔", "⭐", "⬆", "📝",
     ],
     logo: "▶️",
     tab: "🎬",
@@ -136,9 +136,9 @@ const NERD: Icons = Icons {
     ],
     settings: [
         "\u{f007}", "\u{f15b}", "\u{f021}", "\u{f08b}", "\u{f1ab}", "\u{f075}", "\u{f1de}", "\u{f008}", "\u{f025}",
-        "\u{f051}", "\u{f0ac}", "\u{f118}", "\u{f03e}", "\u{f245}", "\u{f04b}", "\u{f0d0}", "\u{f0e7}", "\u{f0a1}",
-        "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f10b}", "\u{f0f3}", "\u{f005}",
-        "\u{f01b}", "\u{f044}",
+        "\u{f051}", "\u{f144}", "\u{f0ac}", "\u{f118}", "\u{f03e}", "\u{f245}", "\u{f04b}", "\u{f0d0}", "\u{f0e7}",
+        "\u{f0a1}", "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f10b}", "\u{f0f3}",
+        "\u{f005}", "\u{f01b}", "\u{f044}",
     ],
     logo: "\u{f16a}",
     tab: "\u{f144}",
@@ -159,8 +159,8 @@ const NERD: Icons = Icons {
 const UNICODE: Icons = Icons {
     sections: ["⌂", "◈", "◎", "▣", "◷", "↺", "≣", "★", "✧", "⌕", "⌁", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "⚑", "☻", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫", "▭", "#",
-        "✚", "◉", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫", "▭",
+        "#", "✚", "◉", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -397,6 +397,15 @@ pub fn draw(frame: &mut Frame, state: &State, view: &View) {
             ]);
             let body = if state.details_shown(tab) {
                 Paragraph::default() // the details, drawn below
+            } else if tab.ended {
+                // Not started yet (autoplay off): nothing plays until Enter.
+                Paragraph::new(vec![
+                    Line::from(""),
+                    Line::from(playback.title.clone()).fg(FG).bold(),
+                    Line::from(""),
+                    Line::from(lang.pick("▶ Enter lo reproduce", "▶ Enter plays it")).fg(YELLOW),
+                ])
+                .alignment(Alignment::Center)
             } else if playback.audio_only {
                 let songs = playback.queue.len();
                 Paragraph::new(vec![
@@ -533,7 +542,11 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         lines.push(Line::from(note).fg(TEAL));
     }
     if tab.ended {
-        let note = lang.pick("⏹ Video cerrado · Enter lo vuelve a ver", "⏹ Video closed · Enter plays it again");
+        let note = if tab.started {
+            lang.pick("⏹ Video cerrado · Enter lo vuelve a ver", "⏹ Video closed · Enter plays it again")
+        } else {
+            lang.pick("▶ Enter lo reproduce", "▶ Enter plays it")
+        };
         lines.push(Line::from(note).fg(YELLOW));
     }
     if let Some(elapsed) = view.opening {
@@ -1393,7 +1406,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             key("Tab", "volver al video", "back to the video"),
             key("l", "ver después", "watch later"),
             key("c", "canal", "channel"),
-            if state.active_tab().is_some_and(|t| t.ended) {
+            if state.active_tab().is_some_and(|t| t.ended && !t.started) {
+                key("espacio", "reproducir", "play")
+            } else if state.active_tab().is_some_and(|t| t.ended) {
                 key("espacio", "volver a verlo", "play it again")
             } else {
                 key("espacio", "pausa", "pause")
@@ -1405,7 +1420,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
         if state.related_shown().is_some() {
             keys.insert(0, key("Tab", "A continuación", "Up next"));
         }
-        if state.active_tab().is_some_and(|t| t.ended) {
+        if state.active_tab().is_some_and(|t| t.ended && !t.started) {
+            keys.insert(0, key("Enter", "reproducir", "play"));
+        } else if state.active_tab().is_some_and(|t| t.ended) {
             keys.insert(0, key("Enter", "volver a verlo", "play it again"));
         }
         keys.extend(rows(keymap::ON_VIDEO));
@@ -1950,6 +1967,7 @@ mod tests {
     fn state() -> State {
         let mut config = Config::default();
         config.ui.icons = IconSet::Unicode;
+        config.player.autoplay = true;
         State::new(config, Vec::new())
     }
 
@@ -2118,6 +2136,22 @@ mod tests {
     fn window_mode_tab_explains_where_video_is() {
         assert!(render_with(&with_tab(), &View { embedded: false, ..VIEW }).contains("ventana de mpv"));
         assert!(!render(&with_tab()).contains("ventana de mpv"));
+    }
+
+    #[test]
+    fn an_idle_tab_says_enter_plays_it() {
+        // Embedded (kitty) or overlay: no details pane, just the hint.
+        let mut s = with_items(Items::Videos(vec![video("a")]));
+        s.config.player.autoplay = false;
+        s.update(Action::Enter);
+        let screen = render(&s);
+        assert!(screen.contains("▶ Enter lo reproduce"), "{screen}");
+        assert!(!screen.contains("volver a verlo"), "{screen}");
+        assert!(hints(&s).iter().any(|(k, d)| k == "Enter" && *d == "reproducir"));
+        // Video in its own window: the details say it.
+        s.video_window = true;
+        let screen = render_with(&s, &View { embedded: false, ..VIEW });
+        assert!(screen.contains("▶ Enter lo reproduce") && !screen.contains("Video cerrado"), "{screen}");
     }
 
     #[test]

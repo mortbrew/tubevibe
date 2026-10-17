@@ -69,6 +69,9 @@ pub struct PlayerConfig {
     pub background_audio: bool,
     /// Skip sponsors, self promotion and "subscribe!" reminders (SponsorBlock).
     pub sponsorblock: bool,
+    /// Enter on a YouTube video starts playing it in its new tab; off, the
+    /// tab opens with its details and a second Enter plays it.
+    pub autoplay: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -314,6 +317,8 @@ impl Default for PlayerConfig {
             sub_lang: "es".into(),
             background_audio: true,
             sponsorblock: true,
+            // tubevibe: open the tab first, Enter plays (upstream plays at once).
+            autoplay: false,
         }
     }
 }
