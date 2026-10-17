@@ -550,14 +550,20 @@ fn wrap_text(text: &str, width: u16) -> Vec<String> {
 
 /// A blank line, "✦ AI summary" and the summary wrapped at `width`, in at
 /// most `rows` lines: the last one ends in "…" when it does not all fit.
-fn summary_lines(text: &str, width: u16, rows: usize, lang: Lang) -> Vec<Line<'static>> {
+/// Without one (`None`), the heading says so.
+fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang) -> Vec<Line<'static>> {
     if rows < 2 {
         return Vec::new();
     }
+    let note = match text {
+        Some(_) => lang.pick(" · la IA puede equivocarse", " · AI can make mistakes"),
+        None => lang.pick(" · no disponible para este video", " · not available for this video"),
+    };
     let heading = Line::from(vec![
         Span::styled(lang.pick("✦ Resumen IA", "✦ AI summary"), Style::new().fg(BLUE).bold()),
-        Span::styled(lang.pick(" · la IA puede equivocarse", " · AI can make mistakes"), MUTED),
+        Span::styled(note, MUTED),
     ]);
+    let Some(text) = text else { return vec![Line::from(""), heading] };
     let mut wrapped = wrap_text(text, width);
     let room = rows - 2;
     if wrapped.len() > room {
@@ -634,7 +640,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     }
     // The AI summary right under the last detail; the card grows to hold it.
     let mut card_rows = 0;
-    if let Some(summary) = state.tab_summary(tab) {
+    if let Some(summary) = state.tab_summary_lookup(tab) {
         let used = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width);
         let most = inner.height.saturating_sub(UP_NEXT_MIN_ROWS + 1);
         let room = usize::from(most).saturating_sub(used);
@@ -1195,8 +1201,8 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
         lines.push(Line::from(format!("{} {}", icons.subscribed, lang.pick("Suscripto", "Subscribed"))).fg(GREEN));
     }
     lines.extend(rating_line(state, icons, &v.id));
-    // The AI summary in all the room left, cut with "…" if longer.
-    if let Some(summary) = state.summary(&v.id) {
+    // The AI summary in all the room left, cut with "…" if longer (or that it has none).
+    if let Some(summary) = state.summary_lookup(v) {
         let used =
             Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(text_area.width);
         let room = usize::from(text_area.height).saturating_sub(used);
@@ -2575,7 +2581,7 @@ mod tests {
 
     #[test]
     fn summary_lines_fit_their_rows_and_mark_the_cut() {
-        let lines = |rows| summary_lines("uno dos tres cuatro cinco seis", 9, rows, Lang::En);
+        let lines = |rows| summary_lines(Some("uno dos tres cuatro cinco seis"), 9, rows, Lang::En);
         let text = |l: &[Line]| l.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert!(lines(0).is_empty());
         assert!(lines(1).is_empty(), "no room for more than the blank line");
@@ -2583,6 +2589,9 @@ mod tests {
         assert_eq!(text(&lines(4))[2..], ["uno dos", "tres…"]);
         assert_eq!(text(&lines(4))[0], "", "a blank line above the heading");
         assert!(text(&lines(4))[1].starts_with("✦ AI summary"));
+        let none = summary_lines(None, 40, 9, Lang::En);
+        assert_eq!(text(&none), ["", "✦ AI summary · not available for this video"]);
+        assert!(summary_lines(None, 40, 1, Lang::En).is_empty());
     }
 
     /// The row above `(x, y)` is empty there and the one above it is not:
@@ -2626,12 +2635,33 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (x, y) = find(&screen, "title r2  1:00");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        // Without one: nothing extra, Up next where it always was.
+        // Without one: the heading says so, Up next right below.
         let (plain, plain_screen) = details_tab(None);
-        assert!(!plain_screen.contains("✦"), "{plain_screen}");
+        let (hx, hy) = find(&plain_screen, "✦ Resumen IA · no disponible para este video");
+        assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
+        assert!(blank_above(&plain_screen, hx, hy), "{plain_screen}");
         let (x, y2) = find(&plain_screen, "title r2  1:00");
         assert!(y2 < y, "Up next moves up without a summary");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
+    }
+
+    #[test]
+    fn video_tab_says_nothing_of_the_summary_while_loading_nor_for_live_videos() {
+        let mut s = with_items(Items::Videos(vec![video("a")]));
+        s.config.player.autoplay = false;
+        s.video_window = true;
+        s.update(Action::Enter);
+        let view = View { embedded: false, ..VIEW };
+        assert!(!render_with(&s, &view).contains("✦"), "watch page not here yet");
+        let mut s = with_items(Items::Videos(vec![Video { live: Live::Now, ..video("l") }]));
+        s.video_window = true;
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        s.update(Action::Watched(tab, Ok(Watch { related: vec![video("r1")], ..Watch::default() })));
+        let screen = render_with(&s, &view);
+        assert!(!screen.contains("✦"), "live: never asked: {screen}");
+        let (x, y) = find(&screen, "title r1  1:00");
+        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
     }
 
     #[test]
@@ -2659,9 +2689,22 @@ mod tests {
         let shown = screen.lines().filter(|l| l.contains(" w")).count();
         assert!(shown > 5, "not capped at 5 lines: {shown}\n{screen}");
         assert!(screen.contains('…') && !screen.contains("w400"), "cut at the bottom: {screen}");
-        // Another video without one: nothing extra.
-        s.update(Action::Summarized("b".into(), Ok(None)));
+        // Not asked yet: nothing.
         s.update(Action::Down);
+        assert!(!render(&s).contains("✦"));
+        // Asked, it has none (or it could not be had): said so.
+        for result in [Ok(None), Err("falló".to_owned())] {
+            s.update(Action::Summarized("b".into(), result));
+            let screen = render(&s);
+            let (x, y) = find(&screen, "✦ Resumen IA · no disponible para este video");
+            assert!(blank_above(&screen, x, y), "{screen}");
+        }
+    }
+
+    #[test]
+    fn preview_of_a_live_video_says_nothing_of_the_summary() {
+        let mut s = with_items(Items::Videos(vec![Video { live: Live::Now, ..video("l") }]));
+        s.summaries.insert("l".into(), None);
         assert!(!render(&s).contains("✦"));
     }
 
