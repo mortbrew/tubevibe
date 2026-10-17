@@ -114,3 +114,17 @@ earlier version of this branch did; it was taken out whole).
   (`tests/fixtures/next_summary.json`).
 - Each preview summary costs one watch-page request (~400 KB) per video
   looked at.
+
+## "No AI summary" note (`summary-unavailable`)
+
+- When YouTube was asked and the video has **no AI summary**, the video tab
+  and the preview pane now say so, in the same place and style as a summary
+  (one blank line above, blue bold heading, muted note):
+  *"✦ AI summary · not available for this video"*
+  (*"✦ Resumen IA · no disponible para este video"*). It is one line;
+  *Up next* sits just below it and clicks on its rows still line up.
+- A lookup that **failed** (network, YouTube error) shows the same note, to
+  keep it simple; it is not asked again during the session.
+- Nothing is shown **while it is being asked** (before the tab's watch page
+  arrives, or before the preview's 800 ms rest and request finish), nor for
+  **live and upcoming videos**, which are never asked.

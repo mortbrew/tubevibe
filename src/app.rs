@@ -2280,6 +2280,25 @@ impl State {
         self.summaries.get(id).and_then(|s| s.as_deref())
     }
 
+    /// What is known of a video's AI summary: `None` while not asked yet,
+    /// `Some(None)` once asked and it has none (or it could not be had).
+    /// Live and upcoming videos are never asked: always `None`.
+    pub fn summary_lookup(&self, video: &Video) -> Option<Option<&str>> {
+        if video.live != crate::domain::Live::No {
+            return None;
+        }
+        self.summaries.get(&video.id).map(|s| s.as_deref())
+    }
+
+    /// The same for a tab's video: known once its watch page arrived.
+    pub fn tab_summary_lookup<'a>(&'a self, tab: &'a Tab) -> Option<Option<&'a str>> {
+        let video = tab.playback.video.as_ref().filter(|v| v.live == crate::domain::Live::No)?;
+        match &tab.watch {
+            Some(_) => Some(self.tab_summary(tab)),
+            None => self.summary_lookup(video),
+        }
+    }
+
     /// The AI summary of a tab's video.
     pub fn tab_summary<'a>(&'a self, tab: &'a Tab) -> Option<&'a str> {
         let watch = tab.watch.as_ref().and_then(|w| w.summary.as_deref());
