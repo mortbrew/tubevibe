@@ -57,15 +57,29 @@ pub enum Section {
     MiMusica,
     /// Running and finished downloads.
     Descargas,
+    /// The app's own list of videos to watch later, kept on this computer
+    /// (`later.json`), apart from YouTube's Watch Later.
+    Guardados,
     Configuracion,
     AcercaDe,
     Salir,
 }
 
+/// Name of the app's own (local) watch-later list, Spanish and English:
+/// change it here and it changes everywhere.
+pub const SAVED_FOR_LATER: (&str, &str) = ("Ver después", "Watch Later");
+
+/// The two Watch Later lists as messages name them, so they never get mixed up:
+/// YouTube's (online, `w`) and the app's own local one (`l`).
+pub const YOUTUBE_LATER: (&str, &str) = ("Ver después de YouTube", "YouTube Watch Later");
+pub const LOCAL_LATER: (&str, &str) = ("Ver después de tubevibe", "tubevibe Watch Later");
+
 /// Menu groups, drawn with a header each.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     YouTube,
+    /// Lists the app makes itself, not pages of YouTube.
+    Tubevibe,
     Local,
     App,
 }
@@ -74,6 +88,7 @@ impl Group {
     pub fn label(self, lang: Lang) -> &'static str {
         match self {
             Self::YouTube => "YOUTUBE",
+            Self::Tubevibe => "TUBEVIBE",
             Self::Local => lang.pick("EN TU EQUIPO", "ON THIS COMPUTER"),
             Self::App => "",
         }
@@ -81,18 +96,19 @@ impl Group {
 }
 
 impl Section {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Inicio,
-        Self::ParaVos,
-        Self::Descubrir,
         Self::Suscripciones,
         Self::VerDespues,
         Self::Historial,
         Self::MisListas,
         Self::Canales,
-        Self::DescubrirCanales,
         Self::BuscarVideos,
         Self::BuscarCanales,
+        Self::ParaVos,
+        Self::Descubrir,
+        Self::DescubrirCanales,
+        Self::Guardados,
         Self::MisVideos,
         Self::MiMusica,
         Self::Descargas,
@@ -103,6 +119,7 @@ impl Section {
 
     pub fn group(self) -> Group {
         match self {
+            Self::ParaVos | Self::Descubrir | Self::DescubrirCanales | Self::Guardados => Group::Tubevibe,
             Self::MisVideos | Self::MiMusica | Self::Descargas => Group::Local,
             Self::Configuracion | Self::AcercaDe | Self::Salir => Group::App,
             _ => Group::YouTube,
@@ -125,6 +142,7 @@ impl Section {
             Self::MisVideos => ("Mis videos", "My Videos"),
             Self::MiMusica => ("Mi música", "My Music"),
             Self::Descargas => ("Descargas", "Downloads"),
+            Self::Guardados => SAVED_FOR_LATER,
             Self::Configuracion => ("Configuración", "Settings"),
             Self::AcercaDe => ("Acerca de", "About"),
             Self::Salir => ("Salir", "Quit"),
@@ -235,9 +253,10 @@ impl Setting {
             Self::HideWatched => {
                 ("Ocultar los vistos en Inicio (v los muestra)", "Hide watched videos in feeds (v shows them)")
             }
-            Self::HideLater => {
-                ("Ocultar en Mis recomendados los de Ver después", "Hide Watch Later videos in My Recommendations")
-            }
+            Self::HideLater => (
+                "Ocultar en Mis recomendados los de Ver después de YouTube",
+                "Hide YouTube Watch Later videos in My Recommendations",
+            ),
             Self::HideShorts => ("Ocultar los Shorts", "Hide Shorts"),
             Self::NotifyNew => ("Avisar de videos nuevos de mis canales", "Tell me about new videos from my channels"),
             Self::FavoritesFirst => ("Primero mis canales más vistos", "My most watched channels first"),
@@ -312,6 +331,8 @@ pub enum ListKind {
     Later,
     /// "Historial", kept in sync with `State::history`.
     History,
+    /// The app's local watch-later list, kept in sync with `State::saved`.
+    Saved,
     /// "Descargas", kept in sync with `State::downloads`.
     Downloads,
     /// A channel's videos; `/` searches inside it.
@@ -381,6 +402,8 @@ pub enum Confirm {
     },
     /// A video to take out of my YouTube Watch Later.
     RemoveFromLater(Video),
+    /// A video to take out of the local tubevibe Watch Later.
+    RemoveFromSaved(Video),
     /// A video to take out of one of my YouTube playlists.
     RemoveFromPlaylist {
         playlist: PlaylistRef,
@@ -452,6 +475,8 @@ pub enum Action {
     /// `l`: add the selected video to my YouTube Watch Later (if it is
     /// there already, just say so).
     AddLater,
+    /// Put the selected video in the local tubevibe Watch Later (`l`).
+    SaveForLater,
     /// `Ctrl+y x` in Watch Later or a YouTube playlist: take the selected
     /// video out of it, after asking.
     RemoveFromList,
@@ -676,6 +701,8 @@ pub enum Effect {
         video: Video,
     },
     SaveHistory(Vec<HistoryEntry>),
+    /// Write the local tubevibe Watch Later (`later.json`).
+    SaveSaved(Vec<Video>),
     SaveSubs(HashSet<String>),
     /// Read my channels again with the current login (no browser).
     LoadSubs,
@@ -876,6 +903,8 @@ pub struct State {
     pub later_complete: bool,
     /// Watch Later being read in the background, for My Recommendations.
     later_request: Option<u64>,
+    /// The local tubevibe Watch Later (`later.json`), newest first.
+    pub saved: Vec<Video>,
     /// "Historial", newest first.
     pub history: Vec<HistoryEntry>,
     /// What I watched elsewhere (YouTube's history), newest first: shown in
@@ -935,7 +964,8 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(config: Config, later: Vec<Video>) -> Self {
+    /// `saved`: the local tubevibe Watch Later, as read from `later.json`.
+    pub fn new(config: Config, saved: Vec<Video>) -> Self {
         Self {
             sidebar: config.ui.sidebar,
             show_watched: !config.ui.hide_watched,
@@ -950,7 +980,8 @@ impl State {
             query: String::new(),
             stack: Vec::new(),
             loading: None,
-            later,
+            later: Vec::new(),
+            saved,
             later_complete: false,
             later_request: None,
             history: Vec::new(),
@@ -1332,6 +1363,18 @@ impl State {
                 }
             }
             Action::AddLater => return self.add_to_later(),
+            Action::SaveForLater => return self.save_for_later(),
+            Action::Trash if self.active == 0 && self.saved_list_video().is_some() => {
+                self.status = self
+                    .tr(
+                        "Ctrl+y x lo quita de esta lista (pide confirmar)",
+                        "Ctrl+y x removes it from this list (asks first)",
+                    )
+                    .into();
+            }
+            Action::CloseTab | Action::RemoveFromList if self.active == 0 && self.saved_list_video().is_some() => {
+                self.confirm = self.saved_list_video().cloned().map(Confirm::RemoveFromSaved);
+            }
             Action::LaterChecked { video, result } => return self.later_checked(video, result),
             Action::LaterEdited { video, add, result } => self.later_edited(video, add, result),
             Action::ToggleSubscription => return self.toggle_subscription(),
@@ -1349,8 +1392,9 @@ impl State {
                     self.status = format!("🗑 {} {title}…", self.tr("Borrando la lista", "Deleting the playlist"));
                     return vec![Effect::DeletePlaylist { id, title }];
                 }
+                Some(Confirm::RemoveFromSaved(video)) => return self.unsave(&video),
                 Some(Confirm::RemoveFromLater(video)) => {
-                    let removing = self.tr("Quitando de Ver después:", "Removing from Watch Later:");
+                    let removing = self.tr("Quitando de Ver después de YouTube:", "Removing from YouTube Watch Later:");
                     self.status = format!("🗑 {removing} {}…", video.title);
                     return vec![Effect::EditLater { video, add: false }];
                 }
@@ -1757,6 +1801,16 @@ impl State {
             }
             Section::VerDespues => {
                 self.load(Source::Playlist(WATCH_LATER.into()), title, Filter::None, false, ListKind::Later)
+            }
+            Section::Guardados => {
+                let items = Items::Videos(self.saved.clone());
+                self.status = if self.saved.is_empty() {
+                    self.tr("Todavía no guardaste nada acá", "Nothing saved here yet").into()
+                } else {
+                    format!("{title} · {}", self.saved.len())
+                };
+                self.show(Listing::new(title, items, ListKind::Saved));
+                Vec::new()
             }
             Section::Historial => {
                 let items = Items::Videos(self.history_entries().into_iter().map(|e| e.video).collect());
@@ -2271,7 +2325,7 @@ impl State {
                 notes.push(format!("{} {note}", listing.hidden_watched));
             }
             if listing.hidden_later > 0 {
-                let note = self.tr("de Ver después ocultos", "in Watch Later hidden");
+                let note = self.tr("de Ver después de YouTube ocultos", "in YouTube Watch Later hidden");
                 notes.push(format!("{} {note}", listing.hidden_later));
             }
             if !notes.is_empty() {
@@ -2564,7 +2618,7 @@ impl State {
                 if listing.kind == ListKind::History {
                     items.push(item("Quitar del historial", "Remove from history", "x", Action::Trash));
                 }
-                if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_)) {
+                if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_) | ListKind::Saved) {
                     items.push(item(
                         "Quitar de esta lista (pide confirmar)",
                         "Remove from this list (asks first)",
@@ -2615,9 +2669,14 @@ impl State {
         let Some(video) = self.selected_video() else { return Vec::new() };
         let mut items = vec![
             if self.later.iter().any(|v| v.id == video.id) {
-                item("Ya está en Ver después", "Already in Watch Later", "l", Action::AddLater)
+                item("Ya está en Ver después de YouTube", "Already in YouTube Watch Later", "w", Action::AddLater)
             } else {
-                item("Guardar en Ver después", "Save to Watch Later", "l", Action::AddLater)
+                item("Guardar en Ver después de YouTube", "Save to YouTube Watch Later", "w", Action::AddLater)
+            },
+            if self.saved.iter().any(|v| v.id == video.id) {
+                item("Ya está en Ver después de tubevibe", "Already in tubevibe Watch Later", "l", Action::SaveForLater)
+            } else {
+                item("Guardar en Ver después de tubevibe", "Save to tubevibe Watch Later", "l", Action::SaveForLater)
             },
             item("Descargar", "Download", "d", Action::Download),
             if self.ratings.get(&video.id) == Some(&Rating::Like) {
@@ -2662,20 +2721,24 @@ impl State {
         } else if self.later_complete {
             self.add_later(video)
         } else {
-            let checking = self.tr("Mirando Ver después:", "Checking Watch Later:");
+            let checking = self.tr("Mirando Ver después de YouTube:", "Checking YouTube Watch Later:");
             self.status = format!("🕒 {checking} {}…", video.title);
             vec![Effect::CheckLater(video)]
         }
     }
 
     fn add_later(&mut self, video: Video) -> Vec<Effect> {
-        let saving = self.tr("Guardando en Ver después:", "Saving to Watch Later:");
+        let saving = self.tr("Guardando en Ver después de YouTube:", "Saving to YouTube Watch Later:");
         self.status = format!("🕒 {saving} {}…", video.title);
         vec![Effect::EditLater { video, add: true }]
     }
 
     fn already_in_later(&mut self, video: &Video) {
-        self.status = format!("🕒 {}: {}", self.tr("Ya está en Ver después", "Already in Watch Later"), video.title);
+        self.status = format!(
+            "🕒 {}: {}",
+            self.tr("Ya está en Ver después de YouTube", "Already in YouTube Watch Later"),
+            video.title
+        );
     }
 
     /// The selected video of a YouTube list I can take videos out of
@@ -2686,6 +2749,48 @@ impl State {
             return None;
         }
         Some((&listing.kind, self.selected_video()?))
+    }
+
+    /// The selected video of the local tubevibe Watch Later, when it is shown.
+    fn saved_list_video(&self) -> Option<&Video> {
+        self.listing().filter(|l| self.focus == Focus::List && l.kind == ListKind::Saved)?;
+        self.selected_video()
+    }
+
+    /// The local list as messages name it.
+    fn saved_name(&self) -> &'static str {
+        self.tr(LOCAL_LATER.0, LOCAL_LATER.1)
+    }
+
+    /// The selected video goes first in the local tubevibe Watch Later (once).
+    fn save_for_later(&mut self) -> Vec<Effect> {
+        let Some(video) = self.selected_video().cloned() else { return Vec::new() };
+        let name = self.saved_name();
+        if self.saved.iter().any(|v| v.id == video.id) {
+            self.status = format!("🔖 {} {name}: {}", self.tr("Ya está en", "Already in"), video.title);
+            return Vec::new();
+        }
+        self.status = format!("🔖 {} {name}: {}", self.tr("Guardado en", "Saved to"), video.title);
+        self.saved.insert(0, video);
+        self.sync_saved();
+        vec![Effect::SaveSaved(self.saved.clone())]
+    }
+
+    /// Takes a video out of the local tubevibe Watch Later.
+    fn unsave(&mut self, video: &Video) -> Vec<Effect> {
+        self.saved.retain(|v| v.id != video.id);
+        let name = self.saved_name();
+        self.status = format!("🗑 {} {name}: {}", self.tr("Quitado de", "Removed from"), video.title);
+        self.sync_saved();
+        vec![Effect::SaveSaved(self.saved.clone())]
+    }
+
+    /// The shown tubevibe Watch Later lists follow `saved`.
+    fn sync_saved(&mut self) {
+        for listing in self.stack.iter_mut().filter(|l| l.kind == ListKind::Saved) {
+            listing.selected = listing.selected.min(self.saved.len().saturating_sub(1));
+            listing.items = Items::Videos(self.saved.clone());
+        }
     }
 
     /// `Ctrl+y x` in Watch Later or a playlist: take the selected video out, after asking.
@@ -2750,7 +2855,7 @@ impl State {
             }
             Ok(false) => self.add_later(video),
             Err(error) => {
-                let failed = self.tr("No se pudo mirar Ver después", "Could not check Watch Later");
+                let failed = self.tr("No se pudo mirar Ver después de YouTube", "Could not check YouTube Watch Later");
                 self.status = format!("❌ {failed}: {error}");
                 Vec::new()
             }
@@ -2761,20 +2866,27 @@ impl State {
         if let Err(error) = result {
             let title = &video.title;
             self.status = match (self.lang(), add) {
-                (Lang::Es, true) => format!("❌ No se pudo guardar {title} en Ver después: {error}"),
-                (Lang::Es, false) => format!("❌ No se pudo quitar {title} de Ver después: {error}"),
-                (Lang::En, true) => format!("❌ Could not save {title} to Watch Later: {error}"),
-                (Lang::En, false) => format!("❌ Could not remove {title} from Watch Later: {error}"),
+                (Lang::Es, true) => format!("❌ No se pudo guardar {title} en Ver después de YouTube: {error}"),
+                (Lang::Es, false) => format!("❌ No se pudo quitar {title} de Ver después de YouTube: {error}"),
+                (Lang::En, true) => format!("❌ Could not save {title} to YouTube Watch Later: {error}"),
+                (Lang::En, false) => format!("❌ Could not remove {title} from YouTube Watch Later: {error}"),
             };
             return;
         }
         self.later.retain(|v| v.id != video.id);
         if add {
-            self.status = format!("🕒 {}: {}", self.tr("Guardado en Ver después", "Saved to Watch Later"), video.title);
+            self.status = format!(
+                "🕒 {}: {}",
+                self.tr("Guardado en Ver después de YouTube", "Saved to YouTube Watch Later"),
+                video.title
+            );
             self.later.insert(0, video);
         } else {
-            self.status =
-                format!("🗑 {}: {}", self.tr("Quitado de Ver después", "Removed from Watch Later"), video.title);
+            self.status = format!(
+                "🗑 {}: {}",
+                self.tr("Quitado de Ver después de YouTube", "Removed from YouTube Watch Later"),
+                video.title
+            );
         }
         // A playlist: shown whole, Shorts included.
         let shown = self.later.clone();
@@ -4518,7 +4630,13 @@ mod tests {
     fn english_menu_is_in_title_case() {
         for section in Section::ALL {
             let label = section.label(Lang::En);
-            assert!(label.split(' ').all(|w| w.starts_with(|c: char| c.is_uppercase())), "{label}");
+            // Short joining words ("for", "of"…) may stay lowercase.
+            let small = ["for", "of", "in", "to", "and", "the", "a"];
+            assert!(
+                label.split(' ').all(|w| small.contains(&w) || w.starts_with(|c: char| c.is_uppercase())),
+                "{label}"
+            );
+            assert!(label.starts_with(|c: char| c.is_uppercase()), "{label}");
         }
         assert_eq!(Section::Inicio.label(Lang::En), "My Recommendations");
         assert_eq!(Section::Inicio.label(Lang::Es), "Mis recomendados", "Spanish stays as it was");
@@ -4935,7 +5053,9 @@ mod tests {
         s.update(Action::LaterEdited { video: video("b"), add: true, result: Ok(()) });
         s.update(Action::ContextMenu { x: 0, y: 0, row: true });
         assert_eq!(s.context.as_ref().unwrap().items[1].label, "Solo audio");
-        assert!(s.context.as_ref().unwrap().items.iter().any(|i| i.label == "Ya está en Ver después"));
+        let labels: Vec<&str> = s.context.as_ref().unwrap().items.iter().map(|i| i.label).collect();
+        assert!(labels.contains(&"Ya está en Ver después de YouTube"), "{labels:?}");
+        assert!(labels.contains(&"Guardar en Ver después de tubevibe"), "both lists, named apart: {labels:?}");
         s.update(Action::Back);
         assert!(s.context.is_none() && s.listing().is_some(), "Esc closes only the menu");
 
@@ -5002,14 +5122,55 @@ mod tests {
     }
 
     #[test]
+    fn saved_for_later_is_the_local_list() {
+        let mut s = State::new(Config::default(), vec![video("a"), video("b")]);
+        assert!(s.later.is_empty(), "YouTube's Watch Later is apart");
+        assert!(open(&mut s, Section::Guardados).is_empty(), "local: nothing to fetch");
+        let listing = s.listing().unwrap();
+        assert_eq!((listing.kind.clone(), listing.title.as_str()), (ListKind::Saved, "Ver después"));
+        assert_eq!(listing.items, Items::Videos(vec![video("a"), video("b")]));
+        // Plain x only says how; Ctrl+y x asks, then takes it out and saves the file.
+        s.update(Action::Down);
+        s.update(Action::Trash);
+        assert!(s.confirm.is_none() && s.status.contains("Ctrl+y x"), "{}", s.status);
+        s.update(Action::CloseTab);
+        assert_eq!(s.confirm, Some(Confirm::RemoveFromSaved(video("b"))));
+        assert_eq!(s.update(Action::Confirm(true)), [Effect::SaveSaved(vec![video("a")])]);
+        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
+        assert_eq!(s.listing().unwrap().selected, 0);
+        // Saving (no key yet) puts it first, once.
+        let mut s = with_videos(&["x", "a"]);
+        assert_eq!(s.update(Action::SaveForLater), [Effect::SaveSaved(vec![video("x")])]);
+        assert_eq!(s.status, "🔖 Guardado en Ver después de tubevibe: title x");
+        assert!(s.update(Action::SaveForLater).is_empty());
+        assert_eq!(s.status, "🔖 Ya está en Ver después de tubevibe: title x");
+        s.config.ui.lang = Some(Lang::En);
+        s.update(Action::SaveForLater);
+        assert_eq!(s.status, "🔖 Already in tubevibe Watch Later: title x");
+        // The menu calls it Watch Later, under TUBEVIBE; messages always say which one.
+        assert_eq!(Section::Guardados.label(Lang::En), "Watch Later");
+        assert_eq!(Section::Guardados.label(Lang::En), SAVED_FOR_LATER.1);
+    }
+
+    #[test]
     fn menu_is_grouped() {
         let groups: Vec<Group> = Section::ALL.iter().map(|s| s.group()).collect();
         assert_eq!(groups[0], Group::YouTube);
         assert_eq!(Section::MisVideos.group(), Group::Local);
         assert_eq!(Section::MiMusica.group(), Group::Local);
+        assert_eq!(Section::ParaVos.group(), Group::Tubevibe);
+        assert_eq!(Section::Guardados.group(), Group::Tubevibe);
         assert_eq!(groups.last(), Some(&Group::App));
         // Groups are contiguous, so each header appears once.
-        assert!(groups.windows(2).filter(|w| w[0] != w[1]).count() == 2);
+        assert!(groups.windows(2).filter(|w| w[0] != w[1]).count() == 3);
+        let order: Vec<Group> = groups.iter().fold(Vec::new(), |mut seen, g| {
+            if seen.last() != Some(g) {
+                seen.push(*g);
+            }
+            seen
+        });
+        assert_eq!(order, [Group::YouTube, Group::Tubevibe, Group::Local, Group::App], "TUBEVIBE between the two");
+        assert_eq!(Group::Tubevibe.label(Lang::En), "TUBEVIBE");
     }
 
     #[test]

@@ -10,7 +10,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Tabs};
 
 use crate::app::{
-    Confirm, ContextMenu, Focus, Group, ListKind, Listing, Prompt, Section, Setting, State, Tab, language_label,
+    Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, Prompt, Section, Setting, State, Tab,
+    YOUTUBE_LATER, language_label,
 };
 use crate::config::{IconSet, donations};
 use crate::doctor::{Manager, Tool};
@@ -54,14 +55,14 @@ const TEAL: Color = Color::Rgb(115, 218, 202);
 const PURPLE: Color = Color::Rgb(157, 124, 216);
 
 /// One colour per menu entry, in `Section::ALL` order.
-const SECTION_COLORS: [Color; 17] = [
-    BLUE, ORANGE, CYAN, RED, YELLOW, TEAL, GREEN, ORANGE, MAGENTA, GREEN, TEAL, PURPLE, MAGENTA, CYAN, BLUE, PURPLE,
-    MUTED,
+const SECTION_COLORS: [Color; 18] = [
+    BLUE, RED, YELLOW, TEAL, GREEN, ORANGE, GREEN, TEAL, ORANGE, CYAN, MAGENTA, YELLOW, PURPLE, MAGENTA, CYAN, BLUE,
+    PURPLE, MUTED,
 ];
 
 pub struct Icons {
     /// In `Section::ALL` order.
-    pub sections: [&'static str; 17],
+    pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
     pub settings: [&'static str; 31],
     pub logo: &'static str,
@@ -93,7 +94,9 @@ impl Icons {
 }
 
 const EMOJI: Icons = Icons {
-    sections: ["🏠", "🎯", "🧭", "📺", "🕒", "📜", "📚", "⭐", "💡", "🔎", "📡", "📼", "🎵", "📥", "🔧", "💜", "🚪"],
+    sections: [
+        "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
+    ],
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "⏯", "🗣", "😀", "🖼", "🖱", "🎞", "✨", "🌊", "💥",
         "📼", "🎵", "📁", "🏷", "🩺", "👁", "🕒", "🩳", "🔔", "⭐", "⬆", "📝",
@@ -117,16 +120,17 @@ const EMOJI: Icons = Icons {
 const NERD: Icons = Icons {
     sections: [
         "\u{f015}",
-        "\u{f140}",
-        "\u{f14e}",
         "\u{f05c6}",
         "\u{f017}",
         "\u{f1da}",
         "\u{f0cb}",
         "\u{f005}",
-        "\u{f0eb}",
         "\u{f002}",
         "\u{f2ce}",
+        "\u{f140}",
+        "\u{f14e}",
+        "\u{f0eb}",
+        "\u{f02e}",
         "\u{f03d}",
         "\u{f001}",
         "\u{f019}",
@@ -157,7 +161,7 @@ const NERD: Icons = Icons {
 };
 
 const UNICODE: Icons = Icons {
-    sections: ["⌂", "◈", "◎", "▣", "◷", "↺", "≣", "★", "✧", "⌕", "⌁", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
+    sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
         "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫", "▭",
         "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
@@ -618,9 +622,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
             lines.push(Line::from(row.join(" · ")).fg(MUTED));
         }
     }
-    if state.later.iter().any(|l| l.id == video.id) {
-        lines.push(Line::from(format!("{} {}", icons.later, lang.pick("En Ver después", "In Watch Later"))).fg(CYAN));
-    }
+    lines.extend(later_lines(state, icons, &video.id, lang));
     lines.extend(rating_line(state, icons, &video.id));
     lines.extend(size_line(state, video));
     if tab.playback.audio_only {
@@ -860,6 +862,20 @@ fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         Span::styled("tui ", Style::new().fg(FG).bold()),
     ]);
     frame.render_widget(List::new(items).block(panel(title, MUTED)), area);
+}
+
+/// "In YouTube Watch Later" / "In tubevibe Watch Later" lines of a video's preview.
+fn later_lines(state: &State, icons: &Icons, id: &str, lang: Lang) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    if state.later.iter().any(|l| l.id == id) {
+        let label = lang.pick("En Ver después de YouTube", "In YouTube Watch Later");
+        lines.push(Line::from(format!("{} {label}", icons.later)).fg(CYAN));
+    }
+    if state.saved.iter().any(|v| v.id == id) {
+        let label = lang.pick("En Ver después de tubevibe", "In tubevibe Watch Later");
+        lines.push(Line::from(format!("{} {label}", icons.section(Section::Guardados))).fg(CYAN));
+    }
+    lines
 }
 
 fn tab_titles(state: &State, icons: &Icons) -> Vec<String> {
@@ -1102,7 +1118,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
                     }
                 };
                 if listing.hidden_later > 0 {
-                    let label = state.lang().pick("de Ver después ocultos", "in Watch Later hidden");
+                    let label = state.lang().pick("de Ver después de YouTube ocultos", "in YouTube Watch Later hidden");
                     note.push_str(&format!(" · {} {} {label}", icons.later, listing.hidden_later));
                 }
                 format!(" {} · {}{note} ", breadcrumb.join(" › "), videos.len())
@@ -1197,9 +1213,7 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
     if let Some(at) = state.resume_at(&v.id) {
         lines.push(Line::from(format!("⏯ {} {}", lang.pick("Sigue desde", "Resumes at"), clock(at))).fg(YELLOW));
     }
-    if state.later.iter().any(|l| l.id == v.id) {
-        lines.push(Line::from(format!("{} {}", icons.later, lang.pick("En Ver después", "In Watch Later"))).fg(CYAN));
-    }
+    lines.extend(later_lines(state, icons, &v.id, lang));
     if v.channel_id.as_ref().is_some_and(|c| state.subs.contains(c)) {
         lines.push(Line::from(format!("{} {}", icons.subscribed, lang.pick("Suscripto", "Subscribed"))).fg(GREEN));
     }
@@ -1490,7 +1504,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Confirm::Trash(_) => key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash"),
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
-            Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } => {
+            Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } | Confirm::RemoveFromSaved(_) => {
                 key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
             }
         };
@@ -1517,7 +1531,8 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             key("Enter", "ver", "play"),
             key("↑ ↓", "elegir", "choose"),
             key("Tab", "volver al video", "back to the video"),
-            key("l", "ver después", "Watch Later"),
+            key("w", "ver después YouTube", "YouTube Watch Later"),
+            key("l", "ver después tubevibe", "tubevibe Watch Later"),
             key("c", "canal", "channel"),
             if state.active_tab().is_some_and(|t| t.ended && !t.started) {
                 key("espacio", "reproducir", "play")
@@ -1552,7 +1567,8 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 } else {
                     key("v", "mostrar vistos", "show watched")
                 },
-                key("l", "ver después", "Watch Later"),
+                key("w", "ver después YouTube", "YouTube Watch Later"),
+                key("l", "ver después tubevibe", "tubevibe Watch Later"),
                 key("a", "solo audio", "sound only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -1561,16 +1577,26 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 key("/", "buscar", "search"),
                 back,
             ],
+            Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
+                key("Enter", "ver", "play"),
+                key("Ctrl+y x", "quitar de la lista", "remove from the list"),
+                key("w", "ver después YouTube", "YouTube Watch Later"),
+                key("a", "solo audio", "sound only"),
+                key("c", "canal", "channel"),
+                back,
+            ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
                 key("Enter", "ver (sigue donde lo dejaste)", "play (resumes where you left)"),
                 key("x", "quitar del historial", "remove from history"),
-                key("l", "ver después", "Watch Later"),
+                key("w", "ver después YouTube", "YouTube Watch Later"),
+                key("l", "ver después tubevibe", "tubevibe Watch Later"),
                 key("c", "canal", "channel"),
                 back,
             ],
             Some(Items::Videos(_)) => vec![
                 key("Enter", "ver", "play"),
-                key("l", "ver después", "Watch Later"),
+                key("w", "ver después YouTube", "YouTube Watch Later"),
+                key("l", "ver después tubevibe", "tubevibe Watch Later"),
                 key("a", "solo audio", "sound only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -1749,9 +1775,18 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             Span::raw(lang.pick("?", " from YouTube?")),
         ]),
         Confirm::RemoveFromLater(video) => Line::from(vec![
-            Span::raw(lang.pick("¿Quitar de Ver después ", "Remove ")),
+            Span::raw(lang.pick("¿Quitar ", "Remove ")),
             Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
-            Span::raw(lang.pick("?", " from Watch Later?")),
+            Span::raw(lang.pick(" de ", " from ")),
+            Span::styled(lang.pick(YOUTUBE_LATER.0, YOUTUBE_LATER.1), Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
+        ]),
+        Confirm::RemoveFromSaved(video) => Line::from(vec![
+            Span::raw(lang.pick("¿Quitar ", "Remove ")),
+            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" de ", " from ")),
+            Span::styled(lang.pick(LOCAL_LATER.0, LOCAL_LATER.1), Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
         ]),
         Confirm::RemoveFromPlaylist { playlist, video } => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
@@ -2310,7 +2345,7 @@ mod tests {
         let list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(
             hint_keys(&list),
-            ["Enter", "v", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+y + ?"],
+            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+y + ?"],
             "Inicio: a feed"
         );
         let mut search = state();
@@ -2341,7 +2376,8 @@ mod tests {
     #[test]
     fn hint_bar_shows_keys_with_descriptions() {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
-        assert!(screen.contains("l ver después"), "{screen}");
+        assert!(screen.contains("w ver después YouTube"), "{screen}");
+        assert!(screen.contains("l ver después tubevibe"), "{screen}");
         assert!(screen.contains("Ctrl+y + ? todos los atajos"));
     }
 

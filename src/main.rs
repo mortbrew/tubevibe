@@ -164,6 +164,8 @@ struct Runtime {
     /// The same for the AI summary of the video looked at: one at a time.
     summary_wait: Option<(String, Instant)>,
     summarizing: bool,
+    /// `later.json` could not be read: it is left alone, never written.
+    saved_unreadable: bool,
     /// The yt-dlp process of each running download, to cancel it.
     downloads: HashMap<u64, Arc<Mutex<Option<std::process::Child>>>>,
     /// Players of closed tabs, quitting in the background.
@@ -202,9 +204,14 @@ impl Drop for Runtime {
 
 impl Runtime {
     fn new(config: Config, config_path: Option<PathBuf>, paths: Paths) -> Self {
-        // "Ver después" is YouTube's Watch Later now: the old local list
-        // (`later.json`) is left on disk untouched, neither read nor written.
-        let mut state = State::new(config, Vec::new());
+        // "Ver después" is YouTube's Watch Later; the app's old local list
+        // (`later.json`) is the TUBEVIBE "Watch Later". A file that can't be read is
+        // never written over.
+        let (saved, saved_error) = match store::load_later(&paths.later) {
+            Ok(saved) => (saved, None),
+            Err(e) => (Vec::new(), Some(format!("{}: {e}", paths.later.display()))),
+        };
+        let mut state = State::new(config, saved);
         state.update(Action::SubsLoaded(store::load_subs(&paths.subs)));
         state.update(Action::HistoryLoaded(store::load_watched(&paths.watched)));
         state.history = store::load_history(&paths.history);
@@ -242,7 +249,11 @@ impl Runtime {
             grid: None,
             grid_checked: None,
             away: false,
+            saved_unreadable: saved_error.is_some(),
         };
+        if let Some(error) = &saved_error {
+            dbg(format!("later.json: {error}"));
+        }
         runtime.start_session(false);
         runtime.send(Action::AskBrowser);
         runtime.background(|| {
@@ -707,6 +718,15 @@ impl Runtime {
                 self.send(Action::CookiesImported(import_cookies(&expand_home(&path), &dest, self.state.lang())));
             }
             Effect::EditConfig => self.edit_config(terminal)?,
+            Effect::SaveSaved(videos) => {
+                if self.saved_unreadable {
+                    let note = self.tr("no se guarda: no se pudo leer", "not saved: could not read");
+                    self.send(Action::Status(format!("⚠ {note} {}", self.paths.later.display())));
+                } else if let Err(e) = store::save_later(&self.paths.later, &videos) {
+                    let failed = self.tr("No se pudo guardar", "Could not save");
+                    self.send(Action::Status(format!("❌ {failed} {}: {e}", self.paths.later.display())));
+                }
+            }
             Effect::SaveHistory(history) => {
                 if let Err(e) = store::save_history(&self.paths.history, &history) {
                     dbg(format!("history.json: {e}"));

@@ -243,3 +243,41 @@ the same recommendations you see on youtube.com or the phone app.
   shows them)" (it always applied to every feed, not only Home).
 - Limit: if your Watch Later is longer than one page (60 videos by default,
   `[search] results`), only the first page is used for hiding.
+
+## TUBEVIBE menu section and the local Watch Later list (`tubevibe-section`)
+
+- **New left-menu header "TUBEVIBE"**, between YOUTUBE and ON THIS
+  COMPUTER, for lists the app makes itself rather than YouTube pages.
+- **From What I Watched** moved there.
+- **The local Watch Later** (first called *Saved for Later*) is back there: the app's original local watch-later
+  list (`later.json` in the data folder, e.g.
+  `~/.local/share/tubetui/later.json`), which the Watch Later change hid
+  when the menu entry became YouTube's Watch Later. Whatever was in that
+  file shows again. It is separate from YouTube's Watch Later.
+  - Inside it `Ctrl+y` `x` (or right-click → *Remove from this list*) takes
+    the selected video out after asking; plain `x` only says how.
+  - `l` adds to it (see below; `w` is now YouTube's Watch Later).
+  - The menu name is one constant, `SAVED_FOR_LATER` in `src/app.rs`;
+    messages use `LOCAL_LATER` / `YOUTUBE_LATER` next to it.
+  - If `later.json` can't be read it is left alone and never written over.
+
+### Toby's choices: one TUBEVIBE section, two Watch Laters, `w` and `l`
+
+- **TUBEVIBE now holds**: From What I Watched, Discover, Discover Channels,
+  Watch Later (all made by the app, not YouTube pages). YOUTUBE keeps My
+  Recommendations, Subscriptions, Watch Later, History, My Playlists, My
+  Channels, Search Videos, Search Channels.
+- **The local list is called "Watch Later"** in the menu (Spanish *Ver
+  después*), under TUBEVIBE; the header tells it from YouTube's. Messages
+  and questions always say which one: *tubevibe Watch Later* (local) or
+  *YouTube Watch Later* (online), e.g. "🔖 Saved to tubevibe Watch Later:
+  …", "🕒 Saved to YouTube Watch Later: …", "Remove … from tubevibe Watch
+  Later?". The video preview shows "In YouTube Watch Later" and/or "In
+  tubevibe Watch Later".
+- **Keys**: `w` adds to YouTube's Watch Later (what `l` did, "Already in
+  YouTube Watch Later" when it is there); `l` adds to tubevibe's local
+  Watch Later ("Already in tubevibe Watch Later" when it is there). The
+  key hints, help screen (`Ctrl+y ?`), right-click menu and README say so.
+- The setting now reads *Hide YouTube Watch Later videos in My
+  Recommendations* (only YouTube's list is hidden there).
+
