@@ -65,7 +65,7 @@ impl Video {
     }
 }
 
-/// A video I opened in tubetui, for "Historial" and to resume it.
+/// A video I opened in tubevibe, for "Historial" and to resume it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub video: Video,

@@ -209,7 +209,7 @@ earlier version of this branch did; it was taken out whole).
 - **Errors say why**: when YouTube refuses, the status line shows its reason
   (e.g. *"http status: 400 · Request contains an invalid argument."*), and
   reads *"Could not remove <video> from <playlist>: …"*.
-- **Debug log**: with `TUBETUI_DEBUG=/path/to/log`, each removal logs how it
+- **Debug log**: with `TUBEVIBE_DEBUG=/path/to/log` (or the old `TUBETUI_DEBUG`), each removal logs how it
   was sent and the request, every failed YouTube request logs what was sent
   and YouTube's full answer, and a playlist page with no remove commands is
   logged (so the shape of Saved Shorts can be seen if it still fails).
@@ -251,7 +251,7 @@ the same recommendations you see on youtube.com or the phone app.
 - **From What I Watched** moved there.
 - **The local Watch Later** (first called *Saved for Later*) is back there: the app's original local watch-later
   list (`later.json` in the data folder, e.g.
-  `~/.local/share/tubetui/later.json`), which the Watch Later change hid
+  `~/.local/share/tubevibe/later.json`; tubetui's copy is brought over on the first run), which the Watch Later change hid
   when the menu entry became YouTube's Watch Later. Whatever was in that
   file shows again. It is separate from YouTube's Watch Later.
   - Inside it `Ctrl+y` `x` (or right-click → *Remove from this list*) takes
@@ -281,3 +281,35 @@ the same recommendations you see on youtube.com or the phone app.
 - The setting now reads *Hide YouTube Watch Later videos in My
   Recommendations* (only YouTube's list is hidden there).
 
+
+## The app is called tubevibe, and Settings line up (`rebrand`)
+
+tubevibe is based on [tubetui](https://github.com/polblancoo/tubetui) by
+polblancoo; this fork now carries its own name.
+
+- **The command is `tubevibe`** (Cargo package and binary):
+  `cargo build --release` makes `./target/release/tubevibe`. The menu title,
+  the startup logo, the welcome and About screens and the terminal window
+  title say *tubevibe* ("tube" and "vibe" in two colors). About says
+  *Based on tubetui by polblancoo* with the original's link.
+- **Folders**: `~/.config/tubevibe`, `~/.local/share/tubevibe` and
+  `~/.cache/tubevibe` (or the platform equivalents). On the first run, when
+  a tubevibe folder doesn't exist and the tubetui one does, the tubetui one is
+  **copied** over (settings, login copies of the cookies, history, watched,
+  downloads, the local Watch Later). The tubetui folders are never changed or
+  removed; once a tubevibe folder exists nothing is copied again. If
+  `session.cookies_file` in the settings pointed inside the old cache folder,
+  it is pointed at the copy.
+- **Debug log**: `TUBEVIBE_DEBUG=/path/to/log`; `TUBETUI_DEBUG` still works.
+- **Packaging files** (`.desktop`, Windows installer script, release workflow,
+  Debian metadata) use the new name. The update check (`src/update.rs`) is
+  unchanged and still asks the original project's releases.
+- **Settings line up**: values start in one column whatever the icon. Some
+  emoji (🖼, 🗣, 🖱, 🎞, 🏷, 👁, ⏯, ⬆) are drawn one or two cells wide
+  depending on the terminal, which pushed their row's value over; they were
+  replaced by emoji every terminal draws two cells wide (📷, 🔤, 🐭, 🎦, 📌, 👀,
+  👆, 🆙). The label column is as wide as the longest label plus a gap, so
+  *Hide YouTube Watch Later videos in My Recommendations* no longer runs into
+  its value. The same kind of symbol was replaced where it starts a column
+  elsewhere: the progress mark in lists (▸), the downloads' progress and
+  cancelled marks (⇩, ✕) and the system check's warnings (!).

@@ -1,4 +1,9 @@
-# tubetui
+# tubevibe
+
+> **Based on [tubetui](https://github.com/polblancoo/tubetui) by polblancoo.**
+> tubevibe is a fork with its own additions (see
+> [CHANGES-TUBEVIBE.md](CHANGES-TUBEVIBE.md)); the original's website is
+> https://polblancoo.github.io/tubetui/.
 
 YouTube — and your own videos and music — in the terminal, written in Rust
 with [ratatui](https://ratatui.rs). Videos play through [mpv](https://mpv.io):
@@ -8,12 +13,10 @@ Every video opens in its own tab.
 
 > Interface in English and Spanish (`Ctrl+y l` switches). Early but usable:
 > feedback welcome.
->
-> **Website and downloads:** https://polblancoo.github.io/tubetui/
 
-![Search results with the preview panel and the selected video's thumbnail](https://raw.githubusercontent.com/polblancoo/tubetui/main/docs/preview.png)
+![Search results with the preview panel and the selected video's thumbnail](docs/preview.png)
 
-![A YouTube video playing inside tubetui, in kitty](https://raw.githubusercontent.com/polblancoo/tubetui/main/docs/video.png)
+![A YouTube video playing inside tubevibe, in kitty](docs/video.png)
 
 ## What it does
 
@@ -31,7 +34,7 @@ Every video opens in its own tab.
   Inside one, `Ctrl+y` `x` takes the selected video out of it on YouTube
   (after asking; in *Liked videos* that takes the like back)
 - **Historial**: everything you watched, newest first, with the day you
-  watched it: in tubetui and, logged in, on YouTube too (the browser, the
+  watched it: in tubevibe and, logged in, on YouTube too (the browser, the
   phone), more pages coming as you scroll down (`x` removes one from the list)
 - **Resume where you left off**: closing a video remembers the second; opening
   it again starts there, and lists show how far you got. Finished videos (or
@@ -88,7 +91,7 @@ Every video opens in its own tab.
 - **Descubrir canales / Discover Channels**: YouTube's home feed without your
   channels (picks from channels you don't follow yet)
 - **Ver después / Watch Later** (under TUBEVIBE): the app's own watch-later
-  list, kept only on this computer (`~/.local/share/tubetui/later.json`),
+  list, kept only on this computer (`~/.local/share/tubevibe/later.json`),
   apart from YouTube's Watch Later. `l` adds the selected video to it (if it
   is already there, it just says so); inside it `Ctrl+y` `x` removes the
   selected video (after asking). Messages call it *tubevibe Watch Later*
@@ -140,7 +143,7 @@ Every video opens in its own tab.
 - For embedded video: the [kitty](https://sw.kovidgoyal.net/kitty/) terminal
 - Optional: `wmctrl` (X11) for window fullscreen
 
-tubetui checks this itself: when something needed is missing (or yt-dlp is
+tubevibe checks this itself: when something needed is missing (or yt-dlp is
 too old for YouTube) it opens a **system check** that lists what is there,
 what is not and the command that installs it with your package manager
 (apt, pacman, dnf, zypper, Homebrew or winget). It is also in Settings →
@@ -148,30 +151,25 @@ what is not and the command that installs it with your package manager
 
 ## Install
 
-Ready-made packages for every release are on the
-[website](https://polblancoo.github.io/tubetui/#descargas) and in
-[GitHub Releases](https://github.com/polblancoo/tubetui/releases/latest):
-
-- **Windows**: `tubetui-x86_64-windows-setup.exe` (installs for your user,
-  adds tubetui to the PATH and the Start menu, and can install mpv (the official
-  build, `mpv-player.mpv-CI.MSVC`) and yt-dlp with winget), or the portable `.zip`
-- **Debian / Ubuntu / Mint**: `sudo apt install ./tubetui_amd64.deb`
-- **Other Linux**: `tubetui-x86_64-linux.tar.gz`
-- **macOS (Apple Silicon)**: `tubetui-aarch64-macos.tar.gz`
-
-Or from source on Linux / macOS with the installer, which checks the C
-compiler, Rust (1.88 or newer), mpv and yt-dlp first and prints the commands
-for whatever is missing:
+tubevibe has no ready-made packages yet; build it from source, anywhere
+Rust 1.88+ runs (Linux / macOS / Windows):
 
 ```sh
-curl -sSf https://raw.githubusercontent.com/polblancoo/tubetui/main/install.sh | sh
+git clone https://github.com/mortbrew/tubevibe
+cd tubevibe
+cargo build --release
+./target/release/tubevibe
 ```
 
-or by hand, anywhere Rust 1.88+ runs:
+or install the `tubevibe` command into `~/.cargo/bin`:
 
 ```sh
-cargo install tubetui
+cargo install --path .
 ```
+
+(The original tubetui has packages for Windows, Debian/Ubuntu, other Linux
+and macOS on its [website](https://polblancoo.github.io/tubetui/#descargas);
+those install tubetui, not this fork.)
 
 > `feature edition2024 is required` means your Rust is too old — distro
 > packages often are (Ubuntu 22.04 ships 1.75). Install a current one with
@@ -235,15 +233,20 @@ without them, or on Wayland, it falls back to a separate window.
 ## Terminal multiplexers (tmux, zellij, herdr)
 
 Inside a multiplexer, keys and images travel through it, which adds lag and
-can break embedded video. When tubetui detects one (`TMUX`, `ZELLIJ`,
+can break embedded video. When tubevibe detects one (`TMUX`, `ZELLIJ`,
 `HERDR_ENV`), **automatic mode opens videos in an mpv window** and fullscreen
 does not resize the outer terminal window. You can still force embedded video
-(`mode = "embedded"`), but for the smoothest experience run tubetui directly in
+(`mode = "embedded"`), but for the smoothest experience run tubevibe directly in
 kitty.
 
 ## Configuration
 
-`~/.config/tubetui/config.toml` (or the platform equivalent). Every key is
+`~/.config/tubevibe/config.toml` (or the platform equivalent; settings,
+history and lists live in `~/.config/tubevibe`, `~/.local/share/tubevibe` and
+`~/.cache/tubevibe`). The first time tubevibe runs, if those folders don't
+exist yet and tubetui's do (`~/.config/tubetui` and so on), it copies them
+over, so your settings, login, history and lists come along; the tubetui
+folders are left untouched. Every key is
 optional; everything can also be changed from the app (⚙ Configuración).
 
 ```toml
@@ -270,7 +273,7 @@ icons = "emoji"          # emoji | nerd | unicode
 lang = "en"              # en | es (unset: the system language)
 thumbnails = true        # thumbnail in the preview panel (kitty)
 mouse = true             # clicks and wheel; hold Shift to select text
-splash = true            # the tubetui logo for a moment when it opens (any key skips it)
+splash = true            # the tubevibe logo for a moment when it opens (any key skips it)
 check_updates = true     # once a day, tell me about new versions and how to install them here
 hide_shorts = true       # leave Shorts out of every list
 hide_later = true        # leave my YouTube Watch Later videos out of My Recommendations
@@ -294,19 +297,20 @@ against ytfzf and youtube-tui.
 
 If the app closes unexpectedly (for example when launched from a window
 manager shortcut, whose terminal closes with it), the error is kept in
-`~/.cache/tubetui/crash.log`.
+`~/.cache/tubevibe/crash.log`.
 
-To diagnose lag, run with `TUBETUI_DEBUG=/tmp/tubetui.log tubetui`: every key,
+To diagnose lag, run with `TUBEVIBE_DEBUG=/tmp/tubevibe.log tubevibe`
+(the old `TUBETUI_DEBUG` works too): every key,
 redraw and action is logged with its timing.
 
 ## Support
 
-If tubetui is useful to you, the **About** page (Acerca de) lists donation
+If tubevibe is useful to you, the **About** page (Acerca de) lists donation
 addresses. They live in [`donate.toml`](donate.toml).
 
 ## Disclaimer
 
-tubetui talks to YouTube's unofficial internal API and uses your browser
+tubevibe talks to YouTube's unofficial internal API and uses your browser
 session. That may go against YouTube's Terms of Service; use it at your own
 risk. Cookies give access to your account: never share them.
 

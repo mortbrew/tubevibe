@@ -244,7 +244,7 @@ pub fn mpv_args(launch: &Launch, geometry: Option<Geometry>, ipc: &str) -> Vec<S
 }
 
 /// X11 instance name of overlay windows, to tell them apart.
-const OVERLAY_NAME: &str = "tubetui-overlay";
+const OVERLAY_NAME: &str = "tubevibe-overlay";
 
 /// Where the terminal's cell grid starts on the screen, from its X11 window
 /// (`$WINDOWID`): the grid is centered in the window, so the left margin
@@ -741,7 +741,7 @@ fn observe(ipc_path: &str, observed: &Observed) {
 
 fn ipc_path() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let name = format!("tubetui-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+    let name = format!("tubevibe-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
     if cfg!(windows) {
         format!(r"\\.\pipe\{name}")
     } else {

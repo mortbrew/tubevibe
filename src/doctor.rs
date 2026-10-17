@@ -1,4 +1,4 @@
-//! What tubetui needs from the system (mpv, yt-dlp…), whether it is there,
+//! What tubevibe needs from the system (mpv, yt-dlp…), whether it is there,
 //! and the command that installs it with this system's package manager.
 
 use std::path::PathBuf;
