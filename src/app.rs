@@ -1692,7 +1692,7 @@ impl State {
                 self.status = hint.into();
                 Vec::new()
             }
-            Section::Inicio => self.load_feed(Source::Recommended, title, Filter::Mine),
+            Section::Inicio => self.load_feed(Source::Recommended, title, Filter::None),
             Section::Descubrir => self.discover(),
             Section::ParaVos => self.up_next(title),
             Section::DescubrirCanales => self.load_feed(Source::Recommended, title, Filter::NotMine),
@@ -3723,7 +3723,7 @@ mod tests {
     }
 
     #[test]
-    fn my_recommendations_keep_only_my_channels() {
+    fn my_recommendations_show_the_whole_home_feed() {
         let mut s = state();
         assert!(open(&mut s, Section::Inicio).is_empty());
         assert!(s.status.contains("Sin sesión"), "{}", s.status);
@@ -3733,33 +3733,10 @@ mod tests {
             [Effect::Load { id, source: Source::Recommended, .. }, ..] => *id,
             other => panic!("{other:?}"),
         };
+        // Like YouTube's own home page: my channels and everyone else's.
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
-        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
+        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a"), video("b")]));
         assert_eq!(s.listing().unwrap().title, "Mis recomendados");
-    }
-
-    #[test]
-    fn my_recommendations_read_my_channels_again_when_none_match() {
-        let mut s = state();
-        s.config.session.browser = "brave".into();
-        s.update(Action::SubsLoaded(HashSet::from(["UCold".to_string()])));
-        let id = match open(&mut s, Section::Inicio).as_slice() {
-            [Effect::Load { id, .. }, ..] => *id,
-            other => panic!("{other:?}"),
-        };
-        let feed = Items::Videos(vec![video("a"), video("b")]);
-        assert_eq!(s.update(Action::Loaded(id, Ok(feed))), [Effect::LoadSubs], "an old copy of my channels");
-        assert!(s.status.contains("Releyendo"), "{}", s.status);
-        let subs = HashSet::from(["UCb".to_string()]);
-        s.update(Action::SessionReady { cookies: None, subs: Ok(subs) });
-        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("b")]));
-        // Only once: still none of mine shows an empty list.
-        let id = match open(&mut s, Section::Inicio).as_slice() {
-            [Effect::Load { id, .. }, ..] => *id,
-            other => panic!("{other:?}"),
-        };
-        assert!(s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a")])))).is_empty());
-        assert!(s.listing().unwrap().items.is_empty());
     }
 
     #[test]

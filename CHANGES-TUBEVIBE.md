@@ -192,3 +192,8 @@ earlier version of this branch did; it was taken out whole).
   channel*) added by hand in the shape YouTube is known to send.
 - The subscribed set saved from an earlier run (with the topic channels)
   is replaced the next time the channels are read.
+## My recommendations shows the whole YouTube home feed
+
+The original app kept only videos from channels you subscribe to, so with few
+subscriptions the list came up empty. It now shows YouTube's home feed as is,
+the same recommendations you see on youtube.com or the phone app.
