@@ -161,6 +161,8 @@ pub struct UiConfig {
     /// Inicio, Descubrir and Suscripciones leave out the videos I watched
     /// (`v` shows them for a while).
     pub hide_watched: bool,
+    /// My Recommendations leaves out the videos in my YouTube Watch Later.
+    pub hide_later: bool,
     /// Feeds, searches and channels leave out YouTube Shorts.
     pub hide_shorts: bool,
     /// While the app is open, tell when my channels publish something new.
@@ -335,6 +337,7 @@ impl Default for UiConfig {
             splash: true,
             check_updates: true,
             hide_watched: true,
+            hide_later: true,
             hide_shorts: true,
             notify_new: true,
             favorites_first: true,
@@ -431,6 +434,9 @@ mod tests {
         assert_eq!(c.effects, EffectsConfig { startup: true, pages: true, dialogs: true });
         assert_eq!(c.search.results, 60);
         assert_eq!(c.download.dir, "");
+        assert!(c.ui.hide_later, "Watch Later is left out of My Recommendations");
+        let off = Config::from_toml("[ui]\nhide_later = false\n").unwrap();
+        assert!(!off.ui.hide_later);
     }
 
     #[test]

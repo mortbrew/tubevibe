@@ -74,8 +74,8 @@ pub const IN_LISTS: &[(&str, Text)] = &[
     ("Esc  ←  h", Text::new("volver", "back")),
     ("Tab", Text::new("ir al menú", "go to the menu")),
     ("/", Text::new("buscar (dentro de un canal: en ese canal)", "search (inside a channel: in that channel)")),
-    ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched videos (Home…)")),
-    ("espacio", Text::new("marcar varios (Mis videos, Mi música)", "mark several (My videos, My music)")),
+    ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched videos (My Recommendations…)")),
+    ("espacio", Text::new("marcar varios (Mis videos, Mi música)", "mark several (My Videos, My Music)")),
     (
         "x  Supr",
         Text::new("a la papelera (pide s) · Historial: quitarlo", "to the trash (asks y) · History: remove it"),
