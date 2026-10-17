@@ -2715,8 +2715,10 @@ impl State {
             })
             .unwrap_or_else(|| playlist.clone());
         if let Err(error) = result {
-            let failed = self.tr("No se pudo quitar de", "Could not remove from");
-            self.status = format!("❌ {failed} {name} {}: {error}", video.title);
+            self.status = match self.lang() {
+                Lang::Es => format!("❌ No se pudo quitar {} de {name}: {error}", video.title),
+                Lang::En => format!("❌ Could not remove {} from {name}: {error}", video.title),
+            };
             return;
         }
         self.drop_from_playlist(&playlist, &video.id);
@@ -2757,12 +2759,13 @@ impl State {
 
     fn later_edited(&mut self, video: Video, add: bool, result: Result<(), String>) {
         if let Err(error) = result {
-            let failed = if add {
-                self.tr("No se pudo guardar en Ver después", "Could not save to Watch Later")
-            } else {
-                self.tr("No se pudo quitar de Ver después", "Could not remove from Watch Later")
+            let title = &video.title;
+            self.status = match (self.lang(), add) {
+                (Lang::Es, true) => format!("❌ No se pudo guardar {title} en Ver después: {error}"),
+                (Lang::Es, false) => format!("❌ No se pudo quitar {title} de Ver después: {error}"),
+                (Lang::En, true) => format!("❌ Could not save {title} to Watch Later: {error}"),
+                (Lang::En, false) => format!("❌ Could not remove {title} from Watch Later: {error}"),
             };
-            self.status = format!("❌ {failed} {}: {error}", video.title);
             return;
         }
         self.later.retain(|v| v.id != video.id);
@@ -4382,7 +4385,18 @@ mod tests {
             result: Err("STATUS_FAILED".into()),
         });
         assert_eq!(s.listing().unwrap().items.len(), 2);
-        assert!(s.status.starts_with("❌") && s.status.contains("Mine"), "{}", s.status);
+        assert_eq!(s.status, "❌ No se pudo quitar title b de Mine: STATUS_FAILED");
+        s.config.ui.lang = Some(Lang::En);
+        s.update(Action::PlaylistEdited {
+            playlist: "PLx".into(),
+            video: video("b"),
+            result: Err("YouTube: http status: 400 · Request contains an invalid argument.".into()),
+        });
+        assert_eq!(
+            s.status,
+            "❌ Could not remove title b from Mine: YouTube: http status: 400 · Request contains an invalid argument."
+        );
+        s.config.ui.lang = Some(Lang::Es);
         s.update(Action::PlaylistEdited { playlist: "PLx".into(), video: video("b"), result: Ok(()) });
         assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
         assert_eq!(s.listing().unwrap().selected, 0);

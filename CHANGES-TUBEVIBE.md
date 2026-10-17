@@ -192,6 +192,28 @@ earlier version of this branch did; it was taken out whole).
   channel*) added by hand in the shape YouTube is known to send.
 - The subscribed set saved from an earlier run (with the topic channels)
   is replaced the next time the channels are read.
+
+### Fix: removing from Saved Shorts failed with "http status 400"
+
+- **What most likely happened** (not yet confirmed on a live account): `Ctrl+y` `x` in *Saved Shorts* answered
+  *"Could not remove from Saved Shorts <video>: YouTube: http status 400"*.
+  The app could not find the entry's `setVideoId` on that playlist's page
+  (it only looked in two shapes of row, and Shorts come in others), so it
+  fell back to removing by video id, which YouTube only takes for Watch
+  Later: 400 is YouTube refusing the request.
+- **Now** the app sends exactly what YouTube's own *Remove from …* menu on
+  the playlist page sends (the entry's `playlistEditEndpoint`, with its
+  playlist id, `setVideoId` and any extra `params`), found in classic rows,
+  newer lockups and Shorts rows. Removing by video id is only the last
+  resort.
+- **Errors say why**: when YouTube refuses, the status line shows its reason
+  (e.g. *"http status: 400 · Request contains an invalid argument."*), and
+  reads *"Could not remove <video> from <playlist>: …"*.
+- **Debug log**: with `TUBETUI_DEBUG=/path/to/log`, each removal logs how it
+  was sent and the request, every failed YouTube request logs what was sent
+  and YouTube's full answer, and a playlist page with no remove commands is
+  logged (so the shape of Saved Shorts can be seen if it still fails).
+
 ## My Recommendations shows the whole YouTube home feed
 
 The original app kept only videos from channels you subscribe to, so with few
