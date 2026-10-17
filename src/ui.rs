@@ -674,7 +674,7 @@ fn progress_line(info: &Info, segments: &[Segment], width: u16) -> Option<Line<'
 }
 
 fn panel<'a>(title: impl Into<Line<'a>>, color: Color) -> Block<'a> {
-    Block::bordered().border_type(BorderType::Rounded).border_style(Style::new().fg(color)).title(title)
+    Block::bordered().border_type(BorderType::Plain).border_style(Style::new().fg(color)).title(title)
 }
 
 /// The menu's lines, each with what a click on it does.
@@ -1592,7 +1592,7 @@ fn draw_help_section(frame: &mut Frame, title: &str, rows: &[(String, &'static s
         })
         .collect();
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(BorderType::Plain)
         .border_style(Style::new().fg(LINE))
         .title(Line::from(format!(" {title} ")).fg(BLUE).bold());
     frame.render_widget(Paragraph::new(lines).block(block), area);
