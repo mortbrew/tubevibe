@@ -1,13 +1,13 @@
-; Windows installer for tubetui (Inno Setup 6). Built by the release workflow:
-;   iscc /DAppVersion=0.5.0 /DExe=path\to\tubetui.exe /DOutDir=dist packaging\windows\tubetui.iss
-; Installs for the current user only (no administrator), adds tubetui to the
+; Windows installer for tubevibe (Inno Setup 6). Built by the release workflow:
+;   iscc /DAppVersion=0.5.0 /DExe=path\to\tubevibe.exe /DOutDir=dist packaging\windows\tubevibe.iss
+; Installs for the current user only (no administrator), adds tubevibe to the
 ; user's PATH and the Start menu, and can install mpv and yt-dlp with winget.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
 #ifndef Exe
-  #define Exe "..\..\target\release\tubetui.exe"
+  #define Exe "..\..\target\release\tubevibe.exe"
 #endif
 #ifndef OutDir
   #define OutDir "..\..\dist"
@@ -15,24 +15,24 @@
 
 [Setup]
 AppId={{8C5E2F4B-7D1A-4E3B-9A6C-2B7F0D1E5A93}
-AppName=tubetui
+AppName=tubevibe
 AppVersion={#AppVersion}
 AppPublisher=polblancoo
-AppPublisherURL=https://polblancoo.github.io/tubetui/
-AppSupportURL=https://github.com/polblancoo/tubetui/issues
-DefaultDirName={autopf}\tubetui
-DefaultGroupName=tubetui
+AppPublisherURL=https://github.com/mortbrew/tubevibe
+AppSupportURL=https://github.com/mortbrew/tubevibe/issues
+DefaultDirName={autopf}\tubevibe
+DefaultGroupName=tubevibe
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ChangesEnvironment=yes
 OutputDir={#OutDir}
-OutputBaseFilename=tubetui-x86_64-windows-setup
+OutputBaseFilename=tubevibe-x86_64-windows-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayName=tubetui
+UninstallDisplayName=tubevibe
 
 [Languages]
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -52,7 +52,7 @@ Source: "{#Exe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [Icons]
-Name: "{autoprograms}\tubetui"; Filename: "{app}\tubetui.exe"; WorkingDir: "{userdocs}"
+Name: "{autoprograms}\tubevibe"; Filename: "{app}\tubevibe.exe"; WorkingDir: "{userdocs}"
 
 [Run]
 Filename: "winget"; Parameters: "install --id mpv-player.mpv-CI.MSVC -e --accept-source-agreements --accept-package-agreements"; StatusMsg: "{cm:Installing,mpv}"; Tasks: deps; Flags: waituntilterminated

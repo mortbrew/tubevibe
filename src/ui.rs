@@ -98,8 +98,8 @@ const EMOJI: Icons = Icons {
         "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "⏯", "🗣", "😀", "🖼", "🖱", "🎞", "✨", "🌊", "💥",
-        "📼", "🎵", "📁", "🏷", "🩺", "👁", "🕒", "🩳", "🔔", "⭐", "⬆", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "📷", "🐭", "🎦", "✨", "🌊",
+        "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
     ],
     logo: "▶️",
     tab: "🎬",
@@ -114,7 +114,7 @@ const EMOJI: Icons = Icons {
     language: "🌐",
     volume: "🔊",
     muted: "🔇",
-    watched: "👁",
+    watched: "👀",
 };
 
 const NERD: Icons = Icons {
@@ -859,7 +859,7 @@ fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
     let title = Line::from(vec![
         Span::raw(format!(" {} ", icons.logo)),
         Span::styled("tube", Style::new().fg(RED).bold()),
-        Span::styled("tui ", Style::new().fg(FG).bold()),
+        Span::styled("vibe ", Style::new().fg(FG).bold()),
     ]);
     frame.render_widget(List::new(items).block(panel(title, MUTED)), area);
 }
@@ -1045,8 +1045,8 @@ fn draw_cookies_help(frame: &mut Frame, area: Rect, lang: Lang) {
         ),
         Line::from(""),
         line(
-            "tubetui comprueba que tenga una sesión de YouTube y guarda una copia privada (permisos 600).",
-            "tubetui checks it holds a YouTube login and keeps a private copy (mode 600).",
+            "tubevibe comprueba que tenga una sesión de YouTube y guarda una copia privada (permisos 600).",
+            "tubevibe checks it holds a YouTube login and keeps a private copy (mode 600).",
             MUTED,
         ),
         line(
@@ -1066,7 +1066,7 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
         Line::from(vec![
             Span::raw(format!("{}  ", icons.logo)),
             Span::styled("tube", Style::new().fg(RED).bold()),
-            Span::styled("tui", Style::new().fg(FG).bold()),
+            Span::styled("vibe", Style::new().fg(FG).bold()),
         ]),
         Line::from(lang.pick("YouTube en tu terminal", "YouTube in your terminal")).fg(MUTED),
         Line::from(""),
@@ -1313,7 +1313,7 @@ fn video_row_dated<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, 
     ListItem::new(Line::from(spans))
 }
 
-/// How far I got: `  ━━━━─────` (or `  ⏯ 12:34` when the length is unknown).
+/// How far I got: `  ━━━━─────` (or `  ▸ 12:34` when the length is unknown).
 fn resume_bar(at: u32, duration: Option<u32>) -> Vec<Span<'static>> {
     const CELLS: usize = 10;
     match duration.filter(|d| *d > 0) {
@@ -1321,7 +1321,7 @@ fn resume_bar(at: u32, duration: Option<u32>) -> Vec<Span<'static>> {
             let done = ((u64::from(at) * CELLS as u64 / u64::from(d)) as usize).clamp(1, CELLS);
             vec![Span::raw("  "), Span::styled("━".repeat(done), RED), Span::styled("─".repeat(CELLS - done), MUTED)]
         }
-        None => vec![Span::styled(format!("  ⏯ {}", clock(at)), YELLOW)],
+        None => vec![Span::styled(format!("  ▸ {}", clock(at)), YELLOW)],
     }
 }
 
@@ -1364,7 +1364,7 @@ fn playlist_row<'a>(icons: &Icons, playlist: &'a Playlist, lang: Lang) -> ListIt
     ListItem::new(Line::from(spans))
 }
 
-/// `⬇  45.3% ━━━━━─────  2.1MiB/s  00:12   title · channel`.
+/// `⇩  45.3% ━━━━━─────  2.1MiB/s  00:12   title · channel`.
 /// How long `video` is, from the list or, when it did not say, from yt-dlp.
 fn length_label(state: &State, video: &Video) -> String {
     video.duration.or_else(|| state.sizes.get(&video.id).and_then(|s| s.duration)).map(clock).unwrap_or_default()
@@ -1388,7 +1388,7 @@ fn download_row(state: &State, download: &Download, lang: Lang) -> ListItem<'sta
         DownloadState::Running { permille, speed, eta } => {
             let done = usize::from(*permille) * BAR / 1000;
             vec![
-                Span::styled(format!(" ⬇ {:>5.1}% ", f64::from(*permille) / 10.0), Style::new().fg(YELLOW).bold()),
+                Span::styled(format!(" ⇩ {:>5.1}% ", f64::from(*permille) / 10.0), Style::new().fg(YELLOW).bold()),
                 Span::styled("━".repeat(done), RED),
                 Span::styled("─".repeat(BAR - done), MUTED),
                 Span::styled(format!(" {speed:>10} {eta:>8}  "), MUTED),
@@ -1401,7 +1401,7 @@ fn download_row(state: &State, download: &Download, lang: Lang) -> ListItem<'sta
             vec![Span::styled(pad_cells(&format!(" ✗ {}", lang.pick("falló", "failed")), 41), RED)]
         }
         DownloadState::Cancelled => {
-            vec![Span::styled(pad_cells(&format!(" ⏹ {}", lang.pick("cancelada", "cancelled")), 41), MUTED)]
+            vec![Span::styled(pad_cells(&format!(" ✕ {}", lang.pick("cancelada", "cancelled")), 41), MUTED)]
         }
     };
     spans.push(Span::styled(download.video.title.clone(), FG));
@@ -1452,9 +1452,19 @@ fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: boo
     ]))
 }
 
+/// Width of the settings' label column: the longest label and a gap, so
+/// the values line up.
+fn setting_label_width(lang: Lang) -> usize {
+    Setting::ALL.iter().map(|s| Span::raw(s.label(lang)).width()).max().unwrap_or(0) + 3
+}
+
 fn setting_row(state: &State, icon: &str, setting: Setting) -> ListItem<'static> {
     let value = state.setting_value(setting);
-    let mut spans = vec![Span::raw(format!(" {icon} ")), Span::styled(pad_cells(setting.label(state.lang()), 44), FG)];
+    let lang = state.lang();
+    let mut spans = vec![
+        Span::raw(format!(" {} ", pad_cells(icon, 2))),
+        Span::styled(pad_cells(setting.label(lang), setting_label_width(lang)), FG),
+    ];
     if !value.is_empty() {
         spans.push(Span::styled(value, Style::new().fg(YELLOW).bold()));
     }
@@ -1817,15 +1827,15 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
     frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
 }
 
-/// "tubetui" in big letters (toilet's smmono12 font, 5 cells a letter).
+/// "tubevibe" in big letters (toilet's smmono12 font, 5 cells a letter).
 const LOGO: [&str; 7] = [
-    "          ▗▖                    █  ",
-    " ▐▌       ▐▌         ▐▌         ▀  ",
-    "▐███ ▐▌ ▐▌▐▙█▙  ▟█▙ ▐███ ▐▌ ▐▌ ██  ",
-    " ▐▌  ▐▌ ▐▌▐▛ ▜▌▐▙▄▟▌ ▐▌  ▐▌ ▐▌  █  ",
-    " ▐▌  ▐▌ ▐▌▐▌ ▐▌▐▛▀▀▘ ▐▌  ▐▌ ▐▌  █  ",
-    " ▐▙▄ ▐▙▄█▌▐█▄█▘▝█▄▄▌ ▐▙▄ ▐▙▄█▌▗▄█▄▖",
-    "  ▀▀  ▀▀▝▘▝▘▀▘  ▝▀▀   ▀▀  ▀▀▝▘▝▀▀▀▘",
+    "          ▗▖               █  ▗▖        ",
+    " ▐▌       ▐▌               ▀  ▐▌        ",
+    "▐███ ▐▌ ▐▌▐▙█▙  ▟█▙ ▐▌ ▐▌ ██  ▐▙█▙  ▟█▙ ",
+    " ▐▌  ▐▌ ▐▌▐▛ ▜▌▐▙▄▟▌▝█ █▘  █  ▐▛ ▜▌▐▙▄▟▌",
+    " ▐▌  ▐▌ ▐▌▐▌ ▐▌▐▛▀▀▘ █ █   █  ▐▌ ▐▌▐▛▀▀▘",
+    " ▐▙▄ ▐▙▄█▌▐█▄█▘▝█▄▄▌ ▐█▌ ▗▄█▄▖▐█▄█▘▝█▄▄▌",
+    "  ▀▀  ▀▀▝▘▝▘▀▘  ▝▀▀   ▀  ▝▀▀▀▘▝▘▀▘  ▝▀▀ ",
 ];
 /// YouTube's red, for the play button.
 const YOUTUBE_RED: Color = Color::Rgb(255, 0, 51);
@@ -1867,7 +1877,7 @@ fn draw_splash(frame: &mut Frame, lang: Lang) {
     if area.width < width || area.height < 12 {
         let line = Line::from(vec![
             Span::styled(" ▶ ", Style::new().fg(Color::White).bg(YOUTUBE_RED)),
-            Span::raw(" tubetui").bold(),
+            Span::raw(" tubevibe").bold(),
         ]);
         frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), centered(area, area.width, 1));
         return;
@@ -1876,7 +1886,7 @@ fn draw_splash(frame: &mut Frame, lang: Lang) {
         .into_iter()
         .zip(LOGO)
         .map(|(button, text)| {
-            // "tube" in the theme's text color, "tui" in red, like YouTube's logo.
+            // "tube" in the theme's text color, "vibe" in red, like YouTube's logo.
             let cut = text.char_indices().nth(20).map_or(text.len(), |(i, _)| i);
             let mut spans = button.spans.into_iter().map(|s| s.patch_style(button.style)).collect::<Vec<_>>();
             spans.push(Span::raw("  "));
@@ -1941,7 +1951,7 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
             (Some((keyring, _)), true) if check.tool == Tool::Keyring => {
                 let missing = if keyring.starts_with("KWALLET") { "kwallet-query" } else { "secretstorage" };
                 (
-                    "⚠",
+                    "!",
                     YELLOW,
                     format!(
                         "{}: {missing}",
@@ -1950,7 +1960,7 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
                 )
             }
             (Some(_), true) => {
-                ("⚠", YELLOW, lang.pick("viejo: YouTube cambia seguido", "too old: YouTube changes often").into())
+                ("!", YELLOW, lang.pick("viejo: YouTube cambia seguido", "too old: YouTube changes often").into())
             }
             (None, _) if check.tool.required() => ("✗", RED, lang.pick("falta · necesario", "missing · needed").into()),
             (None, _) => ("·", MUTED, lang.pick("no está · opcional", "not installed · optional").into()),
@@ -1998,7 +2008,7 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         Line::from(vec![
             Span::raw(format!("{}  ", icons.logo)),
             Span::styled("tube", Style::new().fg(RED).bold()),
-            Span::styled("tui", Style::new().fg(FG).bold()),
+            Span::styled("vibe", Style::new().fg(FG).bold()),
             Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), MUTED),
         ]),
         Line::from(lang.pick(
@@ -2008,7 +2018,11 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         .fg(FG),
         Line::from(""),
         Line::from(vec![label("GitHub"), Span::styled(env!("CARGO_PKG_REPOSITORY"), CYAN)]),
-        Line::from(vec![label("crates.io"), Span::styled("https://crates.io/crates/tubetui", CYAN)]),
+        Line::from(vec![
+            label(lang.pick("Basado en", "Based on")),
+            Span::styled(lang.pick("tubetui de polblancoo · ", "tubetui by polblancoo · "), FG),
+            Span::styled("https://github.com/polblancoo/tubetui", CYAN),
+        ]),
         Line::from(vec![label(lang.pick("Licencia", "License")), Span::styled("MIT / Apache-2.0", FG)]),
         Line::from(vec![
             label(lang.pick("Errores", "Bugs")),
@@ -2149,6 +2163,64 @@ mod tests {
         s.menu = Section::ALL.iter().position(|x| *x == Section::Configuracion).unwrap();
         s.update(Action::Enter);
         s
+    }
+
+    #[test]
+    fn settings_values_line_up() {
+        for lang in [Lang::Es, Lang::En] {
+            let mut s = open_settings();
+            s.config.ui.lang = Some(lang);
+            for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+                let icons = icons(set);
+                let starts: Vec<usize> = Setting::ALL
+                    .iter()
+                    .enumerate()
+                    .map(|(i, setting)| {
+                        // Icon cell and label column: the value starts right after.
+                        Span::raw(format!(" {} ", pad_cells(icons.settings[i], 2))).width()
+                            + Span::raw(pad_cells(setting.label(lang), setting_label_width(lang))).width()
+                    })
+                    .collect();
+                assert!(starts.windows(2).all(|w| w[0] == w[1]), "{set:?} {lang:?}: {starts:?}");
+            }
+            // The longest label still leaves a gap before its value.
+            let longest = Setting::ALL.iter().map(|x| Span::raw(x.label(lang)).width()).max().unwrap();
+            assert!(setting_label_width(lang) >= longest + 2);
+        }
+        let mut s = open_settings();
+        s.config.ui.lang = Some(Lang::En);
+        let screen = render(&s);
+        let mut columns = Vec::new();
+        for setting in Setting::ALL {
+            let (label, value) = (setting.label(Lang::En), s.setting_value(setting));
+            let Some(line) = screen.lines().find(|l| l.contains(label)) else { continue };
+            let after = line.find(label).unwrap() + label.len();
+            if value.is_empty() || !line[after..].contains(value.as_str()) {
+                continue;
+            }
+            let at = after + line[after..].find(value.as_str()).unwrap();
+            assert!(line[after..at].chars().all(|c| c == ' ') && at - after >= 2, "{label}: {line}");
+            columns.push((label, line[..at].chars().count()));
+        }
+        assert!(columns.len() > 10, "{screen}");
+        assert!(columns.iter().all(|(_, c)| *c == columns[0].1), "{columns:?}\n{screen}");
+    }
+
+    /// Emoji whose width terminals disagree on (text-presentation ones like
+    /// 🖼 or 👁, or any with U+FE0F) push the rest of the row over; every
+    /// emoji that starts a column is one terminals always draw two cells wide.
+    #[test]
+    fn column_emoji_are_always_two_cells() {
+        let column: Vec<&str> =
+            EMOJI.settings.iter().chain(EMOJI.sections.iter()).copied().chain([EMOJI.watched, EMOJI.later]).collect();
+        for icon in column {
+            assert_eq!(icon.chars().count(), 1, "one code point, no variation selector: {icon:?}");
+            assert_eq!(Span::raw(icon).width(), 2, "{icon} is not wide everywhere");
+            let c = icon.chars().next().unwrap() as u32;
+            // Text-presentation emoji in the ranges used here (2-wide only in some terminals).
+            let text_style = [0x23EF, 0x23F9, 0x2B06, 0x2B07, 0x1F441, 0x1F5BC, 0x1F5B1, 0x1F5E3, 0x1F39E, 0x1F3F7];
+            assert!(!text_style.contains(&c), "{icon} draws 1 or 2 cells depending on the terminal");
+        }
     }
 
     fn hint_keys(state: &State) -> Vec<String> {
@@ -2427,7 +2499,7 @@ mod tests {
         s.update(Action::ToggleFullscreen);
         let area = Rect::new(0, 0, 100, 30);
         assert_eq!(video_area(&s, area), Some(area));
-        assert!(!render(&s).contains("tubetui"), "no sidebar or bars");
+        assert!(!render(&s).contains("tubevibe"), "no sidebar or bars");
     }
 
     #[test]
@@ -2478,6 +2550,7 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains(env!("CARGO_PKG_VERSION")), "{screen}");
         assert!(screen.contains("github.com/polblancoo/tubetui"), "{screen}");
+        assert!(screen.contains("tubetui de polblancoo"), "credits the original: {screen}");
     }
 
     #[test]
@@ -2872,11 +2945,11 @@ mod tests {
             "✗ mpv",
             "falta · necesario",
             "sudo apt install mpv",
-            "⚠ yt-dlp",
+            "! yt-dlp",
             "2024.04.09",
             "pipx install yt-dlp",
             "✓ kitty",
-            "⚠ keyring",
+            "! keyring",
             "falta: secretstorage",
             "pipx inject yt-dlp secretstorage",
             "Comandos para: apt",

@@ -1,4 +1,4 @@
-//! tubetui binary: terminal setup and the effect runtime around the pure core.
+//! tubevibe binary: terminal setup and the effect runtime around the pure core.
 //!
 //! Slow work (yt-dlp, the YouTube API, reading browser cookies) runs on
 //! short-lived threads that report back as `Action`s; each video is its own
@@ -19,17 +19,17 @@ use ratatui::crossterm::event::{
 use ratatui::crossterm::execute;
 use ratatui::layout::Rect;
 
-use tubetui::anim::Animations;
-use tubetui::app::{Action, Effect, Playback, PlayerCommand, SettingValue, State};
-use tubetui::config::{self, Config, PlayerMode};
-use tubetui::domain::TabId;
-use tubetui::i18n::Lang;
-use tubetui::media::{self, MediaKind};
-use tubetui::player::{self, Geometry, Launch, Mode, Player};
-use tubetui::store::{self, Paths};
-use tubetui::thumbs::Thumbnails;
-use tubetui::youtube::{self, Items};
-use tubetui::{keymap, mouse, session, ui};
+use tubevibe::anim::Animations;
+use tubevibe::app::{Action, Effect, Playback, PlayerCommand, SettingValue, State};
+use tubevibe::config::{self, Config, PlayerMode};
+use tubevibe::domain::TabId;
+use tubevibe::i18n::Lang;
+use tubevibe::media::{self, MediaKind};
+use tubevibe::player::{self, Geometry, Launch, Mode, Player};
+use tubevibe::store::{self, Paths};
+use tubevibe::thumbs::Thumbnails;
+use tubevibe::youtube::{self, Items};
+use tubevibe::{keymap, mouse, session, ui};
 
 const SUBS_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 /// While the window is being resized the video stays hidden; it is placed
@@ -56,16 +56,16 @@ const DOWNLOAD_REPORT: Duration = Duration::from_millis(500);
 /// How long the selection rests on a video before yt-dlp is asked its weight.
 const SIZE_DELAY: Duration = Duration::from_millis(800);
 
-/// Started from a launcher (`kitty -e tubetui`), the window closes as soon as
+/// Started from a launcher (`kitty -e tubevibe`), the window closes as soon as
 /// the app exits: keep a startup error on screen until Enter.
 fn wait_on_error(error: &dyn std::fmt::Display) {
     use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() {
         return;
     }
-    eprintln!("tubetui: {error}\n");
-    eprintln!("Corregí el archivo o actualizá tubetui (una versión vieja no conoce las opciones nuevas).");
-    eprintln!("Fix the file or update tubetui (an old version doesn't know newer options).\n");
+    eprintln!("tubevibe: {error}\n");
+    eprintln!("Corregí el archivo o actualizá tubevibe (una versión vieja no conoce las opciones nuevas).");
+    eprintln!("Fix the file or update tubevibe (an old version doesn't know newer options).\n");
     eprint!("Enter: salir / quit ");
     let _ = std::io::stdin().read_line(&mut String::new());
 }
@@ -74,13 +74,23 @@ fn wait_on_error(error: &dyn std::fmt::Display) {
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Config file [default: platform config dir, e.g. ~/.config/tubetui/config.toml]
+    /// Config file [default: platform config dir, e.g. ~/.config/tubevibe/config.toml]
     #[arg(long)]
     config: Option<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    // Renamed from tubetui: its settings, login copies, history and lists come
+    // along the first time (copied; the old folders stay as they were).
+    let renamed = store::renamed_dirs();
+    let copied = store::copy_old_dirs(&renamed).unwrap_or_else(|e| {
+        dbg(format!("copying the tubetui folders: {e}"));
+        Vec::new()
+    });
+    for (old, new) in &copied {
+        dbg(format!("copied {} → {}", old.display(), new.display()));
+    }
     let config_path = cli.config.or_else(Config::default_path);
     let mut config = match &config_path {
         Some(path) => Config::load(path).inspect_err(|e| wait_on_error(e))?,
@@ -92,12 +102,20 @@ fn main() -> anyhow::Result<()> {
             ["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
         Lang::from_locale(&locale.unwrap_or_default())
     });
+    // An imported cookies file named by its old path: the copy in the new folder.
+    if let Some(moved) = store::moved_path(Path::new(&config.session.cookies_file), &copied).filter(|p| p.exists()) {
+        config.session.cookies_file = moved.display().to_string();
+        if let Some(path) = &config_path {
+            let _ = config::set_value(path, "session", "cookies_file", config.session.cookies_file.as_str());
+        }
+    }
     let paths = Paths::system().context("no se encontró la carpeta personal")?;
     let crash_log = paths.cache.join("crash.log");
     log_panics(crash_log.clone());
 
     let mut runtime = Runtime::new(config, config_path, paths);
     let mut terminal = ratatui::init();
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle("tubevibe"));
     set_focus_reports(true);
     let result = runtime.run(&mut terminal);
     // Stop every mpv first so no frame arrives after the cleanup.
@@ -257,14 +275,14 @@ impl Runtime {
         runtime.start_session(false);
         runtime.send(Action::AskBrowser);
         runtime.background(|| {
-            let (manager, checks) = tubetui::doctor::run();
+            let (manager, checks) = tubevibe::doctor::run();
             Action::SystemChecked(manager, checks)
         });
         if runtime.state.config.ui.check_updates {
             // Quietly: no network or no news means nothing to say.
             let (tx, cache) = (runtime.tx.clone(), runtime.paths.cache.join("latest-release.txt"));
             std::thread::spawn(move || {
-                if let Ok(Some(update)) = tubetui::update::check(&cache) {
+                if let Ok(Some(update)) = tubevibe::update::check(&cache) {
                     let _ = tx.send(Action::UpdateFound(update));
                 }
             });
@@ -554,7 +572,7 @@ impl Runtime {
         (self.state.tabs.iter().filter(|t| !t.segments.is_empty()))
             .filter_map(|tab| {
                 let position = self.players.get(&tab.id)?.info().position?;
-                let index = tubetui::sponsorblock::to_skip(&tab.segments, position, &tab.skipped)?;
+                let index = tubevibe::sponsorblock::to_skip(&tab.segments, position, &tab.skipped)?;
                 Some(Action::SkipSegment(tab.id, index))
             })
             .collect()
@@ -596,7 +614,7 @@ impl Runtime {
             }
             Effect::CheckSystem => {
                 self.background(|| {
-                    let (manager, checks) = tubetui::doctor::run();
+                    let (manager, checks) = tubevibe::doctor::run();
                     Action::SystemChecked(manager, checks)
                 });
             }
@@ -655,7 +673,7 @@ impl Runtime {
             Effect::Segments { tab, video } => {
                 // Without them the video just plays whole.
                 self.background(move || {
-                    Action::SegmentsLoaded(tab, tubetui::sponsorblock::fetch(&video).unwrap_or_default())
+                    Action::SegmentsLoaded(tab, tubevibe::sponsorblock::fetch(&video).unwrap_or_default())
                 });
             }
             Effect::Watch { tab, video } => {
@@ -795,7 +813,7 @@ impl Runtime {
             Effect::Download { id, video } => {
                 let dir = self.download_dir();
                 // Hidden, so Mis videos does not list it.
-                let temp = dir.join(format!(".tubetui-{}-{id}", std::process::id()));
+                let temp = dir.join(format!(".tubevibe-{}-{id}", std::process::id()));
                 let player = &self.state.config.player;
                 let (format, sub_lang) = (player::ytdl_format(player, Mode::Window), player.sub_lang.clone());
                 let cookies = self.cookies.clone();
@@ -837,7 +855,7 @@ impl Runtime {
                     // Waited for on its own thread, so it leaves no zombie behind.
                     std::thread::spawn(move || {
                         let _ = std::process::Command::new("notify-send")
-                            .args(["--app-name=tubetui", "tubetui", &message])
+                            .args(["--app-name=tubevibe", "tubevibe", &message])
                             .stdout(std::process::Stdio::null())
                             .stderr(std::process::Stdio::null())
                             .status();
@@ -1120,13 +1138,13 @@ fn import_cookies(source: &Path, dest: &Path, lang: Lang) -> Result<String, Stri
     Ok(dest.display().to_string())
 }
 
-/// Timing trace for diagnosing lag: set `TUBETUI_DEBUG=/path/to/file`.
+/// Timing trace for diagnosing lag: set `TUBEVIBE_DEBUG=/path/to/file` (`TUBETUI_DEBUG` works too).
 fn dbg(msg: impl AsRef<str>) {
     use std::io::Write;
     use std::sync::OnceLock;
     static START: OnceLock<Instant> = OnceLock::new();
     let start = *START.get_or_init(Instant::now);
-    if let Ok(path) = std::env::var("TUBETUI_DEBUG")
+    if let Some(path) = config::debug_path()
         && let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path)
     {
         let _ = writeln!(f, "{:>8.1} {}", start.elapsed().as_secs_f64() * 1000.0, msg.as_ref());

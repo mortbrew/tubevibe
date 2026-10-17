@@ -1,4 +1,4 @@
-# Donation addresses shown in tubetui's "Acerca de / About" page.
+# Donation addresses shown in tubevibe's "Acerca de / About" page.
 # One [[wallet]] block per network; blocks with an empty address are hidden.
 # This file is compiled into the app, so every user sees the same addresses.
 

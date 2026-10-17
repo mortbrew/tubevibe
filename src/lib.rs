@@ -1,4 +1,4 @@
-//! tubetui — YouTube in your terminal.
+//! tubevibe — YouTube in your terminal.
 //!
 //! The core is pure and synchronous: [`app::State::update`] turns an
 //! [`app::Action`] into state changes plus [`app::Effect`]s, and the binary

@@ -1170,10 +1170,10 @@ fn clip(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// A line in the `TUBETUI_DEBUG` file, when that is set.
+/// A line in the `TUBEVIBE_DEBUG` (or `TUBETUI_DEBUG`) file, when that is set.
 fn debug_log(message: &str) {
     use std::io::Write;
-    if let Ok(path) = std::env::var("TUBETUI_DEBUG")
+    if let Some(path) = crate::config::debug_path()
         && let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path)
     {
         let _ = writeln!(file, "[youtube] {message}");
@@ -1395,9 +1395,9 @@ pub fn compact(n: u64) -> String {
     }
 }
 
-/// Starts the progress lines yt-dlp prints, `tubetui 45.3%|1.12MiB/s|00:12`
+/// Starts the progress lines yt-dlp prints, `tubevibe 45.3%|1.12MiB/s|00:12`
 /// (read by `domain::parse_progress`).
-pub const PROGRESS_PREFIX: &str = "tubetui ";
+pub const PROGRESS_PREFIX: &str = "tubevibe ";
 
 /// Pieces go to `temp` (one folder per download) and only the finished files
 /// to `dir`: a cancelled download leaves nothing behind once `temp` is gone.
@@ -1790,12 +1790,12 @@ mod tests {
 
     #[test]
     fn download_args_include_subs_and_output_dir() {
-        let args = download_args("URL", "best", "es", Path::new("/v"), Path::new("/v/.tubetui-3"), None);
+        let args = download_args("URL", "best", "es", Path::new("/v"), Path::new("/v/.tubevibe-3"), None);
         assert_eq!(args.last().unwrap(), "URL");
         let joined = args.join(" ");
         assert!(joined.contains("-f best"));
         assert!(joined.contains("--sub-langs es"));
-        assert!(joined.contains("-P home:/v -P temp:/v/.tubetui-3 -o %(title)s.%(ext)s"), "pieces apart");
+        assert!(joined.contains("-P home:/v -P temp:/v/.tubevibe-3 -o %(title)s.%(ext)s"), "pieces apart");
         assert!(joined.contains("--print after_move:filepath"), "the final file, to play it");
         assert!(joined.contains(&format!("--progress-template download:{PROGRESS_PREFIX}%(progress._percent_str)s|")));
     }

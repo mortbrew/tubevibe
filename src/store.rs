@@ -14,7 +14,7 @@ pub struct Paths {
     pub subs: PathBuf,
     /// Cookie exports.
     pub cache: PathBuf,
-    /// Videos watched in tubetui, one id per line, oldest first.
+    /// Videos watched in tubevibe, one id per line, oldest first.
     pub watched: PathBuf,
     /// `history.json`: what I opened and where I left it, newest first.
     pub history: PathBuf,
@@ -23,9 +23,9 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// Platform data and cache dirs (`~/.local/share/tubetui`, `~/.cache/tubetui`).
+    /// Platform data and cache dirs (`~/.local/share/tubevibe`, `~/.cache/tubevibe`).
     pub fn system() -> Option<Self> {
-        let dirs = directories::ProjectDirs::from("", "", "tubetui")?;
+        let dirs = directories::ProjectDirs::from("", "", "tubevibe")?;
         Some(Self::new(dirs.data_dir(), dirs.cache_dir()))
     }
 
@@ -162,6 +162,70 @@ fn write_atomic(path: &Path, content: &str) -> io::Result<()> {
     std::fs::rename(tmp, path)
 }
 
+/// The original app's name: its folders are copied over on the first run.
+pub const OLD_NAME: &str = "tubetui";
+pub const NAME: &str = "tubevibe";
+
+/// `(old, new)` pairs of the platform config, data and cache folders
+/// (`~/.config/tubetui` → `~/.config/tubevibe`, and so on), each once.
+pub fn renamed_dirs() -> Vec<(PathBuf, PathBuf)> {
+    let (Some(old), Some(new)) =
+        (directories::ProjectDirs::from("", "", OLD_NAME), directories::ProjectDirs::from("", "", NAME))
+    else {
+        return Vec::new();
+    };
+    let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for (o, n) in
+        [(old.config_dir(), new.config_dir()), (old.data_dir(), new.data_dir()), (old.cache_dir(), new.cache_dir())]
+    {
+        if !pairs.iter().any(|(_, seen)| seen == n) {
+            pairs.push((o.to_path_buf(), n.to_path_buf()));
+        }
+    }
+    pairs
+}
+
+/// Copies (never moves) each old folder to its new place when the new one
+/// does not exist yet and the old one does. Returns the folders copied.
+/// A copy that fails halfway is removed, so the next run tries again.
+pub fn copy_old_dirs(pairs: &[(PathBuf, PathBuf)]) -> io::Result<Vec<(PathBuf, PathBuf)>> {
+    let mut copied = Vec::new();
+    for (old, new) in pairs {
+        if new.exists() || !old.is_dir() {
+            continue;
+        }
+        if let Err(e) = copy_dir(old, new) {
+            let _ = std::fs::remove_dir_all(new);
+            return Err(e);
+        }
+        copied.push((old.clone(), new.clone()));
+    }
+    Ok(copied)
+}
+
+/// `from` and everything in it into `to` (files keep their permissions,
+/// e.g. the private cookie copies). Links and sockets are left out.
+fn copy_dir(from: &Path, to: &Path) -> io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let target = to.join(entry.file_name());
+        if kind.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// A path inside an old folder, moved to the matching new folder (the
+/// imported cookies file named in `config.toml`, say).
+pub fn moved_path(path: &Path, pairs: &[(PathBuf, PathBuf)]) -> Option<PathBuf> {
+    pairs.iter().find_map(|(old, new)| path.strip_prefix(old).ok().map(|rest| new.join(rest)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,5 +313,25 @@ mod tests {
         save_subs(&path, &subs).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "UCa\nUCb\n");
         assert_eq!(load_subs(&path), subs);
+    }
+
+    #[test]
+    fn old_folders_are_copied_once_and_kept() {
+        let root = temp_dir("rename");
+        let (old, new) = (root.join("tubetui"), root.join("tubevibe"));
+        std::fs::create_dir_all(old.join("data")).unwrap();
+        std::fs::write(old.join("config.toml"), "[ui]\nlang = \"en\"\n").unwrap();
+        std::fs::write(old.join("data/later.json"), "[]").unwrap();
+        let pairs = vec![(old.clone(), new.clone()), (root.join("missing"), root.join("other"))];
+        assert_eq!(copy_old_dirs(&pairs).unwrap(), vec![(old.clone(), new.clone())]);
+        assert_eq!(std::fs::read_to_string(new.join("data/later.json")).unwrap(), "[]");
+        assert!(old.join("config.toml").exists(), "copied, not moved");
+        assert!(!root.join("other").exists(), "nothing to copy: nothing made");
+        // The new folder exists now: never copied over again.
+        std::fs::write(new.join("config.toml"), "changed").unwrap();
+        assert!(copy_old_dirs(&pairs).unwrap().is_empty());
+        assert_eq!(std::fs::read_to_string(new.join("config.toml")).unwrap(), "changed");
+        assert_eq!(moved_path(&old.join("cookies-imported.txt"), &pairs), Some(new.join("cookies-imported.txt")));
+        assert_eq!(moved_path(Path::new("/elsewhere/c.txt"), &pairs), None);
     }
 }

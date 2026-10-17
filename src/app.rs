@@ -44,7 +44,7 @@ pub enum Section {
     Descubrir,
     Suscripciones,
     VerDespues,
-    /// What I opened in tubetui, newest first; resumes where I left.
+    /// What I opened in tubevibe, newest first; resumes where I left.
     Historial,
     /// My YouTube playlists.
     MisListas,
@@ -1431,6 +1431,7 @@ impl State {
             }
             Action::UpdateFound(update) => {
                 let (available, see) = (self.tr("disponible", "available"), self.tr("mirá Acerca de", "see About"));
+                // The update check still follows the original project (src/update.rs).
                 self.status = format!("⬆ tubetui {} {available} · {see}", update.version);
                 self.update = Some(update);
             }
@@ -1824,7 +1825,7 @@ impl State {
                 } else {
                     if self.history.is_empty() {
                         self.status =
-                            self.tr("Todavía no viste nada en tubetui", "Nothing watched in tubetui yet").into();
+                            self.tr("Todavía no viste nada en tubevibe", "Nothing watched in tubevibe yet").into();
                     }
                     Vec::new()
                 };
@@ -3232,7 +3233,7 @@ impl State {
         vec![Effect::SaveHistory(self.history.clone())]
     }
 
-    /// "Historial": what I watched in tubetui and on YouTube, newest first.
+    /// "Historial": what I watched in tubevibe and on YouTube, newest first.
     pub fn history_entries(&self) -> Vec<HistoryEntry> {
         let mut entries = self.history.clone();
         let mine: HashSet<&str> = self.history.iter().map(|e| e.video.id.as_str()).collect();
@@ -3241,7 +3242,7 @@ impl State {
         entries
     }
 
-    /// When I last watched `id`, in tubetui or on YouTube.
+    /// When I last watched `id`, in tubevibe or on YouTube.
     pub fn watched_at(&self, id: &str) -> Option<i64> {
         let local = self.history.iter().find(|e| e.video.id == id).map(|e| e.at);
         local.or_else(|| self.youtube_history.iter().find(|e| e.video.id == id).map(|e| e.at))

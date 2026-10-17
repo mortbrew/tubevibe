@@ -154,7 +154,7 @@ pub struct UiConfig {
     pub thumbnails: bool,
     /// Clicks and the wheel (selecting text then needs Shift).
     pub mouse: bool,
-    /// The tubetui logo for a moment when the app opens.
+    /// The tubevibe logo for a moment when the app opens.
     pub splash: bool,
     /// Ask GitHub once a day whether there is a newer version.
     pub check_updates: bool,
@@ -376,10 +376,15 @@ impl Config {
         Self::from_toml(&text).map_err(|source| ConfigError::Parse { path: path.into(), source })
     }
 
-    /// `~/.config/tubetui/config.toml` on Linux, the platform equivalent elsewhere.
+    /// `~/.config/tubevibe/config.toml` on Linux, the platform equivalent elsewhere.
     pub fn default_path() -> Option<PathBuf> {
-        directories::ProjectDirs::from("", "", "tubetui").map(|dirs| dirs.config_dir().join("config.toml"))
+        directories::ProjectDirs::from("", "", "tubevibe").map(|dirs| dirs.config_dir().join("config.toml"))
     }
+}
+
+/// The debug log file: `TUBEVIBE_DEBUG`, or the old `TUBETUI_DEBUG`.
+pub fn debug_path() -> Option<String> {
+    ["TUBEVIBE_DEBUG", "TUBETUI_DEBUG"].iter().find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
 }
 
 /// Sets `[table] key = value` in the file at `path`, creating file and
@@ -406,7 +411,7 @@ pub fn set_value(path: &Path, table: &str, key: &str, value: impl Into<toml_edit
 
 #[cfg(test)]
 pub(crate) fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("tubetui-test-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("tubevibe-test-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -554,7 +559,7 @@ mod tests {
     #[test]
     fn default_path_ends_in_config_toml() {
         if let Some(p) = Config::default_path() {
-            assert!(p.ends_with("config.toml") && p.to_string_lossy().contains("tubetui"), "{p:?}");
+            assert!(p.ends_with("config.toml") && p.to_string_lossy().contains("tubevibe"), "{p:?}");
         }
     }
 

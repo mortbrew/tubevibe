@@ -29,7 +29,7 @@ struct Mpv {
 
 impl Mpv {
     fn spawn(url: &str, height: u32, embed: Option<Rect>) -> std::io::Result<Self> {
-        let socket = std::env::temp_dir().join(format!("tubetui-spike-{}.sock", std::process::id()));
+        let socket = std::env::temp_dir().join(format!("tubevibe-spike-{}.sock", std::process::id()));
         let mut cmd = Command::new("mpv");
         cmd.arg(format!("--input-ipc-server={}", socket.display()))
             .arg(format!("--ytdl-format=bv*[height<={height}]+ba/b[height<={height}]"))
@@ -119,7 +119,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
     let [side, main] = Layout::horizontal([Constraint::Length(sidebar_width), Constraint::Fill(1)]).areas(body);
     if app.sidebar {
         let items = ["Feed", "Suscripciones", "Ver después", "Descubrir", "Historial", "Ajustes"];
-        frame.render_widget(List::new(items).block(Block::bordered().title(" tubetui ")), side);
+        frame.render_widget(List::new(items).block(Block::bordered().title(" tubevibe ")), side);
     }
     let video = Block::bordered().title(" video ");
     app.video_area = video.inner(main);
