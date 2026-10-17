@@ -48,7 +48,7 @@ pub const PREFIX: &[(char, Action, Text)] = &[
 
 /// Keys that act on the selected video, in lists and in video tabs.
 pub const ON_VIDEO: &[(&str, Text)] = &[
-    ("l", Text::new("agregar / quitar (pide s) de Ver después", "add to / remove (asks y) from Watch later")),
+    ("l", Text::new("agregar / quitar (pide s) de Ver después", "add to / remove (asks y) from Watch Later")),
     ("s", Text::new("suscribirse / desuscribirse (pide confirmar)", "subscribe / unsubscribe (asks first)")),
     ("g", Text::new("me gusta (otra vez: lo quita)", "like (again: take it back)")),
     ("G", Text::new("no me gusta (otra vez: lo quita)", "dislike (again: take it back)")),

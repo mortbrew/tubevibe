@@ -613,7 +613,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         }
     }
     if state.later.iter().any(|l| l.id == video.id) {
-        lines.push(Line::from(format!("{} {}", icons.later, lang.pick("En Ver después", "In Watch later"))).fg(CYAN));
+        lines.push(Line::from(format!("{} {}", icons.later, lang.pick("En Ver después", "In Watch Later"))).fg(CYAN));
     }
     lines.extend(rating_line(state, icons, &video.id));
     lines.extend(size_line(state, video));
@@ -1189,7 +1189,7 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
         lines.push(Line::from(format!("⏯ {} {}", lang.pick("Sigue desde", "Resumes at"), clock(at))).fg(YELLOW));
     }
     if state.later.iter().any(|l| l.id == v.id) {
-        lines.push(Line::from(format!("{} {}", icons.later, lang.pick("En Ver después", "In Watch later"))).fg(CYAN));
+        lines.push(Line::from(format!("{} {}", icons.later, lang.pick("En Ver después", "In Watch Later"))).fg(CYAN));
     }
     if v.channel_id.as_ref().is_some_and(|c| state.subs.contains(c)) {
         lines.push(Line::from(format!("{} {}", icons.subscribed, lang.pick("Suscripto", "Subscribed"))).fg(GREEN));
@@ -1740,7 +1740,7 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         Confirm::RemoveFromLater(video) => Line::from(vec![
             Span::raw(lang.pick("¿Quitar de Ver después ", "Remove ")),
             Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
-            Span::raw(lang.pick("?", " from Watch later?")),
+            Span::raw(lang.pick("?", " from Watch Later?")),
         ]),
         Confirm::Trash(paths) => {
             let what = match paths.as_slice() {
@@ -2408,7 +2408,7 @@ mod tests {
         s.update(Action::ToggleUiLang);
         s.update(Action::GoTab(0));
         let screen = render(&s);
-        for text in ["Home", "Watch later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"] {
+        for text in ["Home", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"] {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
         assert!(!screen.contains("Ver después"), "{screen}");

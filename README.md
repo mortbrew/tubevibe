@@ -25,7 +25,7 @@ Every video opens in its own tab.
   (YouTube's picks from channels you don't follow yet)
 - **Según lo que vi**: what YouTube puts *Up next* to the last 10 videos you
   watched, all together and taking turns, without the ones you already saw
-- **Ver después / Watch later**: your real YouTube *Watch later* playlist
+- **Ver después / Watch Later**: your real YouTube *Watch Later* playlist
   (needs a login; the old local-only list is no longer shown). `l` adds the
   selected video to it right away, or, if it is already there, takes it out
   after asking; inside the list `x` removes the selected video (after asking)
@@ -191,8 +191,8 @@ it (each with its key). Hold Shift to select text.
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
 `l` YouTube watch later (add / remove, removing asks), `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
-audio only. In **History** `x` removes the video; in **Watch later** it
-removes it from your YouTube Watch later (after asking); in **Downloads** it cancels
+audio only. In **History** `x` removes the video; in **Watch Later** it
+removes it from your YouTube Watch Later (after asking); in **Downloads** it cancels
 the download (or forgets a finished one). In **My videos**
 and **My music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.

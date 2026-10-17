@@ -115,7 +115,7 @@ impl Section {
             Self::ParaVos => ("Según lo que vi", "From what I watched"),
             Self::Descubrir => ("Descubrir", "Discover"),
             Self::Suscripciones => ("Suscripciones", "Subscriptions"),
-            Self::VerDespues => ("Ver después", "Watch later"),
+            Self::VerDespues => ("Ver después", "Watch Later"),
             Self::Historial => ("Historial", "History"),
             Self::MisListas => ("Mis listas", "My playlists"),
             Self::Canales => ("Mis canales", "My channels"),
@@ -293,7 +293,7 @@ pub enum Prompt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ListKind {
     Plain,
-    /// My YouTube "Watch later" playlist (WL), kept in sync with `State::later`.
+    /// My YouTube "Watch Later" playlist (WL), kept in sync with `State::later`.
     Later,
     /// "Historial", kept in sync with `State::history`.
     History,
@@ -344,7 +344,7 @@ pub enum Confirm {
         id: String,
         title: String,
     },
-    /// A video to take out of my YouTube Watch later.
+    /// A video to take out of my YouTube Watch Later.
     RemoveFromLater(Video),
 }
 
@@ -409,16 +409,16 @@ pub enum Action {
     CookiesImported(Result<String, String>),
     /// `config.toml` was edited outside the app.
     ConfigReloaded(Result<Config, String>),
-    /// `l`: add the selected video to my YouTube Watch later, or (asking
+    /// `l`: add the selected video to my YouTube Watch Later, or (asking
     /// first) take it out.
     ToggleLater,
-    /// Whether a video is in my YouTube Watch later, asked to YouTube when
+    /// Whether a video is in my YouTube Watch Later, asked to YouTube when
     /// the loaded list could not tell.
     LaterChecked {
         video: Video,
         result: Result<bool, String>,
     },
-    /// A video added to (`add`) or removed from my YouTube Watch later, or why not.
+    /// A video added to (`add`) or removed from my YouTube Watch Later, or why not.
     LaterEdited {
         video: Video,
         add: bool,
@@ -614,9 +614,9 @@ pub enum Effect {
     },
     ImportCookies(String),
     EditConfig,
-    /// Ask YouTube whether a video is in my Watch later.
+    /// Ask YouTube whether a video is in my Watch Later.
     CheckLater(Video),
-    /// Add a video to (`add`) or remove it from my YouTube Watch later.
+    /// Add a video to (`add`) or remove it from my YouTube Watch Later.
     EditLater {
         video: Video,
         add: bool,
@@ -809,11 +809,11 @@ pub struct State {
     pub stack: Vec<Listing>,
     /// Title of the list being loaded.
     pub loading: Option<String>,
-    /// My YouTube "Watch later" (WL) as last loaded, with the edits made
+    /// My YouTube "Watch Later" (WL) as last loaded, with the edits made
     /// since. Never saved: YouTube keeps it.
     pub later: Vec<Video>,
     /// `later` is the whole playlist (it was loaded and fit in one page), so
-    /// a video missing from it is not in Watch later.
+    /// a video missing from it is not in Watch Later.
     pub later_complete: bool,
     /// "Historial", newest first.
     pub history: Vec<HistoryEntry>,
@@ -1284,7 +1284,7 @@ impl State {
                     return vec![Effect::DeletePlaylist { id, title }];
                 }
                 Some(Confirm::RemoveFromLater(video)) => {
-                    let removing = self.tr("Quitando de Ver después:", "Removing from Watch later:");
+                    let removing = self.tr("Quitando de Ver después:", "Removing from Watch Later:");
                     self.status = format!("🗑 {removing} {}…", video.title);
                     return vec![Effect::EditLater { video, add: false }];
                 }
@@ -1570,7 +1570,7 @@ impl State {
             Items::Playlists(playlists) => match playlists.get(selected).cloned() {
                 Some(p) => {
                     let title = p.name(self.lang()).to_owned();
-                    // YouTube's Watch later keeps `l`, `x` and the 🕒 marks in sync.
+                    // YouTube's Watch Later keeps `l`, `x` and the 🕒 marks in sync.
                     let kind = if p.id == WATCH_LATER { ListKind::Later } else { ListKind::Plain };
                     self.load(Source::Playlist(p.id), title, Filter::None, true, kind)
                 }
@@ -1647,7 +1647,7 @@ impl State {
                 Vec::new()
             }
             Section::MisListas => self.load(Source::MyPlaylists, title, Filter::None, false, ListKind::Plain),
-            // My YouTube Watch later; the old local list (later.json) is no longer shown.
+            // My YouTube Watch Later; the old local list (later.json) is no longer shown.
             Section::VerDespues if !self.logged_in() => {
                 self.status = self.sign_in_for_later().into();
                 Vec::new()
@@ -1886,7 +1886,7 @@ impl State {
     fn set_session(&mut self, browser: String, cookies_file: String) -> Vec<Effect> {
         self.config.session.browser = browser.clone();
         self.config.session.cookies_file = cookies_file.clone();
-        // Another account, another Watch later.
+        // Another account, another Watch Later.
         self.later.clear();
         self.later_complete = false;
         vec![
@@ -2059,7 +2059,7 @@ impl State {
                 return Vec::new();
             }
         };
-        // Watch later as YouTube has it (Shorts too): `l` tells from it whether a video is there.
+        // Watch Later as YouTube has it (Shorts too): `l` tells from it whether a video is there.
         if pending.kind == ListKind::Later
             && let Items::Videos(videos) = &items
         {
@@ -2419,12 +2419,12 @@ impl State {
             if self.later.iter().any(|v| v.id == video.id) {
                 item(
                     "Quitar de Ver después (pide confirmar)",
-                    "Remove from Watch later (asks first)",
+                    "Remove from Watch Later (asks first)",
                     "l",
                     Action::ToggleLater,
                 )
             } else {
-                item("Ver después", "Watch later", "l", Action::ToggleLater)
+                item("Ver después", "Watch Later", "l", Action::ToggleLater)
             },
             item("Descargar", "Download", "d", Action::Download),
             if self.ratings.get(&video.id) == Some(&Rating::Like) {
@@ -2452,10 +2452,10 @@ impl State {
     }
 
     fn sign_in_for_later(&self) -> &'static str {
-        self.tr("Iniciá sesión para ver tu Ver después de YouTube", "Sign in to see your YouTube Watch later")
+        self.tr("Iniciá sesión para ver tu Ver después de YouTube", "Sign in to see your YouTube Watch Later")
     }
 
-    /// `l`: a video not in my YouTube Watch later goes in; one that is there
+    /// `l`: a video not in my YouTube Watch Later goes in; one that is there
     /// comes out after asking. When the loaded list can't tell, YouTube is asked.
     fn toggle_later(&mut self) -> Vec<Effect> {
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
@@ -2469,19 +2469,19 @@ impl State {
         } else if self.later_complete {
             self.add_later(video)
         } else {
-            let checking = self.tr("Mirando Ver después:", "Checking Watch later:");
+            let checking = self.tr("Mirando Ver después:", "Checking Watch Later:");
             self.status = format!("🕒 {checking} {}…", video.title);
             vec![Effect::CheckLater(video)]
         }
     }
 
     fn add_later(&mut self, video: Video) -> Vec<Effect> {
-        let saving = self.tr("Guardando en Ver después:", "Saving to Watch later:");
+        let saving = self.tr("Guardando en Ver después:", "Saving to Watch Later:");
         self.status = format!("🕒 {saving} {}…", video.title);
         vec![Effect::EditLater { video, add: true }]
     }
 
-    /// `x` in Watch later: take the selected video out, after asking.
+    /// `x` in Watch Later: take the selected video out, after asking.
     fn ask_remove_later(&mut self) {
         if let Some(video) = self.selected_video().cloned() {
             self.confirm = Some(Confirm::RemoveFromLater(video));
@@ -2495,7 +2495,7 @@ impl State {
                     self.later.insert(0, video.clone());
                 }
                 self.status =
-                    format!("🕒 {}: {}", self.tr("Ya está en Ver después", "Already in Watch later"), video.title);
+                    format!("🕒 {}: {}", self.tr("Ya está en Ver después", "Already in Watch Later"), video.title);
                 if self.confirm.is_none() {
                     self.confirm = Some(Confirm::RemoveFromLater(video));
                 }
@@ -2503,7 +2503,7 @@ impl State {
             }
             Ok(false) => self.add_later(video),
             Err(error) => {
-                let failed = self.tr("No se pudo mirar Ver después", "Could not check Watch later");
+                let failed = self.tr("No se pudo mirar Ver después", "Could not check Watch Later");
                 self.status = format!("❌ {failed}: {error}");
                 Vec::new()
             }
@@ -2513,20 +2513,20 @@ impl State {
     fn later_edited(&mut self, video: Video, add: bool, result: Result<(), String>) {
         if let Err(error) = result {
             let failed = if add {
-                self.tr("No se pudo guardar en Ver después", "Could not save to Watch later")
+                self.tr("No se pudo guardar en Ver después", "Could not save to Watch Later")
             } else {
-                self.tr("No se pudo quitar de Ver después", "Could not remove from Watch later")
+                self.tr("No se pudo quitar de Ver después", "Could not remove from Watch Later")
             };
             self.status = format!("❌ {failed} {}: {error}", video.title);
             return;
         }
         self.later.retain(|v| v.id != video.id);
         if add {
-            self.status = format!("🕒 {}: {}", self.tr("Guardado en Ver después", "Saved to Watch later"), video.title);
+            self.status = format!("🕒 {}: {}", self.tr("Guardado en Ver después", "Saved to Watch Later"), video.title);
             self.later.insert(0, video);
         } else {
             self.status =
-                format!("🗑 {}: {}", self.tr("Quitado de Ver después", "Removed from Watch later"), video.title);
+                format!("🗑 {}: {}", self.tr("Quitado de Ver después", "Removed from Watch Later"), video.title);
         }
         let hide_shorts = self.config.ui.hide_shorts;
         let shown: Vec<Video> = self.later.iter().filter(|v| !(hide_shorts && v.short)).cloned().collect();
@@ -2602,7 +2602,7 @@ impl State {
 
     fn ask_delete_playlist(&mut self) {
         let Some(playlist) = self.selected_playlist() else { return };
-        // Liked videos and Watch later are YouTube's own: they can't go.
+        // Liked videos and Watch Later are YouTube's own: they can't go.
         if matches!(playlist.id.as_str(), "LL" | "WL") {
             self.status = self
                 .tr("Esa lista es de YouTube: no se puede borrar", "That list is YouTube's: it can't be deleted")
@@ -4003,7 +4003,7 @@ mod tests {
         let short = Video { short: true, ..video("s") };
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), short.clone(), video("b")]))));
         assert_eq!(s.listing().unwrap().kind, ListKind::Later);
-        assert_eq!(s.later, vec![video("a"), short, video("b")], "Shorts too: they are in Watch later");
+        assert_eq!(s.later, vec![video("a"), short, video("b")], "Shorts too: they are in Watch Later");
         assert!(s.later_complete, "fewer than a page: the whole list");
     }
 

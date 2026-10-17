@@ -202,7 +202,7 @@ impl Drop for Runtime {
 
 impl Runtime {
     fn new(config: Config, config_path: Option<PathBuf>, paths: Paths) -> Self {
-        // "Ver después" is YouTube's Watch later now: the old local list
+        // "Ver después" is YouTube's Watch Later now: the old local list
         // (`later.json`) is left on disk untouched, neither read nor written.
         let mut state = State::new(config, Vec::new());
         state.update(Action::SubsLoaded(store::load_subs(&paths.subs)));
