@@ -63,7 +63,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 17],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 30],
+    pub settings: [&'static str; 31],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -96,7 +96,7 @@ const EMOJI: Icons = Icons {
     sections: ["🏠", "🎯", "🧭", "📺", "🕒", "📜", "📚", "⭐", "💡", "🔎", "📡", "📼", "🎵", "📥", "🔧", "💜", "🚪"],
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "⏯", "🗣", "😀", "🖼", "🖱", "🎞", "✨", "🌊", "💥",
-        "📼", "🎵", "📁", "🏷", "🩺", "👁", "🩳", "🔔", "⭐", "⬆", "📝",
+        "📼", "🎵", "📁", "🏷", "🩺", "👁", "🕒", "🩳", "🔔", "⭐", "⬆", "📝",
     ],
     logo: "▶️",
     tab: "🎬",
@@ -137,8 +137,8 @@ const NERD: Icons = Icons {
     settings: [
         "\u{f007}", "\u{f15b}", "\u{f021}", "\u{f08b}", "\u{f1ab}", "\u{f075}", "\u{f1de}", "\u{f008}", "\u{f025}",
         "\u{f051}", "\u{f144}", "\u{f0ac}", "\u{f118}", "\u{f03e}", "\u{f245}", "\u{f04b}", "\u{f0d0}", "\u{f0e7}",
-        "\u{f0a1}", "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f10b}", "\u{f0f3}",
-        "\u{f005}", "\u{f01b}", "\u{f044}",
+        "\u{f0a1}", "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f017}", "\u{f10b}",
+        "\u{f0f3}", "\u{f005}", "\u{f01b}", "\u{f044}",
     ],
     logo: "\u{f16a}",
     tab: "\u{f144}",
@@ -160,7 +160,7 @@ const UNICODE: Icons = Icons {
     sections: ["⌂", "◈", "◎", "▣", "◷", "↺", "≣", "★", "✧", "⌕", "⌁", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
         "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫", "▭",
-        "#", "✚", "◉", "▯", "♪", "★", "↑", "✎",
+        "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -938,7 +938,7 @@ fn draw_inicio(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
                     Span::raw(format!(
                         " {} {} ",
                         icons.section(Section::BuscarVideos),
-                        lang.pick("Buscar videos en", "Search videos in")
+                        lang.pick("Buscar videos en", "Search Videos in")
                     )),
                     Span::styled(scope.label(lang), Style::new().fg(YELLOW).bold()),
                     Span::raw(lang.pick(" · Tab cambia ", " · Tab changes ")).fg(MUTED),
@@ -946,7 +946,7 @@ fn draw_inicio(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
                 Prompt::Channels => Line::from(format!(
                     " {} {} ",
                     icons.section(Section::BuscarCanales),
-                    lang.pick("Buscar canales", "Search channels")
+                    lang.pick("Buscar canales", "Search Channels")
                 )),
                 Prompt::CookiesFile => Line::from(format!(
                     " {} {} ",
@@ -1092,8 +1092,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
         None if listing.items == Items::Settings => format!(" {} ", breadcrumb.join(" › ")),
         None => match &listing.items {
             Items::Videos(videos) if listing.all.is_some() => {
-                let hidden = listing.all.as_ref().map_or(0, Vec::len) - videos.len();
-                let note = match (state.show_watched, hidden) {
+                let mut note = match (state.show_watched, listing.hidden_watched) {
                     (true, _) => {
                         format!(" · {} {}", icons.watched, state.lang().pick("con los vistos", "watched included"))
                     }
@@ -1102,6 +1101,10 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
                         format!(" · {} {n} {}", icons.watched, state.lang().pick("vistos ocultos", "watched hidden"))
                     }
                 };
+                if listing.hidden_later > 0 {
+                    let label = state.lang().pick("de Ver después ocultos", "in Watch Later hidden");
+                    note.push_str(&format!(" · {} {} {label}", icons.later, listing.hidden_later));
+                }
                 format!(" {} · {}{note} ", breadcrumb.join(" › "), videos.len())
             }
             Items::Files(files, _) if files.iter().any(|f| state.marked.contains(&f.path)) => {
@@ -1514,7 +1517,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             key("Enter", "ver", "play"),
             key("↑ ↓", "elegir", "choose"),
             key("Tab", "volver al video", "back to the video"),
-            key("l", "ver después", "watch later"),
+            key("l", "ver después", "Watch Later"),
             key("c", "canal", "channel"),
             if state.active_tab().is_some_and(|t| t.ended && !t.started) {
                 key("espacio", "reproducir", "play")
@@ -1549,7 +1552,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 } else {
                     key("v", "mostrar vistos", "show watched")
                 },
-                key("l", "ver después", "watch later"),
+                key("l", "ver después", "Watch Later"),
                 key("a", "solo audio", "sound only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -1561,13 +1564,13 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
                 key("Enter", "ver (sigue donde lo dejaste)", "play (resumes where you left)"),
                 key("x", "quitar del historial", "remove from history"),
-                key("l", "ver después", "watch later"),
+                key("l", "ver después", "Watch Later"),
                 key("c", "canal", "channel"),
                 back,
             ],
             Some(Items::Videos(_)) => vec![
                 key("Enter", "ver", "play"),
-                key("l", "ver después", "watch later"),
+                key("l", "ver después", "Watch Later"),
                 key("a", "solo audio", "sound only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),

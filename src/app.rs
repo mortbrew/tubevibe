@@ -111,19 +111,19 @@ impl Section {
 
     pub fn label(self, lang: Lang) -> &'static str {
         let (es, en) = match self {
-            Self::Inicio => ("Mis recomendados", "My recommendations"),
-            Self::ParaVos => ("Según lo que vi", "From what I watched"),
+            Self::Inicio => ("Mis recomendados", "My Recommendations"),
+            Self::ParaVos => ("Según lo que vi", "From What I Watched"),
             Self::Descubrir => ("Descubrir", "Discover"),
             Self::Suscripciones => ("Suscripciones", "Subscriptions"),
             Self::VerDespues => ("Ver después", "Watch Later"),
             Self::Historial => ("Historial", "History"),
-            Self::MisListas => ("Mis listas", "My playlists"),
-            Self::Canales => ("Mis canales", "My channels"),
-            Self::DescubrirCanales => ("Descubrir canales", "Discover channels"),
-            Self::BuscarVideos => ("Buscar videos", "Search videos"),
-            Self::BuscarCanales => ("Buscar canales", "Search channels"),
-            Self::MisVideos => ("Mis videos", "My videos"),
-            Self::MiMusica => ("Mi música", "My music"),
+            Self::MisListas => ("Mis listas", "My Playlists"),
+            Self::Canales => ("Mis canales", "My Channels"),
+            Self::DescubrirCanales => ("Descubrir canales", "Discover Channels"),
+            Self::BuscarVideos => ("Buscar videos", "Search Videos"),
+            Self::BuscarCanales => ("Buscar canales", "Search Channels"),
+            Self::MisVideos => ("Mis videos", "My Videos"),
+            Self::MiMusica => ("Mi música", "My Music"),
             Self::Descargas => ("Descargas", "Downloads"),
             Self::Configuracion => ("Configuración", "Settings"),
             Self::AcercaDe => ("Acerca de", "About"),
@@ -161,6 +161,7 @@ pub enum Setting {
     DiscoverTopics,
     SystemCheck,
     HideWatched,
+    HideLater,
     HideShorts,
     NotifyNew,
     FavoritesFirst,
@@ -169,7 +170,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 31] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -195,6 +196,7 @@ impl Setting {
         Self::DiscoverTopics,
         Self::SystemCheck,
         Self::HideWatched,
+        Self::HideLater,
         Self::HideShorts,
         Self::NotifyNew,
         Self::FavoritesFirst,
@@ -231,7 +233,10 @@ impl Setting {
             Self::DiscoverTopics => ("Temas de Descubrir", "Discover topics"),
             Self::SystemCheck => ("Revisar el sistema (mpv, yt-dlp…)", "Check the system (mpv, yt-dlp…)"),
             Self::HideWatched => {
-                ("Ocultar los vistos en Inicio (v los muestra)", "Hide watched in Home (v shows them)")
+                ("Ocultar los vistos en Inicio (v los muestra)", "Hide watched videos in feeds (v shows them)")
+            }
+            Self::HideLater => {
+                ("Ocultar en Mis recomendados los de Ver después", "Hide Watch Later videos in My Recommendations")
             }
             Self::HideShorts => ("Ocultar los Shorts", "Hide Shorts"),
             Self::NotifyNew => ("Avisar de videos nuevos de mis canales", "Tell me about new videos from my channels"),
@@ -333,11 +338,28 @@ pub struct Listing {
     pub more: Option<u64>,
     /// Feeds: every video, watched ones included (`items` may leave them out).
     pub all: Option<Vec<Video>>,
+    /// My Recommendations: videos in my Watch Later are left out (`hide_later`).
+    pub skip_later: bool,
+    /// Videos `items` leaves out because I watched them…
+    pub hidden_watched: usize,
+    /// … and because they are in my Watch Later.
+    pub hidden_later: usize,
 }
 
 impl Listing {
     pub fn new(title: String, items: Items, kind: ListKind) -> Self {
-        Self { title, items, selected: 0, kind, next: None, more: None, all: None }
+        Self {
+            title,
+            items,
+            selected: 0,
+            kind,
+            next: None,
+            more: None,
+            all: None,
+            skip_later: false,
+            hidden_watched: 0,
+            hidden_later: 0,
+        }
     }
 }
 
@@ -823,6 +845,8 @@ struct Pending {
     /// A playlist I opened (Watch Later and Liked videos too): shown whole,
     /// Shorts included, whatever `hide_shorts` says.
     keep_shorts: bool,
+    /// My Recommendations: leaves out my Watch Later (`hide_later`).
+    skip_later: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -850,6 +874,8 @@ pub struct State {
     /// `later` is the whole playlist (it was loaded and fit in one page), so
     /// a video missing from it is not in Watch Later.
     pub later_complete: bool,
+    /// Watch Later being read in the background, for My Recommendations.
+    later_request: Option<u64>,
     /// "Historial", newest first.
     pub history: Vec<HistoryEntry>,
     /// What I watched elsewhere (YouTube's history), newest first: shown in
@@ -926,6 +952,7 @@ impl State {
             loading: None,
             later,
             later_complete: false,
+            later_request: None,
             history: Vec::new(),
             youtube_history: Vec::new(),
             downloads: Vec::new(),
@@ -1117,6 +1144,10 @@ impl State {
             },
             Setting::HideWatched => {
                 let (es, en) = on_off(self.config.ui.hide_watched);
+                self.tr(es, en).into()
+            }
+            Setting::HideLater => {
+                let (es, en) = on_off(self.config.ui.hide_later);
                 self.tr(es, en).into()
             }
             Setting::HideShorts => {
@@ -1339,11 +1370,11 @@ impl State {
             Action::SystemChecked(manager, checks) => self.system_checked(manager, checks),
             Action::HistoryLoaded(ids) => {
                 self.watched.extend(ids);
-                self.refilter_watched();
+                self.refilter();
             }
             Action::ToggleWatched => {
                 self.show_watched = !self.show_watched;
-                self.refilter_watched();
+                self.refilter();
                 self.status = if self.show_watched {
                     self.tr("Mostrando también los vistos (v los oculta)", "Showing watched videos too (v hides them)")
                 } else {
@@ -1692,7 +1723,18 @@ impl State {
                 self.status = hint.into();
                 Vec::new()
             }
-            Section::Inicio => self.load_feed(Source::Recommended, title, Filter::None),
+            Section::Inicio => {
+                let mut effects = self.load_feed(Source::Recommended, title, Filter::None);
+                if let Some(pending) = &mut self.pending {
+                    pending.skip_later = true;
+                }
+                if self.config.ui.hide_later
+                    && let Some(load) = self.load_later_quietly()
+                {
+                    effects.push(load);
+                }
+                effects
+            }
             Section::Descubrir => self.discover(),
             Section::ParaVos => self.up_next(title),
             Section::DescubrirCanales => self.load_feed(Source::Recommended, title, Filter::NotMine),
@@ -1855,8 +1897,20 @@ impl State {
             Setting::HideWatched => {
                 self.config.ui.hide_watched = !self.config.ui.hide_watched;
                 self.show_watched = !self.config.ui.hide_watched;
-                self.refilter_watched();
+                self.refilter();
                 save("ui", "hide_watched", SettingValue::Bool(self.config.ui.hide_watched))
+            }
+            Setting::HideLater => {
+                self.config.ui.hide_later = !self.config.ui.hide_later;
+                self.refilter();
+                let mut effects = save("ui", "hide_later", SettingValue::Bool(self.config.ui.hide_later));
+                if self.config.ui.hide_later
+                    && self.stack.iter().any(|l| l.skip_later)
+                    && let Some(load) = self.load_later_quietly()
+                {
+                    effects.push(load);
+                }
+                effects
             }
             Setting::Splash => {
                 self.config.ui.splash = !self.config.ui.splash;
@@ -1950,6 +2004,7 @@ impl State {
         // Another account, another Watch Later.
         self.later.clear();
         self.later_complete = false;
+        self.later_request = None;
         vec![
             Effect::SaveSetting { table: "session", key: "browser", value: SettingValue::Text(browser) },
             Effect::SaveSetting { table: "session", key: "cookies_file", value: SettingValue::Text(cookies_file) },
@@ -2057,7 +2112,16 @@ impl State {
         self.next_request += 1;
         self.status = format!("{} {title}…", self.tr("Cargando", "Loading"));
         self.loading = Some(title.clone());
-        self.pending = Some(Pending { id, title, filter, push, kind, favorites_first: false, keep_shorts: false });
+        self.pending = Some(Pending {
+            id,
+            title,
+            filter,
+            push,
+            kind,
+            favorites_first: false,
+            keep_shorts: false,
+            skip_later: false,
+        });
         id
     }
 
@@ -2101,7 +2165,7 @@ impl State {
                 let entries = page.videos.into_iter().map(|(video, at)| HistoryEntry { video, at, position: None });
                 self.youtube_history.extend(entries);
                 self.sync_history();
-                self.refilter_watched();
+                self.refilter();
                 let count = self.listing().map_or(0, |l| l.items.len());
                 self.status = format!("{} · {count}", self.tr("Historial", "History"));
             }
@@ -2110,6 +2174,11 @@ impl State {
     }
 
     fn loaded(&mut self, id: u64, result: Result<Items, String>, next: Option<String>) -> Vec<Effect> {
+        if self.later_request.is_some_and(|r| r == id) {
+            self.later_request = None;
+            self.later_read(result);
+            return Vec::new();
+        }
         let Some(pending) = self.pending.take_if(|p| p.id == id) else {
             return Vec::new(); // superseded by a newer request
         };
@@ -2127,6 +2196,7 @@ impl State {
         {
             self.later_complete = videos.len() < self.config.search.results as usize;
             self.later = videos.clone();
+            self.refilter();
         }
         // None of my channels in a whole feed: my channels are likely an old
         // copy of a stale login. Read them again once and filter again.
@@ -2187,15 +2257,25 @@ impl State {
         } else {
             format!("{} · {}", pending.title, items.len())
         };
-        let mut listing = Listing { next, ..Listing::new(pending.title, items, pending.kind) };
+        let mut listing =
+            Listing { next, skip_later: pending.skip_later, ..Listing::new(pending.title, items, pending.kind) };
         if listing.kind == ListKind::Feed
             && let Items::Videos(videos) = &listing.items
         {
             listing.all = Some(videos.clone());
-            let hidden = filter_watched(&mut listing, &self.watched, self.show_watched);
-            if hidden > 0 {
+            let later = self.later_ids();
+            filter_feed(&mut listing, &self.watched, self.show_watched, &later);
+            let mut notes = Vec::new();
+            if listing.hidden_watched > 0 {
                 let note = self.tr("vistos ocultos (v los muestra)", "watched hidden (v shows them)");
-                self.status = format!("{} · {} · {hidden} {note}", listing.title, listing.items.len());
+                notes.push(format!("{} {note}", listing.hidden_watched));
+            }
+            if listing.hidden_later > 0 {
+                let note = self.tr("de Ver después ocultos", "in Watch Later hidden");
+                notes.push(format!("{} {note}", listing.hidden_later));
+            }
+            if !notes.is_empty() {
+                self.status = format!("{} · {} · {}", listing.title, listing.items.len(), notes.join(" · "));
             }
         }
         if pending.push {
@@ -2248,11 +2328,39 @@ impl State {
         effects
     }
 
-    /// Hides or shows the watched videos of every feed.
-    fn refilter_watched(&mut self) {
+    /// Hides or shows the watched videos of every feed, and my Watch Later
+    /// in My Recommendations.
+    fn refilter(&mut self) {
+        let later = self.later_ids();
         for listing in &mut self.stack {
-            filter_watched(listing, &self.watched, self.show_watched);
+            filter_feed(listing, &self.watched, self.show_watched, &later);
         }
+    }
+
+    /// The ids My Recommendations leaves out: my Watch Later, when `hide_later` is on.
+    fn later_ids(&self) -> HashSet<String> {
+        if self.config.ui.hide_later { self.later.iter().map(|v| v.id.clone()).collect() } else { HashSet::new() }
+    }
+
+    /// Reads my Watch Later without showing it, so My Recommendations can
+    /// leave it out (`None`: not logged in, or already being read).
+    fn load_later_quietly(&mut self) -> Option<Effect> {
+        if !self.logged_in() || self.later_request.is_some() {
+            return None;
+        }
+        let id = self.next_request;
+        self.next_request += 1;
+        self.later_request = Some(id);
+        Some(Effect::Load { id, source: Source::Playlist(WATCH_LATER.into()), limit: self.config.search.results })
+    }
+
+    /// My Watch Later, read in the background: kept, and left out of My Recommendations.
+    fn later_read(&mut self, result: Result<Items, String>) {
+        // Not worth a message: My Recommendations just shows everything.
+        let Ok(Items::Videos(videos)) = result else { return };
+        self.later_complete = videos.len() < self.config.search.results as usize;
+        self.later = videos;
+        self.refilter();
     }
 
     fn back(&mut self) {
@@ -2671,6 +2779,8 @@ impl State {
             listing.selected = listing.selected.min(shown.len().saturating_sub(1));
             listing.items = Items::Videos(shown.clone());
         }
+        // Saved to Watch Later: out of My Recommendations (taken out: back in).
+        self.refilter();
     }
 
     fn toggle_subscription(&mut self) -> Vec<Effect> {
@@ -3201,19 +3311,24 @@ impl State {
 
 /// A feed's videos without the watched ones (unless `show`), keeping the
 /// selection on the same video; how many it hides.
-fn filter_watched(listing: &mut Listing, watched: &HashSet<String>, show: bool) -> usize {
-    let Some(all) = &listing.all else { return 0 };
+/// Shows a feed without the videos I watched (unless `show`) and, in My
+/// Recommendations, without those in `later` (my Watch Later).
+fn filter_feed(listing: &mut Listing, watched: &HashSet<String>, show: bool, later: &HashSet<String>) {
+    let Some(all) = &listing.all else { return };
     let current = match &listing.items {
         Items::Videos(videos) => videos.get(listing.selected).map(|v| v.id.clone()),
         _ => None,
     };
-    let videos: Vec<Video> = all.iter().filter(|v| show || !watched.contains(&v.id)).cloned().collect();
-    let hidden = all.len() - videos.len();
+    let in_later = |v: &Video| listing.skip_later && later.contains(&v.id);
+    let not_later: Vec<&Video> = all.iter().filter(|v| !in_later(v)).collect();
+    let videos: Vec<Video> =
+        not_later.iter().filter(|v| show || !watched.contains(&v.id)).map(|v| (*v).clone()).collect();
+    listing.hidden_later = all.len() - not_later.len();
+    listing.hidden_watched = not_later.len() - videos.len();
     listing.selected = current
         .and_then(|id| videos.iter().position(|v| v.id == id))
         .unwrap_or(listing.selected.min(videos.len().saturating_sub(1)));
     listing.items = Items::Videos(videos);
-    hidden
 }
 
 fn dirs_label(dirs: &[String], default: &str, lang: Lang) -> String {
@@ -3629,7 +3744,7 @@ mod tests {
         assert_eq!(s.lang(), Lang::Es, "Spanish until the runtime picks the system's");
         assert_eq!(s.update(Action::ToggleUiLang), vec![saved("ui", "lang", text("en"))]);
         assert_eq!((s.lang(), s.status.as_str()), (Lang::En, "Language: English"));
-        assert_eq!(Section::Inicio.label(s.lang()), "My recommendations");
+        assert_eq!(Section::Inicio.label(s.lang()), "My Recommendations");
         assert_eq!(s.update(Action::ToggleUiLang), vec![saved("ui", "lang", text("es"))]);
         assert_eq!(change(&mut s, Setting::AppLang), vec![saved("ui", "lang", text("en"))]);
         assert_eq!(change(&mut s, Setting::FxPages), vec![saved("effects", "pages", SettingValue::Bool(false))]);
@@ -4383,6 +4498,75 @@ mod tests {
         s.update(Action::ToggleWatched);
         assert_eq!(ids(&s), ["a"]);
         assert_eq!(s.listing().unwrap().selected, 0, "c is hidden: clamped");
+    }
+
+    #[test]
+    fn english_menu_is_in_title_case() {
+        for section in Section::ALL {
+            let label = section.label(Lang::En);
+            assert!(label.split(' ').all(|w| w.starts_with(|c: char| c.is_uppercase())), "{label}");
+        }
+        assert_eq!(Section::Inicio.label(Lang::En), "My Recommendations");
+        assert_eq!(Section::Inicio.label(Lang::Es), "Mis recomendados", "Spanish stays as it was");
+    }
+
+    #[test]
+    fn my_recommendations_hide_my_watch_later() {
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let effects = open(&mut s, Section::Inicio);
+        let feed = load_id(&effects);
+        let later = effects
+            .iter()
+            .find_map(|e| match e {
+                Effect::Load { id, source: Source::Playlist(p), .. } if p == WATCH_LATER => Some(*id),
+                _ => None,
+            })
+            .expect("Watch Later is read in the background");
+        let ids = |s: &State| match &s.listing().unwrap().items {
+            Items::Videos(v) => v.iter().map(|v| v.id.clone()).collect::<Vec<_>>(),
+            _ => panic!(),
+        };
+        s.update(Action::Loaded(feed, Ok(Items::Videos(vec![video("a"), video("b"), video("c")]))));
+        assert_eq!(ids(&s), ["a", "b", "c"], "Watch Later not here yet: everything shows");
+        // Watch Later arrives after the feed: b goes, and the list stays the one shown.
+        s.update(Action::Loaded(later, Ok(Items::Videos(vec![video("b")]))));
+        assert_eq!(ids(&s), ["a", "c"]);
+        assert_eq!(s.listing().unwrap().hidden_later, 1);
+        assert!(s.later_complete && s.loading.is_none());
+        // Saving c with `l` takes it out too; taking b out of Watch Later brings it back.
+        s.update(Action::LaterEdited { video: video("c"), add: true, result: Ok(()) });
+        assert_eq!(ids(&s), ["a"]);
+        s.update(Action::LaterEdited { video: video("b"), add: false, result: Ok(()) });
+        assert_eq!(ids(&s), ["a", "b"]);
+        // The setting off: Watch Later shows again, and stays off in config.toml.
+        s.stack.push(Listing::new("Settings".into(), Items::Settings, ListKind::Settings));
+        let effects = s.change_setting(Setting::HideLater);
+        assert!(!s.config.ui.hide_later);
+        assert!(effects.contains(&Effect::SaveSetting {
+            table: "ui",
+            key: "hide_later",
+            value: SettingValue::Bool(false)
+        }));
+        s.stack.pop();
+        assert_eq!(ids(&s), ["a", "b", "c"]);
+        // Other feeds keep my Watch Later.
+        let id = load_id(&open(&mut s, Section::Suscripciones));
+        s.config.ui.hide_later = true;
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("c")]))));
+        assert_eq!(ids(&s), ["c"]);
+    }
+
+    #[test]
+    fn my_recommendations_keep_watch_later_when_the_setting_is_off() {
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        s.config.ui.hide_later = false;
+        let effects = open(&mut s, Section::Inicio);
+        assert!(!effects.iter().any(|e| matches!(e, Effect::Load { source: Source::Playlist(_), .. })));
+        s.later = vec![video("a")];
+        s.update(Action::Loaded(load_id(&effects), Ok(Items::Videos(vec![video("a")]))));
+        assert_eq!(s.listing().unwrap().items.len(), 1);
     }
 
     #[test]

@@ -18,8 +18,8 @@ Every video opens in its own tab.
 ## What it does
 
 **YouTube**
-- **Mis recomendados** (your home feed, in YouTube's own order, only your
-  channels), **Descubrir** (this week's most watched videos on your topics,
+- **Mis recomendados / My Recommendations** (your home feed, in YouTube's own
+  order, without the videos already in your Watch Later), **Descubrir** (this week's most watched videos on your topics,
   e.g. `rust, nba, jazz`, outside your channels and your history), **Suscripciones** (newest from your
   channels, live and upcoming first), **Mis canales**, **Descubrir canales**
   (YouTube's picks from channels you don't follow yet)
@@ -30,7 +30,7 @@ Every video opens in its own tab.
   selected video to it right away (if it is already there, it just says so);
   inside the list `Ctrl+y` `x` removes the selected video (after asking)
 - **Mis listas**: your YouTube playlists, plus *Liked videos* and *Watch
-  later*; `Enter` opens one, `x` deletes it from YouTube (after asking).
+  Later*; `Enter` opens one, `x` deletes it from YouTube (after asking).
   Inside one, `Ctrl+y` `x` takes the selected video out of it on YouTube
   (after asking; in *Liked videos* that takes the like back)
 - **Historial**: everything you watched, newest first, with the day you
@@ -197,8 +197,8 @@ In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
 `l` save to YouTube Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
 audio only. In **History** `x` removes the video; in **Watch Later** and
 **playlists** `Ctrl+y` `x` removes it on YouTube (after asking); in **Downloads** `x` cancels
-the download (or forgets a finished one). In **My videos**
-and **My music**: `space` marks files, `x` / `Del` moves the marked ones (or
+the download (or forgets a finished one). In **My Videos**
+and **My Music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
 In a video tab that is not playing yet (or closed), `Enter` or `space` plays it.
 While watching: `space` pause, `←→` seek, `↑↓` volume, `m` mute, `j`
@@ -262,6 +262,7 @@ mouse = true             # clicks and wheel; hold Shift to select text
 splash = true            # the tubetui logo for a moment when it opens (any key skips it)
 check_updates = true     # once a day, tell me about new versions and how to install them here
 hide_shorts = true       # leave Shorts out of every list
+hide_later = true        # leave my Watch Later videos out of My Recommendations
 notify_new = true        # check my subscriptions every 15 minutes and tell me about new videos
 favorites_first = true   # my most watched channels first in Suscripciones and Mis canales
 

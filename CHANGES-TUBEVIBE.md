@@ -26,7 +26,7 @@ Now:
   - The open list is updated as soon as YouTube confirms; errors show in the
     status bar (❌ …). Without a login it says to sign in.
 - **`x`** inside Watch Later removes the selected video (after asking).
-  Opening *Watch Later (YouTube)* from **My playlists** behaves the same.
+  Opening *Watch Later (YouTube)* from **My Playlists** behaves the same.
 - The 🕒 marks in lists and the count next to the menu entry reflect the
   YouTube list (the count only when the whole list was loaded).
 - Changing the login forgets the Watch Later known so far.
@@ -153,7 +153,7 @@ earlier version of this branch did; it was taken out whole).
   removed. The right-click item reads *Save to Watch Later* / *Already in
   Watch Later*.
 - **`Ctrl+y` `x` removes from YouTube lists**: in Watch Later or any
-  YouTube playlist opened from *My playlists* (mine, saved), it asks
+  YouTube playlist opened from *My Playlists* (mine, saved), it asks
   *"Remove <video> from <playlist>?"* and, on yes, takes the selected video
   out on YouTube; the list updates when YouTube says it is done, errors go
   to the status bar. In **Liked videos** removing is taking the like back
@@ -162,8 +162,8 @@ earlier version of this branch did; it was taken out whole).
   lists offers *Remove from this list*.
 - **Plain `x` no longer removes** videos from Watch Later or playlists (it
   says *"Ctrl+y x removes it from this list"*). Elsewhere it is unchanged:
-  History (remove), Downloads (cancel / forget), My videos / My music
-  (trash), My playlists (delete the whole playlist).
+  History (remove), Downloads (cancel / forget), My Videos / My Music
+  (trash), My Playlists (delete the whole playlist).
 - **How a playlist removal is sent**: Watch Later as before
   (`ACTION_REMOVE_VIDEO_BY_VIDEO_ID`). Other playlists: the entry's
   `setVideoId` is read from the playlist (signed-in `browse` `VL<id>`, page
@@ -172,10 +172,10 @@ earlier version of this branch did; it was taken out whole).
   lockup), kept per playlist for the session, and sent as
   `ACTION_REMOVE_VIDEO`; with none found, `ACTION_REMOVE_VIDEO_BY_VIDEO_ID`
   is tried.
-- **My channels / subscription checkmarks**: the sidebar (`guide`) used to
+- **My Channels / subscription checkmarks**: the sidebar (`guide`) used to
   add every channel link in it, so YouTube's own channels in *Explore*
   (Music, Live, Gaming, News, Sports…) and *Your channel* counted as
-  subscriptions, in *My channels* and as ✓ marks (the subscribed set comes
+  subscriptions, in *My Channels* and as ✓ marks (the subscribed set comes
   from the same list). Only the `guideSubscriptionsSectionRenderer`
   section is read now (its *Show more* entries included).
 
@@ -192,8 +192,32 @@ earlier version of this branch did; it was taken out whole).
   channel*) added by hand in the shape YouTube is known to send.
 - The subscribed set saved from an earlier run (with the topic channels)
   is replaced the next time the channels are read.
-## My recommendations shows the whole YouTube home feed
+## My Recommendations shows the whole YouTube home feed
 
 The original app kept only videos from channels you subscribe to, so with few
 subscriptions the list came up empty. It now shows YouTube's home feed as is,
 the same recommendations you see on youtube.com or the phone app.
+
+## My Recommendations hides your Watch Later, and Title Case menu names (`recs-titlecase`)
+
+- **My Recommendations no longer shows videos that are already in your
+  YouTube Watch Later.** When you open it, the app quietly reads your Watch
+  Later in the background; when that arrives, those videos drop out of the
+  list. Saving a video with `l` while you're looking at My Recommendations
+  takes it out of the list right away; removing one from Watch Later brings
+  it back. The list title says how many were hidden (e.g. "🕒 3 in Watch
+  Later hidden"). Only My Recommendations does this; the other feeds are
+  unchanged.
+- **New setting**: Settings → *Hide Watch Later videos in My
+  Recommendations* (on by default). It is saved in `config.toml` as
+  `hide_later` under `[ui]`; turning it off shows everything again at once.
+- **The English left menu is in Title Case**: My Recommendations, From What
+  I Watched, Discover, Subscriptions, Watch Later, History, My Playlists, My
+  Channels, Discover Channels, Search Videos, Search Channels, My Videos, My
+  Music, Downloads, Settings, About, Quit. The same names are capitalized in
+  the help screen (`?`), key hints, search box titles and these docs. The
+  Spanish menu is unchanged.
+- The *Hide watched* setting now reads "Hide watched videos in feeds (v
+  shows them)" (it always applied to every feed, not only Home).
+- Limit: if your Watch Later is longer than one page (60 videos by default,
+  `[search] results`), only the first page is used for hiding.
