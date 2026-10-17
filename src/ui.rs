@@ -697,7 +697,8 @@ fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option
             }
         }
         let mut label = section.label(lang).to_owned();
-        if *section == Section::VerDespues && !state.later.is_empty() {
+        // Only a count YouTube's whole list backs up.
+        if *section == Section::VerDespues && state.later_complete && !state.later.is_empty() {
             label.push_str(&format!(" ({})", state.later.len()));
         }
         if *section == Section::Suscripciones && !state.fresh.is_empty() {
@@ -1365,6 +1366,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Confirm::Trash(_) => key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash"),
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
+            Confirm::RemoveFromLater(_) => key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it"),
         };
         vec![yes, key(lang.pick("otra tecla", "other key"), "no", "no")]
     } else if state.help {
@@ -1615,6 +1617,11 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             Span::raw(lang.pick("¿Borrar de YouTube la lista ", "Delete the playlist ")),
             Span::styled(truncate(title, 24), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick("?", " from YouTube?")),
+        ]),
+        Confirm::RemoveFromLater(video) => Line::from(vec![
+            Span::raw(lang.pick("¿Quitar de Ver después ", "Remove ")),
+            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick("?", " from Watch later?")),
         ]),
         Confirm::Trash(paths) => {
             let what = match paths.as_slice() {
@@ -2004,6 +2011,7 @@ mod tests {
     fn menu_shows_every_section_with_icons_and_later_count() {
         let mut s = state();
         s.later = vec![video("x"), video("y")];
+        s.later_complete = true;
         let screen = render(&s);
         for (section, icon) in Section::ALL.iter().zip(UNICODE.sections) {
             assert!(screen.contains(&format!("{icon} {}", section.label(Lang::Es))), "{section:?}\n{screen}");

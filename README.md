@@ -25,6 +25,10 @@ Every video opens in its own tab.
   (YouTube's picks from channels you don't follow yet)
 - **Según lo que vi**: what YouTube puts *Up next* to the last 10 videos you
   watched, all together and taking turns, without the ones you already saw
+- **Ver después / Watch later**: your real YouTube *Watch later* playlist
+  (needs a login; the old local-only list is no longer shown). `l` adds the
+  selected video to it right away, or, if it is already there, takes it out
+  after asking; inside the list `x` removes the selected video (after asking)
 - **Mis listas**: your YouTube playlists, plus *Liked videos* and *Watch
   later*; `Enter` opens one, `x` deletes it from YouTube (after asking)
 - **Historial**: everything you watched, newest first, with the day you
@@ -61,7 +65,7 @@ Every video opens in its own tab.
   **Right click** opens a menu with what can be done there: play, sound only,
   watch later, download, like, channel, subscribe, close the tab, delete…
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
-  dislike** (`g` / `G`, again takes it back), **watch later** (`l`),
+  dislike** (`g` / `G`, again takes it back), **YouTube watch later** (`l`, removing asks first),
   **download** with subtitles (`d`), open the **channel** (`c`)
 - **Comments**: next to *Up next* when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
@@ -178,8 +182,9 @@ progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
-`l` watch later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
-audio only. In **History** `x` removes the video; in **Downloads** it cancels
+`l` YouTube watch later (add / remove, removing asks), `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
+audio only. In **History** `x` removes the video; in **Watch later** it
+removes it from your YouTube Watch later (after asking); in **Downloads** it cancels
 the download (or forgets a finished one). In **My videos**
 and **My music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.

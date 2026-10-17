@@ -22,7 +22,7 @@ use ratatui::layout::Rect;
 use tubetui::anim::Animations;
 use tubetui::app::{Action, Effect, Playback, PlayerCommand, SettingValue, State};
 use tubetui::config::{self, Config, PlayerMode};
-use tubetui::domain::{TabId, Video};
+use tubetui::domain::TabId;
 use tubetui::i18n::Lang;
 use tubetui::media::{self, MediaKind};
 use tubetui::player::{self, Geometry, Launch, Mode, Player};
@@ -93,11 +93,10 @@ fn main() -> anyhow::Result<()> {
         Lang::from_locale(&locale.unwrap_or_default())
     });
     let paths = Paths::system().context("no se encontró la carpeta personal")?;
-    let later = load_later(&paths)?;
     let crash_log = paths.cache.join("crash.log");
     log_panics(crash_log.clone());
 
-    let mut runtime = Runtime::new(config, config_path, paths, later);
+    let mut runtime = Runtime::new(config, config_path, paths);
     let mut terminal = ratatui::init();
     set_focus_reports(true);
     let result = runtime.run(&mut terminal);
@@ -134,20 +133,6 @@ fn append(path: &Path, message: &str) {
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "[{}] {message}", now());
     }
-}
-
-/// "Ver después", migrating the old ytv list the first time.
-fn load_later(paths: &Paths) -> anyhow::Result<Vec<Video>> {
-    if !paths.later.exists()
-        && let Some(ytv) = directories::BaseDirs::new().map(|d| d.data_local_dir().join("ytv/despues.tsv"))
-        && let Ok(text) = std::fs::read_to_string(ytv)
-    {
-        let videos = store::parse_ytv_later(&text);
-        store::save_later(&paths.later, &videos)?;
-        return Ok(videos);
-    }
-    store::load_later(&paths.later)
-        .with_context(|| format!("no se pudo leer {} (no lo sobrescribo)", paths.later.display()))
 }
 
 struct Runtime {
@@ -213,8 +198,10 @@ impl Drop for Runtime {
 }
 
 impl Runtime {
-    fn new(config: Config, config_path: Option<PathBuf>, paths: Paths, later: Vec<Video>) -> Self {
-        let mut state = State::new(config, later);
+    fn new(config: Config, config_path: Option<PathBuf>, paths: Paths) -> Self {
+        // "Ver después" is YouTube's Watch later now: the old local list
+        // (`later.json`) is left on disk untouched, neither read nor written.
+        let mut state = State::new(config, Vec::new());
         state.update(Action::SubsLoaded(store::load_subs(&paths.subs)));
         state.update(Action::HistoryLoaded(store::load_watched(&paths.watched)));
         state.history = store::load_history(&paths.history);
@@ -686,11 +673,25 @@ impl Runtime {
                     dbg(format!("history.json: {e}"));
                 }
             }
-            Effect::SaveLater(videos) => {
-                if let Err(e) = store::save_later(&self.paths.later, &videos) {
-                    let failed = self.tr("No se pudo guardar Ver después", "Could not save Watch later");
-                    self.send(Action::Status(format!("{failed}: {e}")));
-                }
+            Effect::CheckLater(video) => {
+                let cookies = self.cookies.clone();
+                self.background(move || {
+                    let result = match cookies {
+                        Some(cookies) => youtube::in_watch_later(&cookies, &video.id).map_err(|e| e.to_string()),
+                        None => Err(youtube::YoutubeError::NoSession.to_string()),
+                    };
+                    Action::LaterChecked { video, result }
+                });
+            }
+            Effect::EditLater { video, add } => {
+                let cookies = self.cookies.clone();
+                self.background(move || {
+                    let result = match cookies {
+                        Some(cookies) => youtube::edit_watch_later(&cookies, &video.id, add).map_err(|e| e.to_string()),
+                        None => Err(youtube::YoutubeError::NoSession.to_string()),
+                    };
+                    Action::LaterEdited { video, add, result }
+                });
             }
             Effect::LoadSubs => {
                 let cookies = self.cookies.clone();
