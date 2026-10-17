@@ -145,3 +145,9 @@ earlier version of this branch did; it was taken out whole).
   showed empty. Its status count (*"Mine · 12"*) and the Watch Later count
   in the menu now match what is shown. Feeds, Home, Subscriptions,
   searches, channels and the new-video notices still leave Shorts out.
+
+## My recommendations shows the whole YouTube home feed
+
+The original app kept only videos from channels you subscribe to, so with few
+subscriptions the list came up empty. It now shows YouTube's home feed as is,
+the same recommendations you see on youtube.com or the phone app.
