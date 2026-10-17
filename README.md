@@ -53,7 +53,7 @@ Every video opens in its own tab.
 - A **preview** of the selected video with its **thumbnail** (in kitty), its
   length and **what it weighs** to download at your quality
   (*💾 Download ≈ 84 MB (1080p)*), asked to yt-dlp once the selection rests
-  on it
+  on it, together with the first lines of its **description**
 - With the video in its own window, its tab shows the **video's details**
   (thumbnail, subscribers, views, likes, date) and **Up next**: `Tab` moves
   into it, `Enter` opens one in a new tab. Closing the video keeps the tab
@@ -75,6 +75,9 @@ Every video opens in its own tab.
 - **Comments**: next to *Up next* when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
   scroll them
+- **Description**: on the same tabs, its first 8 lines between the details
+  and *Up next*; `e` shows it whole over *Up next* (`PgUp` / `PgDn` scroll
+  it, `e` or `Esc` close it). Links show as plain text
 
 **Playback**
 - Embedded video in kitty, an mpv window, or an **overlay** (X11): an mpv
@@ -198,7 +201,7 @@ While watching: `space` pause, `←→` seek, `↑↓` volume, `m` mute, `j`
 subtitles, `i` original / subtitles / dubbed, `o` language, `v` quality
 (360p–1440p), `b` codec (H.264 / VP9 / AV1 / any), `f` fullscreen, `.` `,`
 next / previous song, `[` `]` previous / next chapter, `a` audio only ⇄ video,
-`PgUp` `PgDn` scroll the comments. Quality, codec and language reload the video at the
+`PgUp` `PgDn` scroll the comments, `e` the whole description (`PgUp` `PgDn` then scroll it). Quality, codec and language reload the video at the
 same second and are remembered. If embedded video looks behind the sound,
 the CPU is dropping frames: `v` down to 480p, or try the overlay.
 

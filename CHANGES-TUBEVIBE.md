@@ -72,3 +72,34 @@ defaults to `false`**:
 
 `autoplay = true` brings back upstream's behavior exactly; the existing tests
 run with it on, new ones cover it off.
+
+## Video descriptions (`descriptions`)
+
+- **Video tab** (when the video plays in its own window, or as sound only,
+  so the tab shows its details): the description goes between the details
+  and *Up next*, up to 8 wrapped lines with its own line breaks kept, the
+  last one saying *"… (more: e)"* when there is more. **`e`** shows it whole
+  over *Up next* (comments stay beside it); **`PgUp` / `PgDn`** scroll it
+  while it is open (otherwise they scroll the comments as before);
+  **`e`**, **`Esc`** or **`Tab`** close it. Links are plain text.
+  It comes from the watch page the tab already asks for
+  (`videoSecondaryInfoRenderer.attributedDescription.content`, else the
+  side panel's `expandableVideoDescriptionBodyRenderer` copy): no extra
+  request.
+- **Preview pane** of video lists: up to 5 lines (the last one `…` when cut)
+  after the other details. It comes from the yt-dlp run that already asks
+  the download size when the selection rests on a video
+  (`--print "%(description)j"` added): no extra run. A video whose size was
+  known without a description is asked once more; live and upcoming videos
+  are not asked (as before), so they show none in the preview.
+- Descriptions are kept in memory for the session (not saved), from either
+  source.
+
+### Uncertain
+
+- The watch-page field was checked against one live anonymous reply
+  (it carries the whole text with real URLs); the panel fallback and the
+  yt-dlp `%(description)j` output (`null` / `"NA"` when missing) are
+  handled but only tested with built replies.
+- Very long descriptions scroll by source lines in the app's state; the
+  view never scrolls past the last screenful.

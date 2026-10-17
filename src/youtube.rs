@@ -576,6 +576,8 @@ pub struct Watch {
     pub rating: Option<Rating>,
     /// Asks YouTube for the comments (see [`comments`]).
     pub comments_token: Option<String>,
+    /// The whole description, with its line breaks; links as plain text.
+    pub description: Option<String>,
 }
 
 /// A top comment of a video.
@@ -737,7 +739,21 @@ pub fn rate(cookies: &Path, video_id: &str, rating: Rating) -> Result<(), Youtub
 pub fn parse_watch(reply: &Value, now: i64) -> Watch {
     let mut watch = Watch::default();
     let mut seen = HashSet::new();
+    // The description under the video, else the copy in its side panel.
+    let mut panel_description = None;
     walk(reply, &mut |object| {
+        if let Some(secondary) = object.get("videoSecondaryInfoRenderer")
+            && watch.description.is_none()
+        {
+            watch.description = description_text(&secondary["attributedDescription"])
+                .or_else(|| text(&secondary["description"]).and_then(trimmed));
+        }
+        if let Some(body) = object.get("expandableVideoDescriptionBodyRenderer")
+            && panel_description.is_none()
+        {
+            panel_description = description_text(&body["attributedDescriptionBodyText"])
+                .or_else(|| text(&body["descriptionBodyText"]).and_then(trimmed));
+        }
         if let Some(primary) = object.get("videoPrimaryInfoRenderer") {
             // `originalViewCount` is sometimes "0" while the text says "6,984 views".
             let views = &primary["viewCount"]["videoViewCountRenderer"];
@@ -785,7 +801,21 @@ pub fn parse_watch(reply: &Value, now: i64) -> Watch {
             watch.related.push(video);
         }
     });
+    watch.description = watch.description.or(panel_description);
     watch
+}
+
+/// The text of an `attributedDescription`: `{ "content": "…" }`.
+fn description_text(value: &Value) -> Option<String> {
+    value["content"].as_str().map(str::to_owned).and_then(trimmed)
+}
+
+/// A video description without trailing spaces on its lines nor blank lines
+/// around it (inner blank lines stay: they separate paragraphs); none if empty.
+pub fn trimmed(text: String) -> Option<String> {
+    let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
+    let text = lines.join("\n").trim_matches('\n').to_owned();
+    (!text.trim().is_empty()).then_some(text)
 }
 
 /// A suggested video in YouTube's newer "lockup" format.
@@ -1002,15 +1032,36 @@ pub fn parse_subscription_reply(reply: &Value) -> Option<bool> {
 }
 
 /// What `url` weighs in `format`, and how long it is. Blocking, a few seconds.
-pub fn size(url: &str, format: &str, cookies: Option<&Path>) -> Result<crate::domain::Size, YoutubeError> {
+/// What a video weighs at `format`, and its description (asked in the same
+/// yt-dlp run: it reads the whole video page anyway).
+pub fn size(
+    url: &str,
+    format: &str,
+    cookies: Option<&Path>,
+) -> Result<(crate::domain::Size, Option<String>), YoutubeError> {
+    Ok(parse_size_reply(&run_yt_dlp(&size_args(url, format, cookies))?))
+}
+
+fn size_args(url: &str, format: &str, cookies: Option<&Path>) -> Vec<String> {
     let mut args: Vec<String> =
         ["--no-warnings", "--skip-download", "--no-playlist", "-f", format].map(String::from).into();
     args.extend(["--print", "%(filesize,filesize_approx)s|%(duration)s|%(height)s"].map(String::from));
+    // JSON keeps the description's line breaks on one output line.
+    args.extend(["--print", "%(description)j"].map(String::from));
     if let Some(cookies) = cookies {
         args.extend(["--cookies".into(), cookies.display().to_string()]);
     }
     args.push(url.to_owned());
-    Ok(crate::domain::parse_size(&run_yt_dlp(&args)?))
+    args
+}
+
+/// `size`'s output: the size line, then the description as a JSON string
+/// (`null` or `"NA"` when there is none).
+pub fn parse_size_reply(output: &str) -> (crate::domain::Size, Option<String>) {
+    let mut lines = output.lines();
+    let size = crate::domain::parse_size(lines.next().unwrap_or_default());
+    let description = lines.next().and_then(|l| serde_json::from_str::<Option<String>>(l.trim()).ok()).flatten();
+    (size, description.filter(|d| d != "NA").and_then(trimmed))
 }
 
 fn run_yt_dlp(args: &[String]) -> Result<String, YoutubeError> {
@@ -1474,7 +1525,8 @@ mod tests {
                             "toggleButtonViewModel": { "defaultButtonViewModel": { "buttonViewModel": {
                             "accessibilityText": "like this video along with 1,733 other people" } } } } } }] } } } },
                 { "videoSecondaryInfoRenderer": { "owner": { "videoOwnerRenderer": {
-                    "subscriberCountText": { "simpleText": "559K subscribers" } } } } },
+                    "subscriberCountText": { "simpleText": "559K subscribers" } } },
+                    "attributedDescription": { "content": "First line  \nhttps://example.com/x\n\nLast\n\n" } } },
                 { "itemSectionRenderer": { "sectionIdentifier": "comment-item-section", "contents": [
                     { "continuationItemRenderer": { "continuationEndpoint": {
                         "continuationCommand": { "token": "COMMENTS" } } } }] } }
@@ -1690,5 +1742,38 @@ mod tests {
         assert_eq!(edit_result(&json!({ "status": "STATUS_SUCCEEDED" })), Ok(()));
         assert_eq!(edit_result(&json!({})), Ok(()));
         assert_eq!(edit_result(&json!({ "status": "STATUS_FAILED" })), Err("STATUS_FAILED".into()));
+    }
+
+    #[test]
+    fn the_watch_page_brings_the_description_with_its_lines() {
+        let watch = parse_watch(&watch_reply(), 0);
+        assert_eq!(watch.description.as_deref(), Some("First line\nhttps://example.com/x\n\nLast"));
+        // Only the side panel's copy: still read.
+        let panel = json!({ "engagementPanels": [{ "structuredDescriptionContentRenderer": { "items": [
+            { "expandableVideoDescriptionBodyRenderer": {
+                "attributedDescriptionBodyText": { "content": "From the panel" } } }] } }] });
+        assert_eq!(parse_watch(&panel, 0).description.as_deref(), Some("From the panel"));
+        let empty = json!({ "videoSecondaryInfoRenderer": { "attributedDescription": { "content": " \n " } } });
+        assert_eq!(parse_watch(&empty, 0).description, None);
+    }
+
+    #[test]
+    fn size_reply_carries_the_description() {
+        let (size, description) = parse_size_reply("1000|60|720\n\"Hi\\nthere\"\n");
+        assert_eq!((size.bytes, size.duration, size.height), (Some(1000), Some(60), Some(720)));
+        assert_eq!(description.as_deref(), Some("Hi\nthere"));
+        for none in
+            ["1000|60|720\nnull", "1000|60|720\nNA", "1000|60|720\n\"NA\"", "1000|60|720", "1000|60|720\n\"  \""]
+        {
+            assert_eq!(parse_size_reply(none).1, None, "{none:?}");
+        }
+        assert_eq!(parse_size_reply("NA|NA|NA\n\"x\"").0, crate::domain::Size::default());
+    }
+
+    #[test]
+    fn size_asks_for_the_description_too() {
+        let args = size_args("https://youtu.be/x", "best", None).join(" ");
+        assert!(args.contains("--print %(description)j"), "{args}");
+        assert!(args.ends_with("https://youtu.be/x"));
     }
 }
