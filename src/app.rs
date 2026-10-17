@@ -1431,8 +1431,7 @@ impl State {
             }
             Action::UpdateFound(update) => {
                 let (available, see) = (self.tr("disponible", "available"), self.tr("mirá Acerca de", "see About"));
-                // The update check still follows the original project (src/update.rs).
-                self.status = format!("⬆ tubetui {} {available} · {see}", update.version);
+                self.status = format!("⬆ tubevibe {} {available} · {see}", update.version);
                 self.update = Some(update);
             }
             Action::ToggleMark => return self.toggle_mark(),

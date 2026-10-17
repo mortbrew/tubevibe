@@ -151,8 +151,40 @@ what is not and the command that installs it with your package manager
 
 ## Install
 
-tubevibe has no ready-made packages yet; build it from source, anywhere
-Rust 1.88+ runs (Linux / macOS / Windows):
+Every release on
+[GitHub Releases](https://github.com/mortbrew/tubevibe/releases/latest) has:
+
+| Machine | File |
+|---|---|
+| Linux x86_64 | `tubevibe-x86_64-linux.tar.gz` |
+| Linux ARM64 | `tubevibe-aarch64-linux.tar.gz` |
+| Debian / Ubuntu / Mint (x86_64) | `tubevibe_amd64.deb` (`sudo apt install ./tubevibe_amd64.deb`) |
+| macOS (Apple Silicon) | `tubevibe-aarch64-macos.tar.gz` |
+| Windows x86_64 | `tubevibe-x86_64-windows-setup.exe` (installer, can install mpv and yt-dlp with winget) or the portable `tubevibe-x86_64-windows.zip` |
+
+On Linux x86_64, one line puts it in `~/.local/bin` (which should be in your
+`PATH`; use `aarch64` instead of `x86_64` on ARM):
+
+```sh
+mkdir -p ~/.local/bin && curl -fsSL https://github.com/mortbrew/tubevibe/releases/latest/download/tubevibe-x86_64-linux.tar.gz | tar xz -C ~/.local/bin --strip-components=1 tubevibe/tubevibe
+```
+
+Or the installer for Linux / macOS, which picks the right file, falls back to
+building from source where there is none, and checks mpv and yt-dlp (and,
+to build, the C compiler and Rust 1.88+), printing the commands for whatever
+is missing:
+
+```sh
+curl -sSf https://raw.githubusercontent.com/mortbrew/tubevibe/main/install.sh | sh
+```
+
+From source, anywhere Rust 1.88+ runs:
+
+```sh
+cargo install --locked --git https://github.com/mortbrew/tubevibe
+```
+
+or from a clone:
 
 ```sh
 git clone https://github.com/mortbrew/tubevibe
@@ -161,15 +193,12 @@ cargo build --release
 ./target/release/tubevibe
 ```
 
-or install the `tubevibe` command into `~/.cargo/bin`:
+When a newer release is out, the **About** page shows the command that
+updates it for how it was installed (Settings → *Look for new versions*).
 
-```sh
-cargo install --path .
-```
-
-(The original tubetui has packages for Windows, Debian/Ubuntu, other Linux
-and macOS on its [website](https://polblancoo.github.io/tubetui/#descargas);
-those install tubetui, not this fork.)
+(The original tubetui has its own packages on its
+[website](https://polblancoo.github.io/tubetui/#descargas); those install
+tubetui, not this fork.)
 
 > `feature edition2024 is required` means your Rust is too old — distro
 > packages often are (Ubuntu 22.04 ships 1.75). Install a current one with

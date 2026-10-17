@@ -2884,17 +2884,19 @@ mod tests {
     #[test]
     fn a_new_version_is_announced_with_how_to_get_it() {
         let mut s = state();
-        let update =
-            crate::update::Update { version: "9.9.9".into(), how: Install::Command("cargo install tubetui".into()) };
+        let update = crate::update::Update {
+            version: "9.9.9".into(),
+            how: Install::Command("cargo install --locked --git https://github.com/mortbrew/tubevibe".into()),
+        };
         s.update(Action::UpdateFound(update));
-        assert!(s.status.contains("⬆ tubetui 9.9.9 disponible"), "{}", s.status);
+        assert!(s.status.contains("⬆ tubevibe 9.9.9 disponible"), "{}", s.status);
         let screen = render(&s);
         assert!(screen.contains("Acerca de ⬆"), "{screen}");
         let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();
         s.update(Action::OpenSection(about));
         let screen = render(&s);
         assert!(screen.contains("Hay una versión nueva: 9.9.9"), "{screen}");
-        assert!(screen.contains("cargo install tubetui"));
+        assert!(screen.contains("cargo install --locked --git https://github.com/mortbrew/tubevibe"), "{screen}");
     }
 
     #[test]

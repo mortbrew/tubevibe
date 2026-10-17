@@ -1,6 +1,8 @@
-# On every `v*` tag: build Linux, Windows and macOS packages and attach them
-# to the GitHub release. File names carry no version, so the website can link
-# to https://github.com/mortbrew/tubevibe/releases/latest/download/<file>.
+# On every `v*` tag: build Linux (x86_64, aarch64), Windows (x86_64) and macOS
+# (Apple Silicon) packages and attach them to the GitHub release. It needs no
+# secrets: the release is made with the workflow's own token. File names carry
+# no version, so links can point at
+# https://github.com/mortbrew/tubevibe/releases/latest/download/<file>.
 name: release
 
 on:
@@ -30,14 +32,24 @@ jobs:
 
   linux:
     needs: create
-    # The oldest supported runner: the binary then runs on older glibc too.
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest supported runners: the binary then runs on older glibc too.
+          - arch: x86_64
+            runner: ubuntu-22.04
+          # GitHub's arm64 runners (free for public repositories).
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
+        if: matrix.arch == 'x86_64'
         with:
           tool: cargo-deb
       - run: cargo test --locked
@@ -46,15 +58,21 @@ jobs:
         run: |
           mkdir -p dist/tubevibe
           cp target/release/tubevibe README.md dist/tubevibe/
-          tar -C dist -czf dist/tubevibe-x86_64-linux.tar.gz tubevibe
-          cargo deb --no-build --output dist/tubevibe_amd64.deb
+          tar -C dist -czf dist/tubevibe-${{ matrix.arch }}-linux.tar.gz tubevibe
+      - name: Debian package
+        if: matrix.arch == 'x86_64'
+        run: cargo deb --no-build --output dist/tubevibe_amd64.deb
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           fail_on_unmatched_files: true
-          files: |
-            dist/tubevibe-x86_64-linux.tar.gz
-            dist/tubevibe_amd64.deb
+          files: dist/tubevibe-${{ matrix.arch }}-linux.tar.gz
+      - uses: softprops/action-gh-release@v2
+        if: matrix.arch == 'x86_64'
+        with:
+          tag_name: ${{ env.TAG }}
+          fail_on_unmatched_files: true
+          files: dist/tubevibe_amd64.deb
 
   windows:
     needs: create

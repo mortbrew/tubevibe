@@ -1,11 +1,16 @@
 #!/bin/sh
-# tubetui installer for Linux and macOS: checks what building and running
-# tubetui needs, prints the commands for whatever is missing, and runs
-# `cargo install tubetui` once it can.
+# tubevibe installer for Linux and macOS. Puts the latest release's program
+# in ~/.local/bin (or $TUBEVIBE_BIN_DIR); where there is no ready-made one
+# (or with TUBEVIBE_FROM_SOURCE=1) it builds it with cargo instead, checking
+# the compiler and Rust first. Either way it checks mpv and yt-dlp and prints
+# the commands for whatever is missing.
 #
-#   curl -sSf https://raw.githubusercontent.com/polblancoo/tubetui/main/install.sh | sh
+#   curl -sSf https://raw.githubusercontent.com/mortbrew/tubevibe/main/install.sh | sh
 
 set -u
+
+REPO=mortbrew/tubevibe
+BIN_DIR=${TUBEVIBE_BIN_DIR:-$HOME/.local/bin}
 
 RUST_MIN=1.88
 # yt-dlp older than this many days often fails: YouTube changes all the time.
@@ -47,6 +52,30 @@ install_cmd() { # install_cmd <package>
     esac
 }
 
+# 0. The ready-made program from the latest release, when there is one for
+#    this machine (file names as .github/workflows/release.yml makes them).
+case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64 | Linux-amd64) asset=tubevibe-x86_64-linux.tar.gz ;;
+    Linux-aarch64 | Linux-arm64) asset=tubevibe-aarch64-linux.tar.gz ;;
+    Darwin-arm64) asset=tubevibe-aarch64-macos.tar.gz ;;
+    *) asset="" ;;
+esac
+downloaded=0
+if [ -n "$asset" ] && [ "${TUBEVIBE_FROM_SOURCE:-0}" != 1 ] && has curl && has tar; then
+    say "Bajando tubevibe ($asset)…" "Downloading tubevibe ($asset)…"
+    tmp=$(mktemp -d)
+    if curl -fsL "https://github.com/$REPO/releases/latest/download/$asset" -o "$tmp/tubevibe.tar.gz" \
+        && tar -xzf "$tmp/tubevibe.tar.gz" -C "$tmp" && [ -f "$tmp/tubevibe/tubevibe" ] \
+        && mkdir -p "$BIN_DIR" && cp "$tmp/tubevibe/tubevibe" "$BIN_DIR/tubevibe.new" \
+        && chmod 755 "$BIN_DIR/tubevibe.new" && mv -f "$BIN_DIR/tubevibe.new" "$BIN_DIR/tubevibe"; then
+        downloaded=1
+        say "Instalado en $BIN_DIR/tubevibe" "Installed at $BIN_DIR/tubevibe"
+    else
+        say "No hay una versión publicada para bajar: lo compilo." "No published release to download: building it instead."
+    fi
+    rm -rf "$tmp"
+fi
+
 # Missing pieces: one line each for the report, and the commands that fix them.
 build_missing="" build_fix=""
 run_missing="" run_fix=""
@@ -57,8 +86,8 @@ add_run() { run_missing="$run_missing  - $1
 "; run_fix="$run_fix$2
 "; }
 
-# 1. A C compiler (the TLS crate `ring` builds C code).
-if ! has cc && ! has gcc && ! has clang; then
+# 1. A C compiler (the TLS crate `ring` builds C code); only to build it.
+if [ "$downloaded" = 0 ] && ! has cc && ! has gcc && ! has clang; then
     case "$manager" in
         apt) fix=$(install_cmd build-essential) ;;
         pacman) fix=$(install_cmd base-devel) ;;
@@ -77,7 +106,9 @@ version_ge() { # version_ge 1.75.0 1.88
 }
 rustup_install="curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . \"\$HOME/.cargo/env\""
-if ! has cargo; then
+if [ "$downloaded" = 1 ]; then
+    :
+elif ! has cargo; then
     add_build "Rust $RUST_MIN+ ($(say "no está instalado" "not installed"))" "$rustup_install"
 else
     rust=$(cargo --version 2>/dev/null | awk '{print $2}')
@@ -92,7 +123,7 @@ else
     fi
 fi
 
-# 3. What tubetui runs: mpv and a current yt-dlp.
+# 3. What tubevibe runs: mpv and a current yt-dlp.
 if ! has mpv; then
     add_run "mpv" "$(install_cmd mpv)"
 fi
@@ -136,7 +167,7 @@ report() { # report <missing> <commands>
 }
 
 if [ -n "$build_missing" ]; then
-    say "Para compilar tubetui falta:" "To build tubetui you need:"
+    say "Para compilar tubevibe falta:" "To build tubevibe you need:"
     report "$build_missing" "$build_fix"
     if [ -n "$run_missing" ]; then
         say "Y para usarlo:" "And to use it:"
@@ -146,16 +177,26 @@ if [ -n "$build_missing" ]; then
     exit 1
 fi
 
-say "Compilando tubetui (unos minutos)…" "Building tubetui (a few minutes)…"
-cargo install --locked tubetui || exit 1
+if [ "$downloaded" = 0 ]; then
+    say "Compilando tubevibe (unos minutos)…" "Building tubevibe (a few minutes)…"
+    cargo install --locked --git "https://github.com/$REPO" || exit 1
+    bin_dir=$HOME/.cargo/bin
+else
+    bin_dir=$BIN_DIR
+fi
 
 if [ -n "$run_missing" ]; then
     echo
-    say "tubetui está instalado, pero para usarlo falta:" "tubetui is installed, but to use it you need:"
+    say "tubevibe está instalado, pero para usarlo falta:" "tubevibe is installed, but to use it you need:"
     report "$run_missing" "$run_fix"
 fi
 case ":$user_path:" in
-    *":$HOME/.cargo/bin:"*) ;;
-    *) say "Abrí una terminal nueva (o corré: . \"\$HOME/.cargo/env\") y ejecutá: tubetui" \
-        "Open a new terminal (or run: . \"\$HOME/.cargo/env\") and run: tubetui" ;;
+    *":$bin_dir:"*) say "Listo: ejecutá tubevibe" "Done: run tubevibe" ;;
+    *) if [ "$downloaded" = 1 ]; then
+        say "$bin_dir no está en tu PATH: agregalo (export PATH=\"$bin_dir:\$PATH\" en ~/.profile) o ejecutá: $bin_dir/tubevibe" \
+            "$bin_dir is not in your PATH: add it (export PATH=\"$bin_dir:\$PATH\" in ~/.profile) or run: $bin_dir/tubevibe"
+    else
+        say "Abrí una terminal nueva (o corré: . \"\$HOME/.cargo/env\") y ejecutá: tubevibe" \
+            "Open a new terminal (or run: . \"\$HOME/.cargo/env\") and run: tubevibe"
+    fi ;;
 esac
