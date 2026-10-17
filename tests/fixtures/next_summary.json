@@ -1,0 +1,118 @@
+{
+ "_note": "Trimmed from a live anonymous /youtubei/v1/next reply for 28ylKo4ZbiA (hl=en gl=US), 2026-10-17.",
+ "engagementPanels": [
+  {
+   "engagementPanelSectionListRenderer": {
+    "targetId": "engagement-panel-structured-description",
+    "content": {
+     "structuredDescriptionContentRenderer": {
+      "items": [
+       {
+        "videoDescriptionHeaderRenderer": {
+         "title": {
+          "runs": [
+           {
+            "text": "The Glasses Dominate - XREAL 1 Pro+"
+           }
+          ]
+         },
+         "channel": {
+          "simpleText": "UFD Tech"
+         }
+        }
+       },
+       {
+        "expandableMetadataRenderer": {
+         "header": {
+          "collapsedTitle": {
+           "simpleText": "UFD Tech explores the updated features of the XREAL Air 1 Pro+ glasses, highlighting improvements in display brightness, refresh rates, and comfort. The demonstration showcases how these spatial display specs function as a portable multi-monitor workspace and entertainment hub, providing flexibility for those working from home or traveling."
+          },
+          "collapsedLabel": {
+           "simpleText": "Summary"
+          },
+          "expandedTitle": {
+           "simpleText": "AI-generated video summary"
+          },
+          "expandedSubtitle": {
+           "simpleText": "AI can make mistakes, so double-check it."
+          },
+          "collapsedLabelIcon": {
+           "iconType": "SPARK"
+          },
+          "expandedTitleIcon": {
+           "iconType": "SPARK"
+          },
+          "expandedSubtitleTapCommand": {
+           "urlEndpoint": {
+            "url": "https://support.google.com/youtube/answer/14089423",
+            "target": "TARGET_NEW_WINDOW"
+           }
+          },
+          "expandedSubtitleTrailingIcon": {
+           "iconType": "INFO"
+          }
+         },
+         "expandedContent": {
+          "videoSummaryContentViewModel": {
+           "paragraphs": [
+            {
+             "videoSummaryParagraphViewModel": {
+              "text": {
+               "content": "UFD Tech explores the updated features of the XREAL Air 1 Pro+ glasses, highlighting improvements in display brightness, refresh rates, and comfort. The demonstration showcases how these spatial display specs function as a portable multi-monitor workspace and entertainment hub, providing flexibility for those working from home or traveling."
+              }
+             }
+            }
+           ]
+          }
+         },
+         "useCustomColors": true,
+         "expandedMenuFooter": {
+          "menuRenderer": {
+           "topLevelButtons": [
+            {
+             "buttonRenderer": {
+              "style": "STYLE_INACTIVE_OUTLINE",
+              "size": "SIZE_DEFAULT",
+              "isDisabled": false,
+              "text": {
+               "simpleText": "Send feedback"
+              },
+              "command": {
+               "userFeedbackEndpoint": {
+                "additionalDatas": [
+                 {
+                  "userFeedbackEndpointProductSpecificValueData": {
+                   "key": "video_id",
+                   "value": "28ylKo4ZbiA"
+                  }
+                 },
+                 {
+                  "userFeedbackEndpointProductSpecificValueData": {
+                   "key": "video_summary_source",
+                   "value": "watch_page"
+                  }
+                 },
+                 {
+                  "userFeedbackEndpointProductSpecificValueData": {
+                   "key": "is_owner",
+                   "value": "false"
+                  }
+                 }
+                ],
+                "bucketIdentifier": "video_summary"
+               }
+              }
+             }
+            }
+           ]
+          }
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

@@ -110,7 +110,7 @@ pub const IN_TAB: &[(&str, Text)] = &[
     ("o", Text::new("otro idioma (es → en → pt …)", "another language (es → en → pt …)")),
     (". ,", Text::new("música: siguiente / anterior", "music: next / previous")),
     ("Tab", Text::new("videos relacionados (en ventana)", "related videos (in a window)")),
-    ("PgUp PgDn", Text::new("comentarios · e: descripción (en ventana)", "comments · e: description (in a window)")),
+    ("PgUp PgDn", Text::new("recorrer los comentarios (en ventana)", "scroll the comments (in a window)")),
 ];
 
 /// `(keys, description)` rows of a table, in `lang`.
@@ -218,7 +218,6 @@ fn player(code: KeyCode) -> Option<Action> {
         KeyCode::Char('b') => Some(Action::CycleCodec),
         KeyCode::Char('.') => Some(Action::NextTrack),
         KeyCode::Char('f') => Some(Action::ToggleFullscreen),
-        KeyCode::Char('e') => Some(Action::ToggleDescription),
         KeyCode::PageDown => Some(Action::ScrollComments(3)),
         KeyCode::PageUp => Some(Action::ScrollComments(-3)),
         KeyCode::Enter => Some(Action::Enter),
@@ -404,12 +403,6 @@ mod tests {
         assert_eq!(map(char(','), TAB), Some(Action::PrevTrack));
         assert_eq!(map(char('['), TAB), Some(Action::Chapter(-1)));
         assert_eq!(map(char(']'), TAB), Some(Action::Chapter(1)));
-        assert_eq!(map(char('e'), TAB), Some(Action::ToggleDescription));
-        assert_eq!(
-            map(char('e'), KeyContext { related: true, ..TAB }),
-            Some(Action::ToggleDescription),
-            "from Up next too"
-        );
         assert_eq!(map(key(KeyCode::Enter), TAB), Some(Action::Enter), "plays a closed video again");
     }
 

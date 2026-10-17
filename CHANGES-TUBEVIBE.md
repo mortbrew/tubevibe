@@ -73,33 +73,43 @@ defaults to `false`**:
 `autoplay = true` brings back upstream's behavior exactly; the existing tests
 run with it on, new ones cover it off.
 
-## Video descriptions (`descriptions`)
+## AI video summaries (`descriptions`)
+
+YouTube shows an *"AI-generated video summary"* under some videos (not
+most: about a third of those tried, more often recent English ones). It now
+shows in tubevibe too. The video's own description is **not** shown (an
+earlier version of this branch did; it was taken out whole).
 
 - **Video tab** (when the video plays in its own window, or as sound only,
-  so the tab shows its details): the description goes between the details
-  and *Up next*, up to 8 wrapped lines with its own line breaks kept, the
-  last one saying *"… (more: e)"* when there is more. **`e`** shows it whole
-  over *Up next* (comments stay beside it); **`PgUp` / `PgDn`** scroll it
-  while it is open (otherwise they scroll the comments as before);
-  **`e`**, **`Esc`** or **`Tab`** close it. Links are plain text.
-  It comes from the watch page the tab already asks for
-  (`videoSecondaryInfoRenderer.attributedDescription.content`, else the
-  side panel's `expandableVideoDescriptionBodyRenderer` copy): no extra
-  request.
-- **Preview pane** of video lists: up to 5 lines (the last one `…` when cut)
-  after the other details. It comes from the yt-dlp run that already asks
-  the download size when the selection rests on a video
-  (`--print "%(description)j"` added): no extra run. A video whose size was
-  known without a description is asked once more; live and upcoming videos
-  are not asked (as before), so they show none in the preview.
-- Descriptions are kept in memory for the session (not saved), from either
-  source.
+  so the tab shows its details): *"✦ AI summary · AI can make mistakes"*
+  and the whole summary, wrapped, on the line right after the last detail
+  (the status line, e.g. *"▶ Enter plays it"*). The details card grows to
+  hold it and *Up next* moves down; without a summary nothing changes. A
+  very long one is cut with `…` so *Up next* keeps a few rows.
+- **Preview pane** of video lists: the same, after the other details, using
+  all the room left in the pane (`…` if it does not fit).
+- **Where it comes from**: the watch page (`/youtubei/v1/next`) the tab
+  already asks for, so no extra request there:
+  `engagementPanels[].engagementPanelSectionListRenderer.content`
+  `.structuredDescriptionContentRenderer.items[].expandableMetadataRenderer`
+  `.expandedContent.videoSummaryContentViewModel.paragraphs[]`
+  `.videoSummaryParagraphViewModel.text.content` (paragraphs joined by a
+  blank line), else that box's `header.collapsedTitle`. For the preview the
+  same request is made for the selected video once the selection rests on
+  it for 800 ms, one at a time, signed in when logged in (like the tab);
+  live and upcoming videos are not asked. Answers (also "none" and
+  failures) are kept for the session, not saved.
+- No new keys (`e` from the description version is gone).
+- `ratatui`'s `unstable-rendered-line-info` feature is turned on to measure
+  how many rows the wrapped details take.
 
 ### Uncertain
 
-- The watch-page field was checked against one live anonymous reply
-  (it carries the whole text with real URLs); the panel fallback and the
-  yt-dlp `%(description)j` output (`null` / `"NA"` when missing) are
-  handled but only tested with built replies.
-- Very long descriptions scroll by source lines in the app's state; the
-  view never scrolls past the last screenful.
+- Checked live only anonymously from a US address (`hl=en`, `gl=US` and
+  others: the summary came every time, in the video's language; only the
+  labels follow `hl`). Not tried signed in, nor from outside the US.
+- The field names are YouTube's undocumented internals and can change;
+  the parser is tested against a trimmed real reply
+  (`tests/fixtures/next_summary.json`).
+- Each preview summary costs one watch-page request (~400 KB) per video
+  looked at.

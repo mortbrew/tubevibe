@@ -489,9 +489,9 @@ pub enum Action {
     /// The newest videos of my channels, checked in the background.
     SubsPolled(Result<Vec<Video>, String>),
     /// What a video weighs (and lasts), asked to yt-dlp in the background.
-    Sized(String, Result<(Size, Option<String>), String>),
-    /// `e` in a video tab: the whole description over "Up next", or back.
-    ToggleDescription,
+    Sized(String, Result<Size, String>),
+    /// YouTube's AI summary of a video looked at in a list (`None`: it has none).
+    Summarized(String, Result<Option<String>, String>),
     /// The top comments of a tab's video arrived.
     CommentsLoaded(TabId, Result<Vec<Comment>, String>),
     /// Move through the comments of the active tab by this many.
@@ -746,9 +746,6 @@ pub struct Tab {
     /// Its video has played at least once; until then it is not in the
     /// history nor marked as watched.
     pub started: bool,
-    /// The whole description is shown over "Up next" (`e`), from this line.
-    pub description_open: bool,
-    pub description_from: usize,
 }
 
 impl Tab {
@@ -765,8 +762,6 @@ impl Tab {
             comments_from: 0,
             ended: false,
             started: true,
-            description_open: false,
-            description_from: 0,
         }
     }
 
@@ -835,8 +830,8 @@ pub struct State {
     pub fresh_shown: HashSet<String>,
     /// Weight and length of the videos looked at, by id.
     pub sizes: HashMap<String, Size>,
-    /// Descriptions of the videos looked at, by id (`None`: it has none).
-    pub descriptions: HashMap<String, Option<String>>,
+    /// YouTube's AI summaries of the videos looked at, by id (`None`: it has none).
+    pub summaries: HashMap<String, Option<String>>,
     /// Videos I opened of each channel lately, and the channels I watch most.
     pub channel_views: HashMap<String, usize>,
     pub favorites: HashSet<String>,
@@ -903,7 +898,7 @@ impl State {
             fresh: Vec::new(),
             fresh_shown: HashSet::new(),
             sizes: HashMap::new(),
-            descriptions: HashMap::new(),
+            summaries: HashMap::new(),
             channel_views: HashMap::new(),
             favorites: HashSet::new(),
             clock: 0,
@@ -1189,9 +1184,6 @@ impl State {
                     return self.move_selection(rows);
                 }
             }
-            Action::ToggleFocus if self.active_tab().is_some_and(|t| t.description_open) => {
-                self.close_description();
-            }
             Action::ToggleFocus if self.active_tab().is_some() => {
                 if self.related_shown().is_some()
                     && let Some(tab) = self.active_tab_mut()
@@ -1233,8 +1225,8 @@ impl State {
                     if let (Some(rating), Some(video)) = (watch.rating, &tab.playback.video) {
                         self.ratings.insert(video.id.clone(), rating);
                     }
-                    if let (Some(text), Some(video)) = (&watch.description, &tab.playback.video) {
-                        self.descriptions.insert(video.id.clone(), Some(text.clone()));
+                    if let Some(video) = &tab.playback.video {
+                        self.summaries.insert(video.id.clone(), watch.summary.clone());
                     }
                     let token = watch.comments_token.clone();
                     tab.watch = Some(watch);
@@ -1247,13 +1239,6 @@ impl State {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
                     // Failed: shown as none rather than loading forever.
                     tab.comments = Some(result.unwrap_or_default());
-                }
-            }
-            Action::ScrollComments(delta) if self.active_tab().is_some_and(|t| t.description_open) => {
-                let lines = self.active_tab().and_then(|t| self.tab_description(t)).map_or(0, |d| d.lines().count());
-                if let Some(tab) = self.active_tab_mut() {
-                    let from = tab.description_from.saturating_add_signed(delta as isize);
-                    tab.description_from = from.min(lines.saturating_sub(1));
                 }
             }
             Action::ScrollComments(delta) => {
@@ -1360,14 +1345,12 @@ impl State {
             Action::SubsPolled(result) => return self.subs_polled(result),
             Action::Sized(id, result) => {
                 // Failed: remembered as unknown, not asked again.
-                let (size, description) = result.unwrap_or_default();
-                self.sizes.insert(id.clone(), size);
-                let known = self.descriptions.entry(id).or_insert(None);
-                if known.is_none() {
-                    *known = description;
-                }
+                self.sizes.insert(id, result.unwrap_or_default());
             }
-            Action::ToggleDescription => self.toggle_description(),
+            // Failed: shown as none, not asked again.
+            Action::Summarized(id, result) => {
+                self.summaries.insert(id, result.ok().flatten());
+            }
             Action::OpenChannel => return self.open_channel(),
             Action::Listen => return self.listen(),
             Action::Status(text) => self.status = text,
@@ -2217,10 +2200,6 @@ impl State {
             self.fullscreen = false;
             return;
         }
-        if self.active_tab().is_some_and(|t| t.description_open) {
-            self.close_description();
-            return;
-        }
         if self.focus == Focus::List {
             if self.stack.len() > 1 {
                 self.stack.pop();
@@ -2284,47 +2263,27 @@ impl State {
     /// the ones downloading. Not live ones, nor those already known.
     pub fn size_wanted(&self) -> Option<&Video> {
         let downloading = self.downloads.iter().filter(|d| matches!(d.state, DownloadState::Running { .. }));
-        self.selected_video().into_iter().chain(downloading.map(|d| &d.video)).find(|v| {
-            // The same yt-dlp run brings the description: ask again if only that is missing.
-            v.live == crate::domain::Live::No
-                && (!self.sizes.contains_key(&v.id) || !self.descriptions.contains_key(&v.id))
-        })
+        self.selected_video()
+            .into_iter()
+            .chain(downloading.map(|d| &d.video))
+            .find(|v| v.live == crate::domain::Live::No && !self.sizes.contains_key(&v.id))
     }
 
-    /// The description of a video, once known (watch page or yt-dlp).
-    pub fn description(&self, id: &str) -> Option<&str> {
-        self.descriptions.get(id).and_then(|d| d.as_deref())
+    /// The video looked at in a list whose AI summary is worth asking for:
+    /// not live nor upcoming ones, nor those already asked.
+    pub fn summary_wanted(&self) -> Option<&Video> {
+        self.selected_video().filter(|v| v.live == crate::domain::Live::No && !self.summaries.contains_key(&v.id))
     }
 
-    /// The description of a tab's video: from its watch page, else yt-dlp's.
-    pub fn tab_description<'a>(&'a self, tab: &'a Tab) -> Option<&'a str> {
-        let watch = tab.watch.as_ref().and_then(|w| w.description.as_deref());
-        watch.or_else(|| tab.playback.video.as_ref().and_then(|v| self.description(&v.id)))
+    /// YouTube's AI summary of a video, once known (from its tab or the preview).
+    pub fn summary(&self, id: &str) -> Option<&str> {
+        self.summaries.get(id).and_then(|s| s.as_deref())
     }
 
-    /// `e`: the whole description over "Up next", or back to it. Only on
-    /// tabs that show their details (the video plays elsewhere).
-    fn toggle_description(&mut self) {
-        let Some(tab) = self.active_tab().filter(|t| self.details_shown(t)) else { return };
-        if tab.description_open {
-            self.close_description();
-            return;
-        }
-        if self.tab_description(tab).is_none() {
-            self.status = self.tr("Este video no tiene descripción", "This video has no description").into();
-            return;
-        }
-        if let Some(tab) = self.active_tab_mut() {
-            tab.description_open = true;
-            tab.description_from = 0;
-            tab.on_related = false;
-        }
-    }
-
-    fn close_description(&mut self) {
-        if let Some(tab) = self.active_tab_mut() {
-            tab.description_open = false;
-        }
+    /// The AI summary of a tab's video.
+    pub fn tab_summary<'a>(&'a self, tab: &'a Tab) -> Option<&'a str> {
+        let watch = tab.watch.as_ref().and_then(|w| w.summary.as_deref());
+        watch.or_else(|| tab.playback.video.as_ref().and_then(|v| self.summary(&v.id)))
     }
 
     /// `(id, name, url)` of the channel the user is pointing at.
@@ -4471,7 +4430,7 @@ mod tests {
         let mut s = with_videos(&["a", "b"]);
         s.update(Action::GoTab(0));
         assert_eq!(s.size_wanted().unwrap().id, "a");
-        s.update(Action::Sized("a".into(), Ok((Size { bytes: Some(1), ..Size::default() }, None))));
+        s.update(Action::Sized("a".into(), Ok(Size { bytes: Some(1), ..Size::default() })));
         assert!(s.size_wanted().is_none(), "known");
         s.update(Action::Down);
         assert_eq!(s.size_wanted().unwrap().id, "b");
@@ -4480,26 +4439,40 @@ mod tests {
     }
 
     #[test]
-    fn a_video_weighed_without_its_description_is_asked_again_once() {
-        let mut s = with_videos(&["a"]);
-        s.sizes.insert("a".into(), Size { bytes: Some(1), ..Size::default() });
-        assert_eq!(s.size_wanted().unwrap().id, "a", "the size is known, the description is not");
-        s.update(Action::Sized("a".into(), Ok((Size { bytes: Some(2), ..Size::default() }, Some("hola".into())))));
-        assert_eq!(s.description("a"), Some("hola"));
-        assert!(s.size_wanted().is_none());
-        // A later answer without one does not forget it.
-        s.update(Action::Sized("a".into(), Ok((Size::default(), None))));
-        assert_eq!(s.description("a"), Some("hola"));
+    fn the_summary_of_the_video_looked_at_is_asked_once() {
+        let mut s = with_videos(&["a", "b", "c"]);
+        s.update(Action::GoTab(0));
+        assert_eq!(s.summary_wanted().unwrap().id, "a");
+        s.update(Action::Summarized("a".into(), Ok(Some("Sum".into()))));
+        assert_eq!(s.summary("a"), Some("Sum"));
+        assert!(s.summary_wanted().is_none(), "known");
+        s.update(Action::Down);
+        s.update(Action::Summarized("b".into(), Ok(None)));
+        assert!(s.summary_wanted().is_none(), "has none: not asked again");
+        s.update(Action::Down);
+        s.update(Action::Summarized("c".into(), Err("falló".into())));
+        assert!(s.summary_wanted().is_none(), "failed: not asked again");
+        assert_eq!(s.summary("c"), None);
     }
 
     #[test]
-    fn live_videos_are_not_weighed_nor_described() {
+    fn live_videos_get_no_summary_asked() {
         let mut s = state();
         let id = load_id(&open(&mut s, Section::Suscripciones));
         let live = Video { live: crate::domain::Live::Now, ..video("l") };
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![live]))));
-        assert!(s.size_wanted().is_none());
-        assert_eq!(s.description("l"), None);
+        assert!(s.summary_wanted().is_none());
+    }
+
+    #[test]
+    fn a_tab_remembers_its_summary_for_the_preview() {
+        let mut s = with_videos(&["a"]);
+        s.update(Action::GoTab(0));
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        s.update(Action::Watched(tab, Ok(Watch { summary: Some("Sum".into()), ..Watch::default() })));
+        assert_eq!(s.summary("a"), Some("Sum"));
+        assert_eq!(s.tab_summary(s.active_tab().unwrap()), Some("Sum"));
     }
 
     #[test]

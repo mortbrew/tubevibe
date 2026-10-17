@@ -576,8 +576,8 @@ pub struct Watch {
     pub rating: Option<Rating>,
     /// Asks YouTube for the comments (see [`comments`]).
     pub comments_token: Option<String>,
-    /// The whole description, with its line breaks; links as plain text.
-    pub description: Option<String>,
+    /// YouTube's "AI-generated video summary", on the videos that have one.
+    pub summary: Option<String>,
 }
 
 /// A top comment of a video.
@@ -739,20 +739,11 @@ pub fn rate(cookies: &Path, video_id: &str, rating: Rating) -> Result<(), Youtub
 pub fn parse_watch(reply: &Value, now: i64) -> Watch {
     let mut watch = Watch::default();
     let mut seen = HashSet::new();
-    // The description under the video, else the copy in its side panel.
-    let mut panel_description = None;
     walk(reply, &mut |object| {
-        if let Some(secondary) = object.get("videoSecondaryInfoRenderer")
-            && watch.description.is_none()
+        if let Some(metadata) = object.get("expandableMetadataRenderer")
+            && watch.summary.is_none()
         {
-            watch.description = description_text(&secondary["attributedDescription"])
-                .or_else(|| text(&secondary["description"]).and_then(trimmed));
-        }
-        if let Some(body) = object.get("expandableVideoDescriptionBodyRenderer")
-            && panel_description.is_none()
-        {
-            panel_description = description_text(&body["attributedDescriptionBodyText"])
-                .or_else(|| text(&body["descriptionBodyText"]).and_then(trimmed));
+            watch.summary = summary_text(metadata);
         }
         if let Some(primary) = object.get("videoPrimaryInfoRenderer") {
             // `originalViewCount` is sometimes "0" while the text says "6,984 views".
@@ -801,21 +792,31 @@ pub fn parse_watch(reply: &Value, now: i64) -> Watch {
             watch.related.push(video);
         }
     });
-    watch.description = watch.description.or(panel_description);
     watch
 }
 
-/// The text of an `attributedDescription`: `{ "content": "…" }`.
-fn description_text(value: &Value) -> Option<String> {
-    value["content"].as_str().map(str::to_owned).and_then(trimmed)
+/// The AI summary in an `expandableMetadataRenderer` of the description
+/// panel: its paragraphs, else the one-string copy of its collapsed header.
+/// Other expandable boxes (without the summary view model) are not it.
+fn summary_text(metadata: &Value) -> Option<String> {
+    let content = metadata["expandedContent"].get("videoSummaryContentViewModel")?;
+    let paragraphs: Vec<&str> = (content["paragraphs"].as_array().into_iter().flatten())
+        .filter_map(|p| p["videoSummaryParagraphViewModel"]["text"]["content"].as_str())
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    let text = if paragraphs.is_empty() {
+        text(&metadata["header"]["collapsedTitle"])?.trim().to_owned()
+    } else {
+        paragraphs.join("\n\n")
+    };
+    (!text.is_empty()).then_some(text)
 }
 
-/// A video description without trailing spaces on its lines nor blank lines
-/// around it (inner blank lines stay: they separate paragraphs); none if empty.
-pub fn trimmed(text: String) -> Option<String> {
-    let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
-    let text = lines.join("\n").trim_matches('\n').to_owned();
-    (!text.trim().is_empty()).then_some(text)
+/// The AI summary of a video, if YouTube has one: the watch page the tab
+/// asks for, for a video that is only looked at in a list.
+pub fn summary(id: &str, cookies: Option<&Path>) -> Result<Option<String>, YoutubeError> {
+    watch(id, cookies).map(|w| w.summary)
 }
 
 /// A suggested video in YouTube's newer "lockup" format.
@@ -1032,36 +1033,15 @@ pub fn parse_subscription_reply(reply: &Value) -> Option<bool> {
 }
 
 /// What `url` weighs in `format`, and how long it is. Blocking, a few seconds.
-/// What a video weighs at `format`, and its description (asked in the same
-/// yt-dlp run: it reads the whole video page anyway).
-pub fn size(
-    url: &str,
-    format: &str,
-    cookies: Option<&Path>,
-) -> Result<(crate::domain::Size, Option<String>), YoutubeError> {
-    Ok(parse_size_reply(&run_yt_dlp(&size_args(url, format, cookies))?))
-}
-
-fn size_args(url: &str, format: &str, cookies: Option<&Path>) -> Vec<String> {
+pub fn size(url: &str, format: &str, cookies: Option<&Path>) -> Result<crate::domain::Size, YoutubeError> {
     let mut args: Vec<String> =
         ["--no-warnings", "--skip-download", "--no-playlist", "-f", format].map(String::from).into();
     args.extend(["--print", "%(filesize,filesize_approx)s|%(duration)s|%(height)s"].map(String::from));
-    // JSON keeps the description's line breaks on one output line.
-    args.extend(["--print", "%(description)j"].map(String::from));
     if let Some(cookies) = cookies {
         args.extend(["--cookies".into(), cookies.display().to_string()]);
     }
     args.push(url.to_owned());
-    args
-}
-
-/// `size`'s output: the size line, then the description as a JSON string
-/// (`null` or `"NA"` when there is none).
-pub fn parse_size_reply(output: &str) -> (crate::domain::Size, Option<String>) {
-    let mut lines = output.lines();
-    let size = crate::domain::parse_size(lines.next().unwrap_or_default());
-    let description = lines.next().and_then(|l| serde_json::from_str::<Option<String>>(l.trim()).ok()).flatten();
-    (size, description.filter(|d| d != "NA").and_then(trimmed))
+    Ok(crate::domain::parse_size(&run_yt_dlp(&args)?))
 }
 
 fn run_yt_dlp(args: &[String]) -> Result<String, YoutubeError> {
@@ -1273,6 +1253,7 @@ mod tests {
     use super::*;
 
     const SEARCH: &str = include_str!("../tests/fixtures/search.json");
+    const NEXT_SUMMARY: &str = include_str!("../tests/fixtures/next_summary.json");
 
     #[test]
     fn parses_real_search_output() {
@@ -1525,8 +1506,7 @@ mod tests {
                             "toggleButtonViewModel": { "defaultButtonViewModel": { "buttonViewModel": {
                             "accessibilityText": "like this video along with 1,733 other people" } } } } } }] } } } },
                 { "videoSecondaryInfoRenderer": { "owner": { "videoOwnerRenderer": {
-                    "subscriberCountText": { "simpleText": "559K subscribers" } } },
-                    "attributedDescription": { "content": "First line  \nhttps://example.com/x\n\nLast\n\n" } } },
+                    "subscriberCountText": { "simpleText": "559K subscribers" } } } } },
                 { "itemSectionRenderer": { "sectionIdentifier": "comment-item-section", "contents": [
                     { "continuationItemRenderer": { "continuationEndpoint": {
                         "continuationCommand": { "token": "COMMENTS" } } } }] } }
@@ -1745,35 +1725,29 @@ mod tests {
     }
 
     #[test]
-    fn the_watch_page_brings_the_description_with_its_lines() {
-        let watch = parse_watch(&watch_reply(), 0);
-        assert_eq!(watch.description.as_deref(), Some("First line\nhttps://example.com/x\n\nLast"));
-        // Only the side panel's copy: still read.
-        let panel = json!({ "engagementPanels": [{ "structuredDescriptionContentRenderer": { "items": [
-            { "expandableVideoDescriptionBodyRenderer": {
-                "attributedDescriptionBodyText": { "content": "From the panel" } } }] } }] });
-        assert_eq!(parse_watch(&panel, 0).description.as_deref(), Some("From the panel"));
-        let empty = json!({ "videoSecondaryInfoRenderer": { "attributedDescription": { "content": " \n " } } });
-        assert_eq!(parse_watch(&empty, 0).description, None);
+    fn the_watch_page_brings_the_ai_summary() {
+        let reply: Value = serde_json::from_str(NEXT_SUMMARY).unwrap();
+        let summary = parse_watch(&reply, 0).summary.unwrap();
+        assert!(summary.starts_with("UFD Tech explores the updated features of the XREAL Air 1 Pro+"), "{summary}");
+        assert!(summary.ends_with("working from home or traveling."), "{summary}");
+        assert_eq!(parse_watch(&watch_reply(), 0).summary, None, "most videos have none");
     }
 
     #[test]
-    fn size_reply_carries_the_description() {
-        let (size, description) = parse_size_reply("1000|60|720\n\"Hi\\nthere\"\n");
-        assert_eq!((size.bytes, size.duration, size.height), (Some(1000), Some(60), Some(720)));
-        assert_eq!(description.as_deref(), Some("Hi\nthere"));
-        for none in
-            ["1000|60|720\nnull", "1000|60|720\nNA", "1000|60|720\n\"NA\"", "1000|60|720", "1000|60|720\n\"  \""]
-        {
-            assert_eq!(parse_size_reply(none).1, None, "{none:?}");
-        }
-        assert_eq!(parse_size_reply("NA|NA|NA\n\"x\"").0, crate::domain::Size::default());
-    }
-
-    #[test]
-    fn size_asks_for_the_description_too() {
-        let args = size_args("https://youtu.be/x", "best", None).join(" ");
-        assert!(args.contains("--print %(description)j"), "{args}");
-        assert!(args.ends_with("https://youtu.be/x"));
+    fn summary_paragraphs_join_and_the_header_is_the_fallback() {
+        let box_with = |content: Value| {
+            json!({ "items": [{ "expandableMetadataRenderer": {
+            "header": { "collapsedTitle": { "simpleText": " From the header " } },
+            "expandedContent": content } }] })
+        };
+        let paragraph = |t: &str| json!({ "videoSummaryParagraphViewModel": { "text": { "content": t } } });
+        let two = box_with(json!({ "videoSummaryContentViewModel": {
+            "paragraphs": [paragraph("One. "), paragraph(""), paragraph("Two.")] } }));
+        assert_eq!(parse_watch(&two, 0).summary.as_deref(), Some("One.\n\nTwo."));
+        let none = box_with(json!({ "videoSummaryContentViewModel": { "paragraphs": [] } }));
+        assert_eq!(parse_watch(&none, 0).summary.as_deref(), Some("From the header"));
+        // Another kind of expandable box is not a summary.
+        let other = box_with(json!({ "horizontalCardListRenderer": {} }));
+        assert_eq!(parse_watch(&other, 0).summary, None);
     }
 }

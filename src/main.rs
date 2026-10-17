@@ -161,6 +161,9 @@ struct Runtime {
     /// The video waiting to be weighed, since when; one yt-dlp at a time.
     size_wait: Option<(String, Instant)>,
     sizing: bool,
+    /// The same for the AI summary of the video looked at: one at a time.
+    summary_wait: Option<(String, Instant)>,
+    summarizing: bool,
     /// The yt-dlp process of each running download, to cancel it.
     downloads: HashMap<u64, Arc<Mutex<Option<std::process::Child>>>>,
     /// Players of closed tabs, quitting in the background.
@@ -228,6 +231,8 @@ impl Runtime {
             next_poll: Instant::now() + SUBS_FIRST_POLL,
             size_wait: None,
             sizing: false,
+            summary_wait: None,
+            summarizing: false,
             closing: Vec::new(),
             animations: Animations::default(),
             thumbs: Thumbnails::default(),
@@ -404,6 +409,7 @@ impl Runtime {
             pending.extend(self.segments_to_skip());
             self.poll_subs();
             self.ask_size();
+            self.ask_summary();
             self.retry_with_cookies(terminal.size()?.into());
             // Players that went away: their tab may stay (details and up next).
             let exited: Vec<TabId> =
@@ -422,6 +428,9 @@ impl Runtime {
                 }
                 if let Action::Sized(..) = &action {
                     self.sizing = false;
+                }
+                if let Action::Summarized(..) = &action {
+                    self.summarizing = false;
                 }
                 for effect in self.state.update(action) {
                     let t = Instant::now();
@@ -498,6 +507,33 @@ impl Runtime {
             let copy = cookies.and_then(|c| session::JarCopy::new(&c).ok());
             let result = youtube::size(&video.url(), &format, copy.as_ref().map(session::JarCopy::path));
             Action::Sized(video.id, result.map_err(|e| e.to_string()))
+        });
+    }
+
+    /// Asks YouTube for the AI summary of the video looked at, once the
+    /// selection rests on it (its watch page, signed in when logged in).
+    fn ask_summary(&mut self) {
+        if self.summarizing {
+            return;
+        }
+        let Some(video) = self.state.summary_wanted().cloned() else {
+            self.summary_wait = None;
+            return;
+        };
+        match &self.summary_wait {
+            Some((id, since)) if *id == video.id && since.elapsed() >= SIZE_DELAY => {}
+            Some((id, _)) if *id == video.id => return,
+            _ => {
+                self.summary_wait = Some((video.id, Instant::now()));
+                return;
+            }
+        }
+        self.summary_wait = None;
+        self.summarizing = true;
+        let cookies = self.cookies.clone();
+        self.background(move || {
+            let result = youtube::summary(&video.id, cookies.as_deref());
+            Action::Summarized(video.id, result.map_err(|e| e.to_string()))
         });
     }
 
