@@ -243,3 +243,21 @@ the same recommendations you see on youtube.com or the phone app.
   shows them)" (it always applied to every feed, not only Home).
 - Limit: if your Watch Later is longer than one page (60 videos by default,
   `[search] results`), only the first page is used for hiding.
+
+## TUBEVIBE menu section and the local Saved for Later list (`tubevibe-section`)
+
+- **New left-menu header "TUBEVIBE"**, between YOUTUBE and ON THIS
+  COMPUTER, for lists the app makes itself rather than YouTube pages.
+- **From What I Watched** moved there.
+- **Saved for Later** is back there: the app's original local watch-later
+  list (`later.json` in the data folder, e.g.
+  `~/.local/share/tubetui/later.json`), which the Watch Later change hid
+  when the menu entry became YouTube's Watch Later. Whatever was in that
+  file shows again. It is separate from YouTube's Watch Later.
+  - Inside it `Ctrl+y` `x` (or right-click → *Remove from this list*) takes
+    the selected video out after asking; plain `x` only says how.
+  - No key adds to it yet (the action exists, unbound).
+  - The name is one constant, `SAVED_FOR_LATER` in `src/app.rs`
+    (Spanish: *Guardados*).
+  - If `later.json` can't be read it is left alone and never written over.
+

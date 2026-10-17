@@ -10,7 +10,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Tabs};
 
 use crate::app::{
-    Confirm, ContextMenu, Focus, Group, ListKind, Listing, Prompt, Section, Setting, State, Tab, language_label,
+    Confirm, ContextMenu, Focus, Group, ListKind, Listing, Prompt, SAVED_FOR_LATER, Section, Setting, State, Tab,
+    language_label,
 };
 use crate::config::{IconSet, donations};
 use crate::doctor::{Manager, Tool};
@@ -54,14 +55,14 @@ const TEAL: Color = Color::Rgb(115, 218, 202);
 const PURPLE: Color = Color::Rgb(157, 124, 216);
 
 /// One colour per menu entry, in `Section::ALL` order.
-const SECTION_COLORS: [Color; 17] = [
-    BLUE, ORANGE, CYAN, RED, YELLOW, TEAL, GREEN, ORANGE, MAGENTA, GREEN, TEAL, PURPLE, MAGENTA, CYAN, BLUE, PURPLE,
-    MUTED,
+const SECTION_COLORS: [Color; 18] = [
+    BLUE, CYAN, RED, YELLOW, TEAL, GREEN, ORANGE, MAGENTA, GREEN, TEAL, ORANGE, YELLOW, PURPLE, MAGENTA, CYAN, BLUE,
+    PURPLE, MUTED,
 ];
 
 pub struct Icons {
     /// In `Section::ALL` order.
-    pub sections: [&'static str; 17],
+    pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
     pub settings: [&'static str; 31],
     pub logo: &'static str,
@@ -93,7 +94,9 @@ impl Icons {
 }
 
 const EMOJI: Icons = Icons {
-    sections: ["🏠", "🎯", "🧭", "📺", "🕒", "📜", "📚", "⭐", "💡", "🔎", "📡", "📼", "🎵", "📥", "🔧", "💜", "🚪"],
+    sections: [
+        "🏠", "🧭", "📺", "🕒", "📜", "📚", "⭐", "💡", "🔎", "📡", "🎯", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
+    ],
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "⏯", "🗣", "😀", "🖼", "🖱", "🎞", "✨", "🌊", "💥",
         "📼", "🎵", "📁", "🏷", "🩺", "👁", "🕒", "🩳", "🔔", "⭐", "⬆", "📝",
@@ -117,7 +120,6 @@ const EMOJI: Icons = Icons {
 const NERD: Icons = Icons {
     sections: [
         "\u{f015}",
-        "\u{f140}",
         "\u{f14e}",
         "\u{f05c6}",
         "\u{f017}",
@@ -127,6 +129,8 @@ const NERD: Icons = Icons {
         "\u{f0eb}",
         "\u{f002}",
         "\u{f2ce}",
+        "\u{f140}",
+        "\u{f02e}",
         "\u{f03d}",
         "\u{f001}",
         "\u{f019}",
@@ -157,7 +161,7 @@ const NERD: Icons = Icons {
 };
 
 const UNICODE: Icons = Icons {
-    sections: ["⌂", "◈", "◎", "▣", "◷", "↺", "≣", "★", "✧", "⌕", "⌁", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
+    sections: ["⌂", "◎", "▣", "◷", "↺", "≣", "★", "✧", "⌕", "⌁", "◈", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
         "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫", "▭",
         "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
@@ -1490,7 +1494,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Confirm::Trash(_) => key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash"),
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
-            Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } => {
+            Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } | Confirm::RemoveFromSaved(_) => {
                 key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
             }
         };
@@ -1559,6 +1563,14 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 key("d", "descargar", "download"),
                 key("c", "canal", "channel"),
                 key("/", "buscar", "search"),
+                back,
+            ],
+            Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
+                key("Enter", "ver", "play"),
+                key("Ctrl+y x", "quitar de la lista", "remove from the list"),
+                key("l", "ver después", "Watch Later"),
+                key("a", "solo audio", "sound only"),
+                key("c", "canal", "channel"),
                 back,
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
@@ -1752,6 +1764,13 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             Span::raw(lang.pick("¿Quitar de Ver después ", "Remove ")),
             Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick("?", " from Watch Later?")),
+        ]),
+        Confirm::RemoveFromSaved(video) => Line::from(vec![
+            Span::raw(lang.pick("¿Quitar ", "Remove ")),
+            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" de ", " from ")),
+            Span::styled(lang.pick(SAVED_FOR_LATER.0, SAVED_FOR_LATER.1), Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
         ]),
         Confirm::RemoveFromPlaylist { playlist, video } => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),

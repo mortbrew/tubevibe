@@ -23,10 +23,8 @@ Every video opens in its own tab.
   e.g. `rust, nba, jazz`, outside your channels and your history), **Suscripciones** (newest from your
   channels, live and upcoming first), **Mis canales**, **Descubrir canales**
   (YouTube's picks from channels you don't follow yet)
-- **Según lo que vi**: what YouTube puts *Up next* to the last 10 videos you
-  watched, all together and taking turns, without the ones you already saw
 - **Ver después / Watch Later**: your real YouTube *Watch Later* playlist
-  (needs a login; the old local-only list is no longer shown). `l` adds the
+  (needs a login; the old local-only list is now *Saved for Later*). `l` adds the
   selected video to it right away (if it is already there, it just says so);
   inside the list `Ctrl+y` `x` removes the selected video (after asking)
 - **Mis listas**: your YouTube playlists, plus *Liked videos* and *Watch
@@ -82,6 +80,14 @@ Every video opens in its own tab.
 - **AI summary**: YouTube's *AI-generated video summary*, on the videos
   that have one, right under the details of the same tabs (and in the
   preview of lists). Video descriptions are not shown
+
+**TUBEVIBE** (lists the app makes itself)
+- **Según lo que vi / From What I Watched**: what YouTube puts *Up next* to the last 10 videos you
+  watched, all together and taking turns, without the ones you already saw
+- **Guardados / Saved for Later**: the app's own watch-later list, kept only
+  on this computer (`~/.local/share/tubetui/later.json`), apart from
+  YouTube's Watch Later. Inside it `Ctrl+y` `x` removes the selected video
+  (after asking). There is no key to add to it yet.
 
 **Playback**
 - Embedded video in kitty, an mpv window, or an **overlay** (X11): an mpv
