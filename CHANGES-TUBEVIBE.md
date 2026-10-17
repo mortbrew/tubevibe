@@ -146,6 +146,74 @@ earlier version of this branch did; it was taken out whole).
   in the menu now match what is shown. Feeds, Home, Subscriptions,
   searches, channels and the new-video notices still leave Shorts out.
 
+## Playlist removal, `l` only adds, real subscriptions (`playlist-delete`)
+
+- **`l` only adds** the selected video to YouTube Watch Later. If it is
+  there already it says *"🕒 Already in Watch Later"*: no prompt, nothing
+  removed. The right-click item reads *Save to Watch Later* / *Already in
+  Watch Later*.
+- **`Ctrl+y` `x` removes from YouTube lists**: in Watch Later or any
+  YouTube playlist opened from *My playlists* (mine, saved), it asks
+  *"Remove <video> from <playlist>?"* and, on yes, takes the selected video
+  out on YouTube; the list updates when YouTube says it is done, errors go
+  to the status bar. In **Liked videos** removing is taking the like back
+  (the same request as `g` on a liked video). In a video tab, or anywhere
+  else, `Ctrl+y` `x` still closes the tab. The right-click menu of those
+  lists offers *Remove from this list*.
+- **Plain `x` no longer removes** videos from Watch Later or playlists (it
+  says *"Ctrl+y x removes it from this list"*). Elsewhere it is unchanged:
+  History (remove), Downloads (cancel / forget), My videos / My music
+  (trash), My playlists (delete the whole playlist).
+- **How a playlist removal is sent**: Watch Later as before
+  (`ACTION_REMOVE_VIDEO_BY_VIDEO_ID`). Other playlists: the entry's
+  `setVideoId` is read from the playlist (signed-in `browse` `VL<id>`, page
+  by page until the video shows, at most 50 pages; from
+  `playlistVideoRenderer.setVideoId` or any `setVideoId` inside the video's
+  lockup), kept per playlist for the session, and sent as
+  `ACTION_REMOVE_VIDEO`; with none found, `ACTION_REMOVE_VIDEO_BY_VIDEO_ID`
+  is tried.
+- **My channels / subscription checkmarks**: the sidebar (`guide`) used to
+  add every channel link in it, so YouTube's own channels in *Explore*
+  (Music, Live, Gaming, News, Sports…) and *Your channel* counted as
+  subscriptions, in *My channels* and as ✓ marks (the subscribed set comes
+  from the same list). Only the `guideSubscriptionsSectionRenderer`
+  section is read now (its *Show more* entries included).
+
+### Uncertain
+
+- None of this was tried against a live account. The anonymous playlist
+  page carries no `setVideoId` (only the owner's view has remove commands),
+  so where YouTube puts it for the owner is a guess covering both known
+  shapes; the by-video-id fallback may or may not work for normal
+  playlists. Saved playlists of other people cannot be edited: YouTube
+  should answer with an error, shown in the status bar.
+- The guide fixture (`tests/fixtures/guide.json`) is a real anonymous
+  reply with the signed-in parts (the subscriptions section, *Your
+  channel*) added by hand in the shape YouTube is known to send.
+- The subscribed set saved from an earlier run (with the topic channels)
+  is replaced the next time the channels are read.
+
+### Fix: removing from Saved Shorts failed with "http status 400"
+
+- **What most likely happened** (not yet confirmed on a live account): `Ctrl+y` `x` in *Saved Shorts* answered
+  *"Could not remove from Saved Shorts <video>: YouTube: http status 400"*.
+  The app could not find the entry's `setVideoId` on that playlist's page
+  (it only looked in two shapes of row, and Shorts come in others), so it
+  fell back to removing by video id, which YouTube only takes for Watch
+  Later: 400 is YouTube refusing the request.
+- **Now** the app sends exactly what YouTube's own *Remove from …* menu on
+  the playlist page sends (the entry's `playlistEditEndpoint`, with its
+  playlist id, `setVideoId` and any extra `params`), found in classic rows,
+  newer lockups and Shorts rows. Removing by video id is only the last
+  resort.
+- **Errors say why**: when YouTube refuses, the status line shows its reason
+  (e.g. *"http status: 400 · Request contains an invalid argument."*), and
+  reads *"Could not remove <video> from <playlist>: …"*.
+- **Debug log**: with `TUBETUI_DEBUG=/path/to/log`, each removal logs how it
+  was sent and the request, every failed YouTube request logs what was sent
+  and YouTube's full answer, and a playlist page with no remove commands is
+  logged (so the shape of Saved Shorts can be seen if it still fails).
+
 ## My recommendations shows the whole YouTube home feed
 
 The original app kept only videos from channels you subscribe to, so with few

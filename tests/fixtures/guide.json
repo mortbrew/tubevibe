@@ -1,0 +1,407 @@
+{
+ "_note": "Anonymous /youtubei/v1/guide reply (hl=en gl=US, 2026-10-17), trimmed; the signed-in parts (Your channel, guideSubscriptionsSectionRenderer) added by hand in the shape YouTube sends them.",
+ "items": [
+  {
+   "guideSectionRenderer": {
+    "items": [
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "FEwhat_to_watch"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Home"
+       },
+       "isPrimary": true
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "formattedTitle": {
+        "simpleText": "Shorts"
+       },
+       "isPrimary": true
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "FEsubscriptions"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Subscriptions"
+       },
+       "entryData": {
+        "guideEntryData": {
+         "guideEntryId": "subscriptions-channels-header"
+        }
+       },
+       "presentationStyle": "GUIDE_ENTRY_PRESENTATION_STYLE_NONE",
+       "targetId": "subscriptions-guide-item",
+       "isPrimary": true
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "FElibrary",
+         "params": "KgN5b3U%3D"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "You"
+       },
+       "targetId": "library-guide-item",
+       "isPrimary": true
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "UCmyOwnChannel00000000000",
+         "canonicalBaseUrl": "/@x"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Your channel"
+       },
+       "presentationStyle": "GUIDE_ENTRY_PRESENTATION_STYLE_NONE"
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "FEhistory"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "History"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "guideSubscriptionsSectionRenderer": {
+    "formattedTitle": {
+     "simpleText": "Subscriptions"
+    },
+    "items": [
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "UCfakeUFDTech000000000000",
+         "canonicalBaseUrl": "/@x"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "UFD Tech"
+       },
+       "presentationStyle": "GUIDE_ENTRY_PRESENTATION_STYLE_NONE"
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+         "canonicalBaseUrl": "/@x"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Linus Tech Tips"
+       },
+       "presentationStyle": "GUIDE_ENTRY_PRESENTATION_STYLE_NONE"
+      }
+     },
+     {
+      "guideCollapsibleEntryRenderer": {
+       "expandableItems": [
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "UCHnyfMqiRRG1u-2MsSQLbXA",
+            "canonicalBaseUrl": "/@x"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Veritasium"
+          },
+          "presentationStyle": "GUIDE_ENTRY_PRESENTATION_STYLE_NONE"
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "FEchannels",
+            "canonicalBaseUrl": "/@x"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Browse channels"
+          },
+          "presentationStyle": "GUIDE_ENTRY_PRESENTATION_STYLE_NONE"
+         }
+        }
+       ],
+       "expanderItem": {
+        "guideEntryRenderer": {
+         "formattedTitle": {
+          "simpleText": "Show 1 more"
+         }
+        }
+       },
+       "collapserItem": {
+        "guideEntryRenderer": {
+         "formattedTitle": {
+          "simpleText": "Show fewer"
+         }
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "guideSectionRenderer": {
+    "items": [
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "UC-9-kyTW8ZkZNDHQJ6FgpwQ"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Music"
+       }
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "FEstorefront"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Movies & TV"
+       }
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "FEhype_leaderboard"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Hype"
+       }
+      }
+     },
+     {
+      "guideCollapsibleEntryRenderer": {
+       "expanderItem": {
+        "guideEntryRenderer": {
+         "formattedTitle": {
+          "simpleText": "Show more"
+         }
+        }
+       },
+       "expandableItems": [
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "UC4R8DWoMoI7CAwX8_LjQHig"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Live"
+          }
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "UCOpNcN46UbXVtpKMrmU4Abg"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Gaming"
+          }
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "UCYfdidRxbB8Qhf0Nx7ioOYw"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "News"
+          }
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "FEcourses_destination"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Courses"
+          }
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "FEpodcasts_destination",
+            "params": "qgcCCAE%3D"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Podcasts"
+          }
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "FEmini_app_destination"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Playables"
+          }
+         }
+        },
+        {
+         "guideEntryRenderer": {
+          "navigationEndpoint": {
+           "browseEndpoint": {
+            "browseId": "FEchannel_memberships"
+           }
+          },
+          "formattedTitle": {
+           "simpleText": "Memberships"
+          },
+          "ytIcon": "YTICON_OUTLINE_STAR_CIRCLE_S24"
+         }
+        }
+       ],
+       "collapserItem": {
+        "guideEntryRenderer": {
+         "formattedTitle": {
+          "simpleText": "Show less"
+         }
+        }
+       }
+      }
+     }
+    ],
+    "formattedTitle": {
+     "simpleText": "Explore"
+    }
+   }
+  },
+  {
+   "guideSectionRenderer": {
+    "items": [
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "SPunlimited"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "YouTube Premium"
+       }
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "urlEndpoint": {
+         "url": "https://tv.youtube.com/?utm_source=youtube_web&utm_medium=ep&utm_campaign=home&ve=34273",
+         "target": "TARGET_NEW_WINDOW"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "YouTube TV"
+       }
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "urlEndpoint": {
+         "url": "https://music.youtube.com",
+         "target": "TARGET_NEW_WINDOW"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "YouTube Music"
+       }
+      }
+     },
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "urlEndpoint": {
+         "url": "https://www.youtubekids.com?source=youtube_web",
+         "target": "TARGET_NEW_WINDOW"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "YouTube Kids"
+       }
+      }
+     }
+    ],
+    "formattedTitle": {
+     "simpleText": "More from YouTube"
+    }
+   }
+  },
+  {
+   "guideSectionRenderer": {
+    "items": [
+     {
+      "guideEntryRenderer": {
+       "navigationEndpoint": {
+        "browseEndpoint": {
+         "browseId": "SPreport_history"
+        }
+       },
+       "formattedTitle": {
+        "simpleText": "Report history"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}
