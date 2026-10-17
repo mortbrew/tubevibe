@@ -205,7 +205,7 @@ impl Drop for Runtime {
 impl Runtime {
     fn new(config: Config, config_path: Option<PathBuf>, paths: Paths) -> Self {
         // "Ver después" is YouTube's Watch Later; the app's old local list
-        // (`later.json`) is "Saved for Later". A file that can't be read is
+        // (`later.json`) is the TUBEVIBE "Watch Later". A file that can't be read is
         // never written over.
         let (saved, saved_error) = match store::load_later(&paths.later) {
             Ok(saved) => (saved, None),

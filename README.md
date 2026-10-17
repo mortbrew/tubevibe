@@ -19,12 +19,11 @@ Every video opens in its own tab.
 
 **YouTube**
 - **Mis recomendados / My Recommendations** (your home feed, in YouTube's own
-  order, without the videos already in your Watch Later), **Descubrir** (this week's most watched videos on your topics,
-  e.g. `rust, nba, jazz`, outside your channels and your history), **Suscripciones** (newest from your
-  channels, live and upcoming first), **Mis canales**, **Descubrir canales**
-  (YouTube's picks from channels you don't follow yet)
-- **Ver después / Watch Later**: your real YouTube *Watch Later* playlist
-  (needs a login; the old local-only list is now *Saved for Later*). `l` adds the
+  order, without the videos already in your YouTube Watch Later),
+  **Suscripciones** (newest from your channels, live and upcoming first),
+  **Mis canales**
+- **Ver después / Watch Later** (under YOUTUBE): your real YouTube *Watch Later* playlist
+  (needs a login; the old local-only list is the Watch Later under TUBEVIBE). `w` adds the
   selected video to it right away (if it is already there, it just says so);
   inside the list `Ctrl+y` `x` removes the selected video (after asking)
 - **Mis listas**: your YouTube playlists, plus *Liked videos* and *Watch
@@ -72,7 +71,7 @@ Every video opens in its own tab.
   **Right click** opens a menu with what can be done there: play, sound only,
   watch later, download, like, channel, subscribe, close the tab, delete…
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
-  dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`l` adds),
+  dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`w` adds), **tubevibe Watch Later** (`l` adds),
   **download** with subtitles (`d`), open the **channel** (`c`)
 - **Comments**: next to *Up next* when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
@@ -84,10 +83,16 @@ Every video opens in its own tab.
 **TUBEVIBE** (lists the app makes itself)
 - **Según lo que vi / From What I Watched**: what YouTube puts *Up next* to the last 10 videos you
   watched, all together and taking turns, without the ones you already saw
-- **Guardados / Saved for Later**: the app's own watch-later list, kept only
-  on this computer (`~/.local/share/tubetui/later.json`), apart from
-  YouTube's Watch Later. Inside it `Ctrl+y` `x` removes the selected video
-  (after asking). There is no key to add to it yet.
+- **Descubrir / Discover**: this week's most watched videos on your topics
+  (e.g. `rust, nba, jazz`), outside your channels and your history
+- **Descubrir canales / Discover Channels**: YouTube's home feed without your
+  channels (picks from channels you don't follow yet)
+- **Ver después / Watch Later** (under TUBEVIBE): the app's own watch-later
+  list, kept only on this computer (`~/.local/share/tubetui/later.json`),
+  apart from YouTube's Watch Later. `l` adds the selected video to it (if it
+  is already there, it just says so); inside it `Ctrl+y` `x` removes the
+  selected video (after asking). Messages call it *tubevibe Watch Later*
+  and the other one *YouTube Watch Later*.
 
 **Playback**
 - Embedded video in kitty, an mpv window, or an **overlay** (X11): an mpv
@@ -187,7 +192,7 @@ Global commands use a **`Ctrl+y` prefix** (tmux style): press `Ctrl+y`, then:
 | `m` | go to the menu |
 | `f` | fullscreen |
 | `n` `p` `0-9` | next / previous / numbered tab (`0` = Inicio) |
-| `x` | close the tab · in Watch Later or a playlist: remove the selected video (asks first) |
+| `x` | close the tab · in either Watch Later or a playlist: remove the selected video (asks first) |
 | `/` | search videos |
 | `l` | English / español |
 | `?` | every shortcut, explained |
@@ -200,9 +205,9 @@ progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
-`l` save to YouTube Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
-audio only. In **History** `x` removes the video; in **Watch Later** and
-**playlists** `Ctrl+y` `x` removes it on YouTube (after asking); in **Downloads** `x` cancels
+`w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
+audio only. In **History** `x` removes the video; in YouTube's **Watch Later** and
+**playlists** `Ctrl+y` `x` removes it on YouTube (after asking), in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** `x` cancels
 the download (or forgets a finished one). In **My Videos**
 and **My Music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
@@ -268,7 +273,7 @@ mouse = true             # clicks and wheel; hold Shift to select text
 splash = true            # the tubetui logo for a moment when it opens (any key skips it)
 check_updates = true     # once a day, tell me about new versions and how to install them here
 hide_shorts = true       # leave Shorts out of every list
-hide_later = true        # leave my Watch Later videos out of My Recommendations
+hide_later = true        # leave my YouTube Watch Later videos out of My Recommendations
 notify_new = true        # check my subscriptions every 15 minutes and tell me about new videos
 favorites_first = true   # my most watched channels first in Suscripciones and Mis canales
 
