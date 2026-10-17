@@ -277,6 +277,7 @@ impl Runtime {
         let mut was_opening = false;
         let splash_end = Instant::now() + SPLASH;
         while !self.state.quit {
+            youtube::set_language(self.state.lang());
             if self.state.splash && Instant::now() >= splash_end {
                 self.state.update(Action::EndSplash);
                 dirty = true;
@@ -557,6 +558,8 @@ impl Runtime {
     }
 
     fn perform(&mut self, effect: Effect, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
+        // Signed-in requests answer in the language chosen now (it can change any time).
+        youtube::set_language(self.state.lang());
         match effect {
             Effect::Load { id, source, limit } => {
                 let cookies = self.cookies.clone();

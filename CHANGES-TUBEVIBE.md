@@ -128,3 +128,20 @@ earlier version of this branch did; it was taken out whole).
 - Nothing is shown **while it is being asked** (before the tab's watch page
   arrives, or before the preview's 800 ms rest and request finish), nor for
   **live and upcoming videos**, which are never asked.
+
+## Playlist fixes (`playlist-fixes`)
+
+- **Language of signed-in answers**: requests made with your login used to
+  ask YouTube for Spanish (`hl=es`) whatever the app's language, so the
+  playlists YouTube names itself came back as *"Shorts guardados"* and the
+  like. They now follow the app's language (Settings → language), and a
+  change applies to the next request. Calls that read dates (History, a
+  video's watch page) still ask for English, as before; the other
+  signed-in replies are parsed by structure, or in both languages
+  (subscriber counts), so English is safe. `gl` (region) is still not sent:
+  YouTube takes it from the account / address.
+- **Shorts in playlists**: *Hide Shorts* no longer applies to a playlist you
+  open (yours, saved ones, Watch Later, Liked videos): a list of only Shorts
+  showed empty. Its status count (*"Mine · 12"*) and the Watch Later count
+  in the menu now match what is shown. Feeds, Home, Subscriptions,
+  searches, channels and the new-video notices still leave Shorts out.
