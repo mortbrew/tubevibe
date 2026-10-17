@@ -146,6 +146,7 @@ pub enum Setting {
     VideoMode,
     BackgroundAudio,
     SponsorBlock,
+    Autoplay,
     AppLang,
     Icons,
     Thumbnails,
@@ -168,7 +169,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 30] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -179,6 +180,7 @@ impl Setting {
         Self::VideoMode,
         Self::BackgroundAudio,
         Self::SponsorBlock,
+        Self::Autoplay,
         Self::AppLang,
         Self::Icons,
         Self::Thumbnails,
@@ -214,6 +216,7 @@ impl Setting {
             Self::VideoMode => ("Video", "Video"),
             Self::BackgroundAudio => ("Al salir de la pestaña del video", "When leaving the video tab"),
             Self::SponsorBlock => ("Saltar patrocinios (SponsorBlock)", "Skip sponsors (SponsorBlock)"),
+            Self::Autoplay => ("Enter en un video", "Enter on a video"),
             Self::AppLang => ("Idioma de la app (Ctrl+y + l)", "App language (Ctrl+y + l)"),
             Self::Icons => ("Íconos", "Icons"),
             Self::Thumbnails => ("Portadas de los videos (kitty)", "Video thumbnails (kitty)"),
@@ -735,8 +738,12 @@ pub struct Tab {
     /// Top comments of its video, once fetched; the first one shown.
     pub comments: Option<Vec<Comment>>,
     pub comments_from: usize,
-    /// Its player is gone, but the details and "up next" stay; Enter plays again.
+    /// No player: it is gone (the details and "up next" stay), or it never
+    /// started (`player.autoplay` off). Enter plays.
     pub ended: bool,
+    /// Its video has played at least once; until then it is not in the
+    /// history nor marked as watched.
+    pub started: bool,
 }
 
 impl Tab {
@@ -752,6 +759,7 @@ impl Tab {
             comments: None,
             comments_from: 0,
             ended: false,
+            started: true,
         }
     }
 
@@ -1035,6 +1043,12 @@ impl State {
                 let (es, en) = on_off(player.sponsorblock);
                 self.tr(es, en).into()
             }
+            Setting::Autoplay => if player.autoplay {
+                self.tr("lo abre y lo reproduce", "opens and plays it")
+            } else {
+                self.tr("abre la pestaña · otro Enter lo reproduce", "opens the tab · Enter again plays it")
+            }
+            .into(),
             Setting::AppLang => lang.name().into(),
             Setting::Icons => self.config.ui.icons.as_str().into(),
             Setting::Thumbnails => {
@@ -1518,7 +1532,7 @@ impl State {
         }
         if self.on_related() {
             let video = self.active_tab().and_then(|t| t.related_videos().get(t.related)).cloned();
-            return video.map(|v| self.play(Playback::youtube(v))).unwrap_or_default();
+            return video.map(|v| self.open_video(v)).unwrap_or_default();
         }
         if self.active_tab().is_some() {
             return self.replay();
@@ -1530,7 +1544,7 @@ impl State {
         let selected = listing.selected;
         match &listing.items {
             Items::Videos(videos) => match videos.get(selected).cloned() {
-                Some(video) => self.play(Playback::youtube(video)),
+                Some(video) => self.open_video(video),
                 None => Vec::new(),
             },
             Items::Files(files, kind) => match Playback::local(files, selected, *kind) {
@@ -1743,6 +1757,10 @@ impl State {
                 player.sponsorblock = !player.sponsorblock;
                 self.status = self.tr("Se aplica a los próximos videos", "Applies to the next videos").into();
                 save("player", "sponsorblock", SettingValue::Bool(self.config.player.sponsorblock))
+            }
+            Setting::Autoplay => {
+                player.autoplay = !player.autoplay;
+                save("player", "autoplay", SettingValue::Bool(player.autoplay))
             }
             Setting::AppLang => self.toggle_ui_lang(),
             Setting::Icons => {
@@ -2695,7 +2713,19 @@ impl State {
         self.load(Source::Channel(url), name, Filter::None, true, kind)
     }
 
-    fn play(&mut self, mut playback: Playback) -> Vec<Effect> {
+    /// Enter on a YouTube video: its tab, playing at once unless
+    /// `player.autoplay` is off (then Enter in the tab plays it).
+    fn open_video(&mut self, video: Video) -> Vec<Effect> {
+        let now = self.config.player.autoplay;
+        self.open_tab(Playback::youtube(video), now)
+    }
+
+    /// A new tab that plays right away (sound only, local files).
+    fn play(&mut self, playback: Playback) -> Vec<Effect> {
+        self.open_tab(playback, true)
+    }
+
+    fn open_tab(&mut self, mut playback: Playback, now: bool) -> Vec<Effect> {
         if let Some(i) = self.tabs.iter().position(|t| t.playback.queue.first() == playback.queue.first()) {
             self.active = i + 1;
             return Vec::new();
@@ -2710,21 +2740,35 @@ impl State {
         }
         let id = TabId(self.next_tab);
         self.next_tab += 1;
-        let mut history = Vec::new();
+        // Local files have no details to look at first: they always play.
+        let now = now || playback.video.is_none();
         if let Some(video) = &playback.video {
             playback.start = playback.start.or_else(|| self.resume_at(&video.id));
+        }
+        let mut history = Vec::new();
+        if now {
             if let Some(start) = playback.start {
                 self.status = format!("⏯ {} {}", self.tr("Sigue desde", "Resuming at"), clock(start));
             }
-            history = self.remember(video.clone(), playback.start);
+            if let Some(video) = &playback.video {
+                history = self.watching(video.clone(), playback.start);
+            }
+        } else {
+            self.status = match playback.start {
+                Some(start) => {
+                    format!("▶ {} {}", self.tr("Enter lo reproduce desde", "Enter plays it from"), clock(start))
+                }
+                None => format!("▶ {}", self.tr("Enter lo reproduce", "Enter plays it")),
+            };
         }
-        self.tabs.push(Tab::new(id, playback.clone()));
+        let mut tab = Tab::new(id, playback.clone());
+        tab.ended = !now;
+        tab.started = now;
+        self.tabs.push(tab);
         self.active = self.tabs.len();
-        let mut effects = vec![Effect::Open(id, playback.clone())];
+        let mut effects = if now { vec![Effect::Open(id, playback.clone())] } else { Vec::new() };
         if let Some(video) = &playback.video {
-            self.watched.insert(video.id.clone());
             effects.push(Effect::Watch { tab: id, video: video.id.clone() });
-            effects.push(Effect::SaveWatched(video.id.clone()));
         }
         effects.extend(history);
         if let Some(video) = playback.video.as_ref().filter(|_| self.config.player.sponsorblock) {
@@ -2733,19 +2777,35 @@ impl State {
         effects
     }
 
-    /// Plays the closed video of the active tab again, from where it was left.
+    /// A YouTube video starts playing for the first time in its tab: it is
+    /// watched now, and goes first in the history.
+    fn watching(&mut self, video: Video, start: Option<u32>) -> Vec<Effect> {
+        self.watched.insert(video.id.clone());
+        let mut effects = vec![Effect::SaveWatched(video.id.clone())];
+        effects.extend(self.remember(video, start));
+        effects
+    }
+
+    /// Plays the video of the active tab: the first time (autoplay off), or
+    /// again once closed, from where it was left.
     fn replay(&mut self) -> Vec<Effect> {
         let resume = self.active_tab().and_then(|t| t.playback.video.as_ref()).and_then(|v| self.resume_at(&v.id));
         let Some(tab) = self.active_tab_mut().filter(|t| t.ended) else { return Vec::new() };
         tab.ended = false;
         tab.on_related = false;
         tab.skipped.clear();
-        tab.playback.start = resume;
+        let first = !tab.started;
+        tab.started = true;
+        tab.playback.start = if first { tab.playback.start.or(resume) } else { resume };
         let (id, playback) = (tab.id, tab.playback.clone());
-        if let Some(start) = resume {
+        if let Some(start) = playback.start {
             self.status = format!("⏯ {} {}", self.tr("Sigue desde", "Resuming at"), clock(start));
         }
-        vec![Effect::Open(id, playback)]
+        let mut effects = vec![Effect::Open(id, playback.clone())];
+        if let Some(video) = playback.video.filter(|_| first) {
+            effects.extend(self.watching(video, playback.start));
+        }
+        effects
     }
 
     /// Where I left `id`, if it is worth resuming.
@@ -3020,7 +3080,15 @@ mod tests {
     use crate::config::{IconSet, UiConfig};
     use crate::domain::{channel, video};
 
+    /// Upstream's behavior, which most tests describe: Enter plays at once.
     fn state() -> State {
+        let mut config = Config::default();
+        config.player.autoplay = true;
+        State::new(config, Vec::new())
+    }
+
+    /// tubevibe's default: Enter opens the tab, Enter again plays.
+    fn idle_state() -> State {
         State::new(Config::default(), Vec::new())
     }
 
@@ -3738,10 +3806,97 @@ mod tests {
         assert_eq!((s.tabs.len(), s.active), (2, 1));
     }
 
+    fn idle_with_videos(ids: &[&str]) -> State {
+        let mut s = idle_state();
+        let id = load_id(&open(&mut s, Section::Suscripciones));
+        s.update(Action::Loaded(id, Ok(Items::Videos(ids.iter().map(|i| video(i)).collect()))));
+        s
+    }
+
+    #[test]
+    fn autoplay_is_off_by_default_in_tubevibe() {
+        assert!(!Config::default().player.autoplay);
+        let config = Config::from_toml("[player]\nautoplay = true").unwrap();
+        assert!(config.player.autoplay);
+    }
+
+    #[test]
+    fn without_autoplay_enter_opens_an_idle_tab_and_enter_again_plays() {
+        let mut s = idle_with_videos(&["a"]);
+        s.video_window = true;
+        let effects = s.update(Action::Enter);
+        let tab = s.active_tab().expect("a tab").id;
+        assert_eq!(effects, [Effect::Watch { tab, video: "a".into() }, Effect::Segments { tab, video: "a".into() }]);
+        let t = s.active_tab().unwrap();
+        assert!(t.ended && !t.started && !t.on_related, "idle, and Enter is for this video");
+        assert!(s.history.is_empty() && !s.watched.contains("a"), "not watched until it plays");
+        assert!(s.status.contains("Enter lo reproduce"), "{}", s.status);
+        // The details arrive; Up next does not take Enter away from the video.
+        s.update(Action::Watched(tab, Ok(Watch { related: vec![video("r1")], ..Watch::default() })));
+        assert!(!s.active_tab().unwrap().on_related);
+        match s.update(Action::Enter).as_slice() {
+            [Effect::Open(id, p), Effect::SaveWatched(v), Effect::SaveHistory(h)] => {
+                assert!(*id == tab && p.video.as_ref().unwrap().id == "a" && v == "a" && h.len() == 1);
+            }
+            other => panic!("{other:?}"),
+        }
+        let t = s.active_tab().unwrap();
+        assert!(!t.ended && t.started);
+        assert!(s.watched.contains("a"));
+        // Closed later: Enter plays it again, without counting it twice.
+        s.update(Action::PlayerClosed(tab, None));
+        s.update(Action::ToggleFocus);
+        assert!(matches!(s.update(Action::Enter).as_slice(), [Effect::Open(id, _)] if *id == tab));
+    }
+
+    #[test]
+    fn without_autoplay_space_plays_and_resumes_where_i_left() {
+        let mut s = idle_with_videos(&["a"]);
+        s.history = vec![HistoryEntry { video: video("a"), at: 0, position: Some(90) }];
+        s.update(Action::Enter);
+        assert!(s.status.contains("1:30"), "{}", s.status);
+        match s.update(Action::TogglePause).as_slice() {
+            [Effect::Open(_, p), ..] => assert_eq!(p.start, Some(90)),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn without_autoplay_up_next_opens_idle_too_but_sound_only_and_files_play() {
+        let mut s = idle_with_videos(&["a", "b"]);
+        s.video_window = true;
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        s.update(Action::Watched(tab, Ok(Watch { related: vec![video("r1")], ..Watch::default() })));
+        s.update(Action::ToggleFocus);
+        let effects = s.update(Action::Enter);
+        assert!(!effects.iter().any(|e| matches!(e, Effect::Open(..))), "{effects:?}");
+        assert_eq!(s.active_tab().unwrap().playback.video.as_ref().unwrap().id, "r1");
+        assert!(s.active_tab().unwrap().ended);
+        // `a` on a list row: sound only, at once.
+        s.update(Action::GoTab(0));
+        s.stack.last_mut().unwrap().selected = 1;
+        let effects = s.update(Action::Listen);
+        assert!(matches!(effects.as_slice(), [Effect::Open(_, p), ..] if p.audio_only));
+        // Local files have no details to wait on.
+        let id = load_id(&open(&mut s, Section::MiMusica));
+        s.update(Action::Loaded(id, Ok(Items::Files(files(&["x"]), MediaKind::Music))));
+        assert!(matches!(s.update(Action::Enter).as_slice(), [Effect::Open(..)]));
+    }
+
+    #[test]
+    fn autoplay_setting_toggles_and_is_saved() {
+        let mut s = idle_state();
+        assert_eq!(change(&mut s, Setting::Autoplay), [saved("player", "autoplay", SettingValue::Bool(true))]);
+        assert!(s.config.player.autoplay);
+        assert_eq!(s.setting_value(Setting::Autoplay), "lo abre y lo reproduce");
+    }
+
     #[test]
     fn max_tabs_is_enforced() {
         let config = Config { ui: UiConfig { max_tabs: 1, ..Default::default() }, ..Default::default() };
         let mut s = State::new(config, vec![]);
+        s.config.player.autoplay = true;
         let id = load_id(&open(&mut s, Section::Suscripciones));
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
         play(&mut s, 0);

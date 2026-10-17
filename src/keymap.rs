@@ -66,7 +66,7 @@ pub const IN_MENU: &[(&str, Text)] = &[
 
 pub const IN_LISTS: &[(&str, Text)] = &[
     ("↑ ↓  j k", Text::new("moverse", "move")),
-    ("Enter", Text::new("ver video · abrir canal · cambiar opción", "play · open channel · change option")),
+    ("Enter", Text::new("abrir video · abrir canal · cambiar opción", "open video · open channel · change option")),
     ("Esc  ←  h", Text::new("volver", "back")),
     ("Tab", Text::new("ir al menú", "go to the menu")),
     ("/", Text::new("buscar (dentro de un canal: en ese canal)", "search (inside a channel: in that channel)")),
@@ -80,7 +80,10 @@ pub const IN_LISTS: &[(&str, Text)] = &[
 
 pub const WITH_MOUSE: &[(&str, Text)] = &[
     ("clic", Text::new("elegir · en el menú y las pestañas: abrir", "select · menu and tabs: open")),
-    ("doble clic", Text::new("ver video · abrir canal · cambiar opción", "play · open channel · change option")),
+    (
+        "doble clic",
+        Text::new("abrir video · abrir canal · cambiar opción", "open video · open channel · change option"),
+    ),
     ("rueda", Text::new("moverse en la lista · en el video: volumen", "move in the list · on the video: volume")),
     ("clic video", Text::new("pausa (doble clic: pantalla completa)", "pause (double click: fullscreen)")),
     ("clic der.", Text::new("opciones de lo que está debajo", "options for what is under it")),
