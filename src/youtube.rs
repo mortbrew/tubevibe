@@ -904,9 +904,25 @@ struct InnerTube {
     agent: ureq::Agent,
     cookie_header: String,
     jar: std::collections::HashMap<String, String>,
-    /// Interface language of the answers; anonymous calls use English so
-    /// relative dates ("3 weeks ago") can be read.
+    /// Interface language of the answers; anonymous calls (and signed-in
+    /// ones that read dates) use English so "3 weeks ago" can be read;
+    /// other signed-in ones the app's language.
     hl: &'static str,
+}
+
+/// Interface language of signed-in answers (playlist names YouTube makes,
+/// like "Saved Shorts"): the app's, set by [`set_language`]. English until then.
+static SIGNED_IN_HL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Signed-in requests from now on answer in `lang` (calls that read dates
+/// stay in English).
+pub fn set_language(lang: crate::i18n::Lang) {
+    SIGNED_IN_HL.store(lang == crate::i18n::Lang::Es, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `hl` of signed-in requests: the app's language.
+fn signed_in_hl() -> &'static str {
+    if SIGNED_IN_HL.load(std::sync::atomic::Ordering::Relaxed) { "es" } else { "en" }
 }
 
 impl InnerTube {
@@ -915,7 +931,7 @@ impl InnerTube {
         let jar = session::parse_cookies(&text);
         session::authorization(&jar, 0).ok_or(YoutubeError::NoSession)?;
         let cookie_header = jar.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ");
-        Ok(Self { agent: agent(), cookie_header, jar, hl: "es" })
+        Ok(Self { agent: agent(), cookie_header, jar, hl: signed_in_hl() })
     }
 
     /// Without login, for public data like searches.
@@ -1722,6 +1738,15 @@ mod tests {
         assert_eq!(edit_result(&json!({ "status": "STATUS_SUCCEEDED" })), Ok(()));
         assert_eq!(edit_result(&json!({})), Ok(()));
         assert_eq!(edit_result(&json!({ "status": "STATUS_FAILED" })), Err("STATUS_FAILED".into()));
+    }
+
+    #[test]
+    fn signed_in_requests_follow_the_app_language() {
+        set_language(crate::i18n::Lang::En);
+        assert_eq!(signed_in_hl(), "en");
+        set_language(crate::i18n::Lang::Es);
+        assert_eq!(signed_in_hl(), "es", "a change applies to the next request");
+        set_language(crate::i18n::Lang::En);
     }
 
     #[test]

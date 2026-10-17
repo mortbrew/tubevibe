@@ -788,6 +788,9 @@ struct Pending {
     kind: ListKind,
     /// My favorite channels go first (Suscripciones, Mis canales).
     favorites_first: bool,
+    /// A playlist I opened (Watch Later and Liked videos too): shown whole,
+    /// Shorts included, whatever `hide_shorts` says.
+    keep_shorts: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1985,6 +1988,7 @@ impl State {
         let id = self.request(title, filter, push, kind);
         if let Some(pending) = &mut self.pending {
             pending.favorites_first = matches!(source, Source::Subscriptions | Source::MyChannels);
+            pending.keep_shorts = matches!(source, Source::Playlist(_));
         }
         vec![Effect::Load { id, source, limit }]
     }
@@ -1995,7 +1999,7 @@ impl State {
         self.next_request += 1;
         self.status = format!("{} {title}…", self.tr("Cargando", "Loading"));
         self.loading = Some(title.clone());
-        self.pending = Some(Pending { id, title, filter, push, kind, favorites_first: false });
+        self.pending = Some(Pending { id, title, filter, push, kind, favorites_first: false, keep_shorts: false });
         id
     }
 
@@ -2083,7 +2087,8 @@ impl State {
             return vec![Effect::LoadSubs];
         }
         if let Items::Videos(videos) = &mut items {
-            if self.config.ui.hide_shorts {
+            // Not in playlists: one of only Shorts would look empty.
+            if self.config.ui.hide_shorts && !pending.keep_shorts {
                 videos.retain(|v| !v.short);
             }
             let mine = |v: &Video| v.channel_id.as_ref().is_some_and(|c| self.subs.contains(c));
@@ -2547,8 +2552,8 @@ impl State {
             self.status =
                 format!("🗑 {}: {}", self.tr("Quitado de Ver después", "Removed from Watch Later"), video.title);
         }
-        let hide_shorts = self.config.ui.hide_shorts;
-        let shown: Vec<Video> = self.later.iter().filter(|v| !(hide_shorts && v.short)).cloned().collect();
+        // A playlist: shown whole, Shorts included.
+        let shown = self.later.clone();
         for listing in self.stack.iter_mut().filter(|l| l.kind == ListKind::Later) {
             listing.selected = listing.selected.min(shown.len().saturating_sub(1));
             listing.items = Items::Videos(shown.clone());
@@ -4022,8 +4027,33 @@ mod tests {
         let short = Video { short: true, ..video("s") };
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), short.clone(), video("b")]))));
         assert_eq!(s.listing().unwrap().kind, ListKind::Later);
-        assert_eq!(s.later, vec![video("a"), short, video("b")], "Shorts too: they are in Watch Later");
+        assert_eq!(s.later, vec![video("a"), short.clone(), video("b")], "Shorts too: they are in Watch Later");
+        assert!(s.config.ui.hide_shorts);
+        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a"), short, video("b")]), "shown too");
         assert!(s.later_complete, "fewer than a page: the whole list");
+    }
+
+    #[test]
+    fn playlists_show_their_shorts_and_feeds_do_not() {
+        let mut s = state();
+        assert!(s.config.ui.hide_shorts);
+        let short = Video { short: true, ..video("s") };
+        // A playlist of only Shorts is not empty.
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::MisListas));
+        let mine = crate::domain::Playlist { id: "PLx".into(), title: "Mine".into(), count: None };
+        s.update(Action::Loaded(id, Ok(Items::Playlists(vec![mine]))));
+        let id = match s.update(Action::Enter).as_slice() {
+            [Effect::Load { id, source: Source::Playlist(list), .. }] if list == "PLx" => *id,
+            other => panic!("{other:?}"),
+        };
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![short.clone(), Video { short: true, ..video("t") }]))));
+        assert_eq!(s.listing().unwrap().items.len(), 2, "both Shorts shown");
+        assert_eq!(s.status, "Mine · 2", "the count says what is shown");
+        // A feed still leaves them out.
+        let id = load_id(&open(&mut s, Section::Suscripciones));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![short, video("a")]))));
+        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
     }
 
     #[test]

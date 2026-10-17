@@ -41,7 +41,9 @@ Every video opens in its own tab.
   new videos are announced in the status bar, counted in the menu
   (*Suscripciones (3 nuevos)*), marked NUEVO in the list and, with
   `notify-send`, as a desktop notification
-- **Shorts hidden** from every list (a setting turns them back on)
+- **Shorts hidden** from feeds, searches and channels (a setting turns them
+  back on); playlists you open (Watch Later and Liked videos too) always show
+  them
 - **Your favorite channels first**: the channels you watch most (3 videos or
   more in the last 30 days, up to 10) are marked ⭐. Their videos from the last
   week go first in *Suscripciones* (after live ones), they top *Mis canales*
