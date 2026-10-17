@@ -82,11 +82,12 @@ earlier version of this branch did; it was taken out whole).
 
 - **Video tab** (when the video plays in its own window, or as sound only,
   so the tab shows its details): *"✦ AI summary · AI can make mistakes"*
-  and the whole summary, wrapped, on the line right after the last detail
+  and the whole summary, wrapped, one blank line after the last detail
   (the status line, e.g. *"▶ Enter plays it"*). The details card grows to
   hold it and *Up next* moves down; without a summary nothing changes. A
   very long one is cut with `…` so *Up next* keeps a few rows.
-- **Preview pane** of video lists: the same, after the other details, using
+- **Preview pane** of video lists: the same, one blank line after the other
+  details, using
   all the room left in the pane (`…` if it does not fit).
 - **Where it comes from**: the watch page (`/youtubei/v1/next`) the tab
   already asks for, so no extra request there:

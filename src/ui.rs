@@ -548,10 +548,10 @@ fn wrap_text(text: &str, width: u16) -> Vec<String> {
     lines
 }
 
-/// "✦ AI summary" and the summary wrapped at `width`, in at most `rows`
-/// lines: the last one ends in "…" when it does not all fit.
+/// A blank line, "✦ AI summary" and the summary wrapped at `width`, in at
+/// most `rows` lines: the last one ends in "…" when it does not all fit.
 fn summary_lines(text: &str, width: u16, rows: usize, lang: Lang) -> Vec<Line<'static>> {
-    if rows == 0 {
+    if rows < 2 {
         return Vec::new();
     }
     let heading = Line::from(vec![
@@ -559,7 +559,7 @@ fn summary_lines(text: &str, width: u16, rows: usize, lang: Lang) -> Vec<Line<'s
         Span::styled(lang.pick(" · la IA puede equivocarse", " · AI can make mistakes"), MUTED),
     ]);
     let mut wrapped = wrap_text(text, width);
-    let room = rows - 1;
+    let room = rows - 2;
     if wrapped.len() > room {
         wrapped.truncate(room);
         if let Some(last) = wrapped.last_mut() {
@@ -570,7 +570,7 @@ fn summary_lines(text: &str, width: u16, rows: usize, lang: Lang) -> Vec<Line<'s
             *last = format!("{}…", last.trim_end());
         }
     }
-    std::iter::once(heading).chain(wrapped.into_iter().map(|l| Line::from(l).fg(FG))).collect()
+    [Line::from(""), heading].into_iter().chain(wrapped.into_iter().map(|l| Line::from(l).fg(FG))).collect()
 }
 
 /// The video plays in its own window: the tab shows its details and what to watch next.
@@ -2578,9 +2578,20 @@ mod tests {
         let lines = |rows| summary_lines("uno dos tres cuatro cinco seis", 9, rows, Lang::En);
         let text = |l: &[Line]| l.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert!(lines(0).is_empty());
-        assert_eq!(text(&lines(9))[1..], ["uno dos", "tres", "cuatro", "cinco", "seis"]);
-        assert_eq!(text(&lines(3))[1..], ["uno dos", "tres…"]);
-        assert!(text(&lines(3))[0].starts_with("✦ AI summary"));
+        assert!(lines(1).is_empty(), "no room for more than the blank line");
+        assert_eq!(text(&lines(9))[2..], ["uno dos", "tres", "cuatro", "cinco", "seis"]);
+        assert_eq!(text(&lines(4))[2..], ["uno dos", "tres…"]);
+        assert_eq!(text(&lines(4))[0], "", "a blank line above the heading");
+        assert!(text(&lines(4))[1].starts_with("✦ AI summary"));
+    }
+
+    /// The row above `(x, y)` is empty there and the one above it is not:
+    /// exactly one blank line.
+    fn blank_above(screen: &str, x: u16, y: u16) -> bool {
+        let cells = |row: u16| -> String {
+            screen.lines().nth(usize::from(row)).unwrap().chars().skip(usize::from(x)).take(12).collect()
+        };
+        cells(y - 1).trim().is_empty() && !cells(y - 2).trim().is_empty()
     }
 
     /// An idle video tab with its details (the video plays in its own window).
@@ -2606,8 +2617,9 @@ mod tests {
                        or traveling. A last sentence that ends it all: THE END.";
         let (s, screen) = details_tab(Some(summary));
         let (_, status) = find(&screen, "▶ Enter lo reproduce");
-        let (_, heading) = find(&screen, "✦ Resumen IA");
-        assert_eq!(heading, status + 1, "no gap under the status line:\n{screen}");
+        let (x, heading) = find(&screen, "✦ Resumen IA");
+        assert_eq!(heading, status + 2, "one blank line under the status line:\n{screen}");
+        assert!(blank_above(&screen, x, heading), "{screen}");
         assert!(screen.contains("UFD Tech explores") && screen.contains("THE END."), "whole: {screen}");
         assert!(find(&screen, "THE END.").1 < find(&screen, "A continuación").1, "Up next below it");
         // Clicks on Up next find the rows where they were drawn.
@@ -2639,6 +2651,8 @@ mod tests {
         s.update(Action::Summarized("a".into(), Ok(Some(short.into()))));
         let screen = render(&s);
         assert!(screen.contains("✦ Resumen IA") && screen.contains("Fin corto."), "{screen}");
+        let (x, y) = find(&screen, "✦ Resumen IA");
+        assert!(blank_above(&screen, x, y), "one blank line after the last detail: {screen}");
         let long: String = (1..=400).map(|n| format!("w{n} ")).collect();
         s.update(Action::Summarized("a".into(), Ok(Some(long))));
         let screen = render(&s);
