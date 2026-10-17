@@ -53,7 +53,7 @@ Every video opens in its own tab.
 - A **preview** of the selected video with its **thumbnail** (in kitty), its
   length and **what it weighs** to download at your quality
   (*💾 Download ≈ 84 MB (1080p)*), asked to yt-dlp once the selection rests
-  on it
+  on it, and YouTube's **AI summary** of it (*✦ AI summary*) when it has one
 - With the video in its own window, its tab shows the **video's details**
   (thumbnail, subscribers, views, likes, date) and **Up next**: `Tab` moves
   into it, `Enter` opens one in a new tab. Closing the video keeps the tab
@@ -75,6 +75,9 @@ Every video opens in its own tab.
 - **Comments**: next to *Up next* when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
   scroll them
+- **AI summary**: YouTube's *AI-generated video summary*, on the videos
+  that have one, right under the details of the same tabs (and in the
+  preview of lists). Video descriptions are not shown
 
 **Playback**
 - Embedded video in kitty, an mpv window, or an **overlay** (X11): an mpv

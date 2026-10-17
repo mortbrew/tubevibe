@@ -72,3 +72,45 @@ defaults to `false`**:
 
 `autoplay = true` brings back upstream's behavior exactly; the existing tests
 run with it on, new ones cover it off.
+
+## AI video summaries (`descriptions`)
+
+YouTube shows an *"AI-generated video summary"* under some videos (not
+most: about a third of those tried, more often recent English ones). It now
+shows in tubevibe too. The video's own description is **not** shown (an
+earlier version of this branch did; it was taken out whole).
+
+- **Video tab** (when the video plays in its own window, or as sound only,
+  so the tab shows its details): *"✦ AI summary · AI can make mistakes"*
+  and the whole summary, wrapped, one blank line after the last detail
+  (the status line, e.g. *"▶ Enter plays it"*). The details card grows to
+  hold it and *Up next* moves down; without a summary nothing changes. A
+  very long one is cut with `…` so *Up next* keeps a few rows.
+- **Preview pane** of video lists: the same, one blank line after the other
+  details, using
+  all the room left in the pane (`…` if it does not fit).
+- **Where it comes from**: the watch page (`/youtubei/v1/next`) the tab
+  already asks for, so no extra request there:
+  `engagementPanels[].engagementPanelSectionListRenderer.content`
+  `.structuredDescriptionContentRenderer.items[].expandableMetadataRenderer`
+  `.expandedContent.videoSummaryContentViewModel.paragraphs[]`
+  `.videoSummaryParagraphViewModel.text.content` (paragraphs joined by a
+  blank line), else that box's `header.collapsedTitle`. For the preview the
+  same request is made for the selected video once the selection rests on
+  it for 800 ms, one at a time, signed in when logged in (like the tab);
+  live and upcoming videos are not asked. Answers (also "none" and
+  failures) are kept for the session, not saved.
+- No new keys (`e` from the description version is gone).
+- `ratatui`'s `unstable-rendered-line-info` feature is turned on to measure
+  how many rows the wrapped details take.
+
+### Uncertain
+
+- Checked live only anonymously from a US address (`hl=en`, `gl=US` and
+  others: the summary came every time, in the video's language; only the
+  labels follow `hl`). Not tried signed in, nor from outside the US.
+- The field names are YouTube's undocumented internals and can change;
+  the parser is tested against a trimmed real reply
+  (`tests/fixtures/next_summary.json`).
+- Each preview summary costs one watch-page request (~400 KB) per video
+  looked at.

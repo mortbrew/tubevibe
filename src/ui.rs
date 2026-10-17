@@ -14,7 +14,7 @@ use crate::app::{
 };
 use crate::config::{IconSet, donations};
 use crate::doctor::{Manager, Tool};
-use crate::domain::{Channel, Download, DownloadState, Live, Playlist, Size, Video, clock, date_labels};
+use crate::domain::{Channel, Download, DownloadState, Live, Playlist, Size, TabId, Video, clock, date_labels};
 use crate::i18n::Lang;
 use crate::media::{LocalFile, MediaKind};
 use crate::player::Info;
@@ -298,7 +298,7 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
         if state.details_shown(tab) {
             // The video is elsewhere (or not shown): here are its details and the related list.
             state.related_shown()?;
-            let list = Block::bordered().inner(watch_layout(Block::bordered().inner(areas.content)).related);
+            let list = Block::bordered().inner(tab_layout(tab, Block::bordered().inner(areas.content)).related);
             return list_row(list, tab.related, tab.related_videos().len(), at);
         }
         let inner = Block::bordered().inner(areas.content);
@@ -476,11 +476,30 @@ const WATCH_THUMBNAIL_WIDTH: u16 = 36;
 /// Narrower than this, a video tab shows no comments.
 const COMMENTS_MIN_WIDTH: u16 = 100;
 
+thread_local! {
+    /// Rows the details card of a video tab took when last drawn, with the
+    /// area it was drawn in: it grows to hold the AI summary, so a click on
+    /// "Up next" must find the rows where they were drawn.
+    static CARD_ROWS: std::cell::Cell<Option<(TabId, Rect, u16)>> = const { std::cell::Cell::new(None) };
+}
+
 fn watch_layout(inner: Rect) -> WatchLayout {
+    watch_layout_with(inner, 0)
+}
+
+/// The layout of `tab` as last drawn in `inner`.
+fn tab_layout(tab: &Tab, inner: Rect) -> WatchLayout {
+    let drawn = CARD_ROWS.with(std::cell::Cell::get).filter(|(id, area, _)| *id == tab.id && *area == inner);
+    watch_layout_with(inner, drawn.map_or(0, |(_, _, rows)| rows))
+}
+
+/// `card_rows`: what the details need, when more than the thumbnail's height.
+fn watch_layout_with(inner: Rect, card_rows: u16) -> WatchLayout {
     let width = WATCH_THUMBNAIL_WIDTH.min(inner.width / 3);
     let rows = (u32::from(width) * 9 / 32) as u16;
+    let card_rows = rows.max(7).max(card_rows);
     let [card, _, below] =
-        Layout::vertical([Constraint::Length(rows.max(7)), Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
+        Layout::vertical([Constraint::Length(card_rows), Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
     let [thumbnail, _, details] =
         Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
     let (related, comments) = if below.width >= COMMENTS_MIN_WIDTH {
@@ -493,11 +512,72 @@ fn watch_layout(inner: Rect) -> WatchLayout {
     WatchLayout { thumbnail: Rect { height: rows.min(card.height), ..thumbnail }, details, related, comments }
 }
 
+/// Rows of the details card kept for "Up next" at least, however long the summary.
+const UP_NEXT_MIN_ROWS: u16 = 6;
+
+/// `text` broken into lines of at most `width` columns: its own line breaks
+/// kept, words kept whole when they fit, longer ones cut.
+fn wrap_text(text: &str, width: u16) -> Vec<String> {
+    let width = usize::from(width.max(1));
+    let mut lines = Vec::new();
+    for source in text.lines() {
+        let mut line = String::new();
+        let mut used = 0;
+        for word in source.split_whitespace() {
+            let size = Span::raw(word).width();
+            if used > 0 && used + 1 + size > width {
+                lines.push(std::mem::take(&mut line));
+                used = 0;
+            }
+            if used > 0 {
+                line.push(' ');
+                used += 1;
+            }
+            for c in word.chars() {
+                let w = Span::raw(c.to_string()).width();
+                if used + w > width && used > 0 {
+                    lines.push(std::mem::take(&mut line));
+                    used = 0;
+                }
+                line.push(c);
+                used += w;
+            }
+        }
+        lines.push(line);
+    }
+    lines
+}
+
+/// A blank line, "✦ AI summary" and the summary wrapped at `width`, in at
+/// most `rows` lines: the last one ends in "…" when it does not all fit.
+fn summary_lines(text: &str, width: u16, rows: usize, lang: Lang) -> Vec<Line<'static>> {
+    if rows < 2 {
+        return Vec::new();
+    }
+    let heading = Line::from(vec![
+        Span::styled(lang.pick("✦ Resumen IA", "✦ AI summary"), Style::new().fg(BLUE).bold()),
+        Span::styled(lang.pick(" · la IA puede equivocarse", " · AI can make mistakes"), MUTED),
+    ]);
+    let mut wrapped = wrap_text(text, width);
+    let room = rows - 2;
+    if wrapped.len() > room {
+        wrapped.truncate(room);
+        if let Some(last) = wrapped.last_mut() {
+            // Room for the mark: drop characters until it fits.
+            while !last.is_empty() && Span::raw(last.as_str()).width() + 1 > usize::from(width) {
+                last.pop();
+            }
+            *last = format!("{}…", last.trim_end());
+        }
+    }
+    [Line::from(""), heading].into_iter().chain(wrapped.into_iter().map(|l| Line::from(l).fg(FG))).collect()
+}
+
 /// The video plays in its own window: the tab shows its details and what to watch next.
 fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab: &Tab, inner: Rect) {
     let lang = state.lang();
     let Some(video) = &tab.playback.video else { return };
-    let layout = watch_layout(inner);
+    let mut layout = watch_layout(inner);
     let details = if view.thumbnails {
         let middle = Rect { y: layout.thumbnail.y + layout.thumbnail.height / 2, height: 1, ..layout.thumbnail };
         frame.render_widget(Paragraph::new("⏳").fg(MUTED).alignment(Alignment::Center), middle);
@@ -552,6 +632,21 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     if let Some(elapsed) = view.opening {
         lines.push(Line::from(loading_text(lang.pick("el video", "the video"), elapsed, lang)).fg(YELLOW));
     }
+    // The AI summary right under the last detail; the card grows to hold it.
+    let mut card_rows = 0;
+    if let Some(summary) = state.tab_summary(tab) {
+        let used = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width);
+        let most = inner.height.saturating_sub(UP_NEXT_MIN_ROWS + 1);
+        let room = usize::from(most).saturating_sub(used);
+        lines.extend(summary_lines(summary, details.width, room, lang));
+        card_rows =
+            (Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width)
+                as u16)
+                .min(most);
+    }
+    CARD_ROWS.with(|c| c.set(Some((tab.id, inner, card_rows))));
+    layout = watch_layout_with(inner, card_rows);
+    let details = Rect { y: layout.details.y, height: layout.details.height, ..details };
     frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), details);
 
     let related = tab.related_videos();
@@ -1100,6 +1195,13 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
         lines.push(Line::from(format!("{} {}", icons.subscribed, lang.pick("Suscripto", "Subscribed"))).fg(GREEN));
     }
     lines.extend(rating_line(state, icons, &v.id));
+    // The AI summary in all the room left, cut with "…" if longer.
+    if let Some(summary) = state.summary(&v.id) {
+        let used =
+            Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(text_area.width);
+        let room = usize::from(text_area.height).saturating_sub(used);
+        lines.extend(summary_lines(summary, text_area.width, room, lang));
+    }
     frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), text_area);
 }
 
@@ -2465,6 +2567,105 @@ mod tests {
     }
 
     #[test]
+    fn wrapping_keeps_line_breaks_words_and_cuts_long_ones() {
+        assert_eq!(wrap_text("one two three\n\nfour", 7), ["one two", "three", "", "four"]);
+        assert_eq!(wrap_text("https://example.com/abc", 10), ["https://ex", "ample.com/", "abc"]);
+        assert_eq!(wrap_text("a  b", 10), ["a b"]);
+    }
+
+    #[test]
+    fn summary_lines_fit_their_rows_and_mark_the_cut() {
+        let lines = |rows| summary_lines("uno dos tres cuatro cinco seis", 9, rows, Lang::En);
+        let text = |l: &[Line]| l.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert!(lines(0).is_empty());
+        assert!(lines(1).is_empty(), "no room for more than the blank line");
+        assert_eq!(text(&lines(9))[2..], ["uno dos", "tres", "cuatro", "cinco", "seis"]);
+        assert_eq!(text(&lines(4))[2..], ["uno dos", "tres…"]);
+        assert_eq!(text(&lines(4))[0], "", "a blank line above the heading");
+        assert!(text(&lines(4))[1].starts_with("✦ AI summary"));
+    }
+
+    /// The row above `(x, y)` is empty there and the one above it is not:
+    /// exactly one blank line.
+    fn blank_above(screen: &str, x: u16, y: u16) -> bool {
+        let cells = |row: u16| -> String {
+            screen.lines().nth(usize::from(row)).unwrap().chars().skip(usize::from(x)).take(12).collect()
+        };
+        cells(y - 1).trim().is_empty() && !cells(y - 2).trim().is_empty()
+    }
+
+    /// An idle video tab with its details (the video plays in its own window).
+    fn details_tab(summary: Option<&str>) -> (State, String) {
+        let mut s = with_items(Items::Videos(vec![video("a")]));
+        s.config.player.autoplay = false;
+        s.video_window = true;
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        let watch =
+            Watch { related: vec![video("r1"), video("r2")], summary: summary.map(String::from), ..Watch::default() };
+        s.update(Action::Watched(tab, Ok(watch)));
+        let screen = render_with(&s, &View { embedded: false, ..VIEW });
+        (s, screen)
+    }
+
+    #[test]
+    fn video_tab_shows_the_ai_summary_right_under_its_details() {
+        let summary = "UFD Tech explores the updated features of the XREAL Air 1 Pro+ glasses, highlighting \
+                       improvements in display brightness, refresh rates, and comfort. The demonstration \
+                       showcases how these spatial display specs function as a portable multi-monitor \
+                       workspace and entertainment hub, providing flexibility for those working from home \
+                       or traveling. A last sentence that ends it all: THE END.";
+        let (s, screen) = details_tab(Some(summary));
+        let (_, status) = find(&screen, "▶ Enter lo reproduce");
+        let (x, heading) = find(&screen, "✦ Resumen IA");
+        assert_eq!(heading, status + 2, "one blank line under the status line:\n{screen}");
+        assert!(blank_above(&screen, x, heading), "{screen}");
+        assert!(screen.contains("UFD Tech explores") && screen.contains("THE END."), "whole: {screen}");
+        assert!(find(&screen, "THE END.").1 < find(&screen, "A continuación").1, "Up next below it");
+        // Clicks on Up next find the rows where they were drawn.
+        let screen_area = Rect::new(0, 0, 130, 40);
+        let (x, y) = find(&screen, "title r2  1:00");
+        assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
+        // Without one: nothing extra, Up next where it always was.
+        let (plain, plain_screen) = details_tab(None);
+        assert!(!plain_screen.contains("✦"), "{plain_screen}");
+        let (x, y2) = find(&plain_screen, "title r2  1:00");
+        assert!(y2 < y, "Up next moves up without a summary");
+        assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
+    }
+
+    #[test]
+    fn a_long_summary_leaves_up_next_some_rows() {
+        let long = "palabra ".repeat(800);
+        let (s, screen) = details_tab(Some(&long));
+        assert!(screen.contains("A continuación") && screen.contains("title r1"), "{screen}");
+        assert!(screen.contains("palabra…"), "cut with the mark: {screen}");
+        let (x, y) = find(&screen, "title r1  1:00");
+        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
+    }
+
+    #[test]
+    fn preview_shows_the_ai_summary_in_all_its_room() {
+        let mut s = with_items(Items::Videos(vec![video("a"), video("b")]));
+        let short = "Uno dos tres. Fin corto.";
+        s.update(Action::Summarized("a".into(), Ok(Some(short.into()))));
+        let screen = render(&s);
+        assert!(screen.contains("✦ Resumen IA") && screen.contains("Fin corto."), "{screen}");
+        let (x, y) = find(&screen, "✦ Resumen IA");
+        assert!(blank_above(&screen, x, y), "one blank line after the last detail: {screen}");
+        let long: String = (1..=400).map(|n| format!("w{n} ")).collect();
+        s.update(Action::Summarized("a".into(), Ok(Some(long))));
+        let screen = render(&s);
+        let shown = screen.lines().filter(|l| l.contains(" w")).count();
+        assert!(shown > 5, "not capped at 5 lines: {shown}\n{screen}");
+        assert!(screen.contains('…') && !screen.contains("w400"), "cut at the bottom: {screen}");
+        // Another video without one: nothing extra.
+        s.update(Action::Summarized("b".into(), Ok(None)));
+        s.update(Action::Down);
+        assert!(!render(&s).contains("✦"));
+    }
+
+    #[test]
     fn video_tab_in_window_mode_shows_details_and_related() {
         let mut s = with_items(Items::Videos(vec![video("a")]));
         s.video_window = true;
@@ -2480,6 +2681,7 @@ mod tests {
             related: vec![video("r1"), video("r2")],
             rating: Some(Rating::Like),
             comments_token: Some("T".into()),
+            summary: None,
         };
         s.update(Action::Watched(tab, Ok(watch)));
         assert!(render_with(&s, &View { embedded: false, ..VIEW }).contains("Buscando comentarios"));

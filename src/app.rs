@@ -490,6 +490,8 @@ pub enum Action {
     SubsPolled(Result<Vec<Video>, String>),
     /// What a video weighs (and lasts), asked to yt-dlp in the background.
     Sized(String, Result<Size, String>),
+    /// YouTube's AI summary of a video looked at in a list (`None`: it has none).
+    Summarized(String, Result<Option<String>, String>),
     /// The top comments of a tab's video arrived.
     CommentsLoaded(TabId, Result<Vec<Comment>, String>),
     /// Move through the comments of the active tab by this many.
@@ -828,6 +830,8 @@ pub struct State {
     pub fresh_shown: HashSet<String>,
     /// Weight and length of the videos looked at, by id.
     pub sizes: HashMap<String, Size>,
+    /// YouTube's AI summaries of the videos looked at, by id (`None`: it has none).
+    pub summaries: HashMap<String, Option<String>>,
     /// Videos I opened of each channel lately, and the channels I watch most.
     pub channel_views: HashMap<String, usize>,
     pub favorites: HashSet<String>,
@@ -894,6 +898,7 @@ impl State {
             fresh: Vec::new(),
             fresh_shown: HashSet::new(),
             sizes: HashMap::new(),
+            summaries: HashMap::new(),
             channel_views: HashMap::new(),
             favorites: HashSet::new(),
             clock: 0,
@@ -1220,6 +1225,9 @@ impl State {
                     if let (Some(rating), Some(video)) = (watch.rating, &tab.playback.video) {
                         self.ratings.insert(video.id.clone(), rating);
                     }
+                    if let Some(video) = &tab.playback.video {
+                        self.summaries.insert(video.id.clone(), watch.summary.clone());
+                    }
                     let token = watch.comments_token.clone();
                     tab.watch = Some(watch);
                     if let Some(token) = token.filter(|_| tab.comments.is_none()) {
@@ -1338,6 +1346,10 @@ impl State {
             Action::Sized(id, result) => {
                 // Failed: remembered as unknown, not asked again.
                 self.sizes.insert(id, result.unwrap_or_default());
+            }
+            // Failed: shown as none, not asked again.
+            Action::Summarized(id, result) => {
+                self.summaries.insert(id, result.ok().flatten());
             }
             Action::OpenChannel => return self.open_channel(),
             Action::Listen => return self.listen(),
@@ -2255,6 +2267,23 @@ impl State {
             .into_iter()
             .chain(downloading.map(|d| &d.video))
             .find(|v| v.live == crate::domain::Live::No && !self.sizes.contains_key(&v.id))
+    }
+
+    /// The video looked at in a list whose AI summary is worth asking for:
+    /// not live nor upcoming ones, nor those already asked.
+    pub fn summary_wanted(&self) -> Option<&Video> {
+        self.selected_video().filter(|v| v.live == crate::domain::Live::No && !self.summaries.contains_key(&v.id))
+    }
+
+    /// YouTube's AI summary of a video, once known (from its tab or the preview).
+    pub fn summary(&self, id: &str) -> Option<&str> {
+        self.summaries.get(id).and_then(|s| s.as_deref())
+    }
+
+    /// The AI summary of a tab's video.
+    pub fn tab_summary<'a>(&'a self, tab: &'a Tab) -> Option<&'a str> {
+        let watch = tab.watch.as_ref().and_then(|w| w.summary.as_deref());
+        watch.or_else(|| tab.playback.video.as_ref().and_then(|v| self.summary(&v.id)))
     }
 
     /// `(id, name, url)` of the channel the user is pointing at.
@@ -4407,6 +4436,43 @@ mod tests {
         assert_eq!(s.size_wanted().unwrap().id, "b");
         s.update(Action::Sized("b".into(), Err("falló".into())));
         assert!(s.size_wanted().is_none(), "failed: not asked again");
+    }
+
+    #[test]
+    fn the_summary_of_the_video_looked_at_is_asked_once() {
+        let mut s = with_videos(&["a", "b", "c"]);
+        s.update(Action::GoTab(0));
+        assert_eq!(s.summary_wanted().unwrap().id, "a");
+        s.update(Action::Summarized("a".into(), Ok(Some("Sum".into()))));
+        assert_eq!(s.summary("a"), Some("Sum"));
+        assert!(s.summary_wanted().is_none(), "known");
+        s.update(Action::Down);
+        s.update(Action::Summarized("b".into(), Ok(None)));
+        assert!(s.summary_wanted().is_none(), "has none: not asked again");
+        s.update(Action::Down);
+        s.update(Action::Summarized("c".into(), Err("falló".into())));
+        assert!(s.summary_wanted().is_none(), "failed: not asked again");
+        assert_eq!(s.summary("c"), None);
+    }
+
+    #[test]
+    fn live_videos_get_no_summary_asked() {
+        let mut s = state();
+        let id = load_id(&open(&mut s, Section::Suscripciones));
+        let live = Video { live: crate::domain::Live::Now, ..video("l") };
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![live]))));
+        assert!(s.summary_wanted().is_none());
+    }
+
+    #[test]
+    fn a_tab_remembers_its_summary_for_the_preview() {
+        let mut s = with_videos(&["a"]);
+        s.update(Action::GoTab(0));
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        s.update(Action::Watched(tab, Ok(Watch { summary: Some("Sum".into()), ..Watch::default() })));
+        assert_eq!(s.summary("a"), Some("Sum"));
+        assert_eq!(s.tab_summary(s.active_tab().unwrap()), Some("Sum"));
     }
 
     #[test]

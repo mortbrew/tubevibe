@@ -576,6 +576,8 @@ pub struct Watch {
     pub rating: Option<Rating>,
     /// Asks YouTube for the comments (see [`comments`]).
     pub comments_token: Option<String>,
+    /// YouTube's "AI-generated video summary", on the videos that have one.
+    pub summary: Option<String>,
 }
 
 /// A top comment of a video.
@@ -738,6 +740,11 @@ pub fn parse_watch(reply: &Value, now: i64) -> Watch {
     let mut watch = Watch::default();
     let mut seen = HashSet::new();
     walk(reply, &mut |object| {
+        if let Some(metadata) = object.get("expandableMetadataRenderer")
+            && watch.summary.is_none()
+        {
+            watch.summary = summary_text(metadata);
+        }
         if let Some(primary) = object.get("videoPrimaryInfoRenderer") {
             // `originalViewCount` is sometimes "0" while the text says "6,984 views".
             let views = &primary["viewCount"]["videoViewCountRenderer"];
@@ -786,6 +793,30 @@ pub fn parse_watch(reply: &Value, now: i64) -> Watch {
         }
     });
     watch
+}
+
+/// The AI summary in an `expandableMetadataRenderer` of the description
+/// panel: its paragraphs, else the one-string copy of its collapsed header.
+/// Other expandable boxes (without the summary view model) are not it.
+fn summary_text(metadata: &Value) -> Option<String> {
+    let content = metadata["expandedContent"].get("videoSummaryContentViewModel")?;
+    let paragraphs: Vec<&str> = (content["paragraphs"].as_array().into_iter().flatten())
+        .filter_map(|p| p["videoSummaryParagraphViewModel"]["text"]["content"].as_str())
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    let text = if paragraphs.is_empty() {
+        text(&metadata["header"]["collapsedTitle"])?.trim().to_owned()
+    } else {
+        paragraphs.join("\n\n")
+    };
+    (!text.is_empty()).then_some(text)
+}
+
+/// The AI summary of a video, if YouTube has one: the watch page the tab
+/// asks for, for a video that is only looked at in a list.
+pub fn summary(id: &str, cookies: Option<&Path>) -> Result<Option<String>, YoutubeError> {
+    watch(id, cookies).map(|w| w.summary)
 }
 
 /// A suggested video in YouTube's newer "lockup" format.
@@ -1222,6 +1253,7 @@ mod tests {
     use super::*;
 
     const SEARCH: &str = include_str!("../tests/fixtures/search.json");
+    const NEXT_SUMMARY: &str = include_str!("../tests/fixtures/next_summary.json");
 
     #[test]
     fn parses_real_search_output() {
@@ -1690,5 +1722,32 @@ mod tests {
         assert_eq!(edit_result(&json!({ "status": "STATUS_SUCCEEDED" })), Ok(()));
         assert_eq!(edit_result(&json!({})), Ok(()));
         assert_eq!(edit_result(&json!({ "status": "STATUS_FAILED" })), Err("STATUS_FAILED".into()));
+    }
+
+    #[test]
+    fn the_watch_page_brings_the_ai_summary() {
+        let reply: Value = serde_json::from_str(NEXT_SUMMARY).unwrap();
+        let summary = parse_watch(&reply, 0).summary.unwrap();
+        assert!(summary.starts_with("UFD Tech explores the updated features of the XREAL Air 1 Pro+"), "{summary}");
+        assert!(summary.ends_with("working from home or traveling."), "{summary}");
+        assert_eq!(parse_watch(&watch_reply(), 0).summary, None, "most videos have none");
+    }
+
+    #[test]
+    fn summary_paragraphs_join_and_the_header_is_the_fallback() {
+        let box_with = |content: Value| {
+            json!({ "items": [{ "expandableMetadataRenderer": {
+            "header": { "collapsedTitle": { "simpleText": " From the header " } },
+            "expandedContent": content } }] })
+        };
+        let paragraph = |t: &str| json!({ "videoSummaryParagraphViewModel": { "text": { "content": t } } });
+        let two = box_with(json!({ "videoSummaryContentViewModel": {
+            "paragraphs": [paragraph("One. "), paragraph(""), paragraph("Two.")] } }));
+        assert_eq!(parse_watch(&two, 0).summary.as_deref(), Some("One.\n\nTwo."));
+        let none = box_with(json!({ "videoSummaryContentViewModel": { "paragraphs": [] } }));
+        assert_eq!(parse_watch(&none, 0).summary.as_deref(), Some("From the header"));
+        // Another kind of expandable box is not a summary.
+        let other = box_with(json!({ "horizontalCardListRenderer": {} }));
+        assert_eq!(parse_watch(&other, 0).summary, None);
     }
 }
