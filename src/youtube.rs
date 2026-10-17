@@ -217,7 +217,7 @@ pub fn my_channels(cookies: &Path) -> Result<Vec<Channel>, YoutubeError> {
     Ok(pages.into_iter().flatten().filter(|c| seen.insert(c.id.clone())).collect())
 }
 
-/// My playlists: "Liked videos" and YouTube's "Watch later" first, then
+/// My playlists: "Liked videos" and YouTube's "Watch Later" first, then
 /// the ones I made or saved.
 pub fn my_playlists(cookies: &Path) -> Result<Vec<Playlist>, YoutubeError> {
     let page = InnerTube::new(cookies)?.call("browse", json!({ "browseId": "FEplaylist_aggregation" }))?;
@@ -672,15 +672,15 @@ pub fn watch(id: &str, cookies: Option<&Path>) -> Result<Watch, YoutubeError> {
     Ok(watch)
 }
 
-/// Id of my YouTube "Watch later" playlist.
+/// Id of my YouTube "Watch Later" playlist.
 pub const WATCH_LATER: &str = "WL";
 
-/// Whether `video_id` is in my YouTube Watch later, as the "Save to playlist"
+/// Whether `video_id` is in my YouTube Watch Later, as the "Save to playlist"
 /// dialog of the website asks it.
 pub fn in_watch_later(cookies: &Path, video_id: &str) -> Result<bool, YoutubeError> {
     let reply = InnerTube::new(cookies)?.call("playlist/get_add_to_playlist", json!({ "videoIds": [video_id] }))?;
     contains_video(&reply, WATCH_LATER)
-        .ok_or_else(|| YoutubeError::Http("no Watch later in YouTube's answer (login stale?)".into()))
+        .ok_or_else(|| YoutubeError::Http("no Watch Later in YouTube's answer (login stale?)".into()))
 }
 
 /// In a `playlist/get_add_to_playlist` answer: whether `playlist` has the
@@ -698,7 +698,7 @@ pub fn contains_video(reply: &Value, playlist: &str) -> Option<bool> {
     found
 }
 
-/// Adds `video_id` to my YouTube Watch later, or (`add` false) takes it out.
+/// Adds `video_id` to my YouTube Watch Later, or (`add` false) takes it out.
 pub fn edit_watch_later(cookies: &Path, video_id: &str, add: bool) -> Result<(), YoutubeError> {
     let reply =
         InnerTube::new(cookies)?.call("browse/edit_playlist", edit_playlist_body(WATCH_LATER, video_id, add))?;
