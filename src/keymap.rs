@@ -39,7 +39,11 @@ pub const PREFIX: &[(char, Action, Text)] = &[
     ('f', Action::ToggleFullscreen, Text::new("pantalla completa", "fullscreen")),
     ('n', Action::NextTab, Text::new("pestaña siguiente", "next tab")),
     ('p', Action::PrevTab, Text::new("pestaña anterior", "previous tab")),
-    ('x', Action::CloseTab, Text::new("cerrar la pestaña", "close the tab")),
+    (
+        'x',
+        Action::CloseTab,
+        Text::new("cerrar la pestaña · en listas: quitar el video", "close tab · Watch Later/playlists: remove video"),
+    ),
     ('/', Action::FocusSearch, Text::new("buscar videos", "search videos")),
     ('l', Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
     ('?', Action::ToggleHelp, Text::new("esta ayuda", "this help")),
@@ -48,7 +52,7 @@ pub const PREFIX: &[(char, Action, Text)] = &[
 
 /// Keys that act on the selected video, in lists and in video tabs.
 pub const ON_VIDEO: &[(&str, Text)] = &[
-    ("l", Text::new("agregar / quitar (pide s) de Ver después", "add to / remove (asks y) from Watch Later")),
+    ("l", Text::new("guardar en Ver después (ya está: lo dice)", "save to Watch Later (if there: says so)")),
     ("s", Text::new("suscribirse / desuscribirse (pide confirmar)", "subscribe / unsubscribe (asks first)")),
     ("g", Text::new("me gusta (otra vez: lo quita)", "like (again: take it back)")),
     ("G", Text::new("no me gusta (otra vez: lo quita)", "dislike (again: take it back)")),
@@ -166,7 +170,7 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         return typing(key.code);
     }
     match key.code {
-        KeyCode::Char('l') => return Some(Action::ToggleLater),
+        KeyCode::Char('l') => return Some(Action::AddLater),
         KeyCode::Char('s') => return Some(Action::ToggleSubscription),
         KeyCode::Char('g') => return Some(Action::Rate(Rating::Like)),
         KeyCode::Char('G') => return Some(Action::Rate(Rating::Dislike)),
@@ -371,7 +375,7 @@ mod tests {
     #[test]
     fn video_keys_work_in_lists_and_tabs() {
         for ctx in [LISTS, TAB] {
-            assert_eq!(map(char('l'), ctx), Some(Action::ToggleLater));
+            assert_eq!(map(char('l'), ctx), Some(Action::AddLater));
             assert_eq!(map(char('s'), ctx), Some(Action::ToggleSubscription));
             assert_eq!(map(char('g'), ctx), Some(Action::Rate(Rating::Like)));
             assert_eq!(map(char('G'), ctx), Some(Action::Rate(Rating::Dislike)));

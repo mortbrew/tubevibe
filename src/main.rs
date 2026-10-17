@@ -732,6 +732,18 @@ impl Runtime {
                     Action::LaterEdited { video, add, result }
                 });
             }
+            Effect::RemoveFromPlaylist { playlist, video } => {
+                let cookies = self.cookies.clone();
+                self.background(move || {
+                    let result = match cookies {
+                        Some(cookies) => {
+                            youtube::remove_from_playlist(&cookies, &playlist, &video.id).map_err(|e| e.to_string())
+                        }
+                        None => Err(youtube::YoutubeError::NoSession.to_string()),
+                    };
+                    Action::PlaylistEdited { playlist, video, result }
+                });
+            }
             Effect::LoadSubs => {
                 let cookies = self.cookies.clone();
                 self.background(move || match cookies {

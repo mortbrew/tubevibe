@@ -249,6 +249,16 @@ pub enum Focus {
     List,
 }
 
+/// A YouTube playlist shown as a list (not Watch Later: that one is `Later`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaylistRef {
+    pub id: String,
+    pub title: String,
+}
+
+/// Id of my "Liked videos" playlist: taking a video out of it is un-liking it.
+pub const LIKED: &str = "LL";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelRef {
     pub name: String,
@@ -301,6 +311,9 @@ pub enum ListKind {
     Downloads,
     /// A channel's videos; `/` searches inside it.
     Channel(ChannelRef),
+    /// A YouTube playlist's videos (mine, saved, Liked videos): `Ctrl+y x`
+    /// takes one out.
+    Playlist(PlaylistRef),
     /// "Mis canales": unsubscribing takes the channel out.
     MyChannels,
     /// Inicio, Descubrir, Suscripciones, Descubrir canales: videos already watched can be hidden.
@@ -346,6 +359,11 @@ pub enum Confirm {
     },
     /// A video to take out of my YouTube Watch Later.
     RemoveFromLater(Video),
+    /// A video to take out of one of my YouTube playlists.
+    RemoveFromPlaylist {
+        playlist: PlaylistRef,
+        video: Video,
+    },
 }
 
 /// The right-click menu: what can be done with what is under the pointer.
@@ -409,9 +427,18 @@ pub enum Action {
     CookiesImported(Result<String, String>),
     /// `config.toml` was edited outside the app.
     ConfigReloaded(Result<Config, String>),
-    /// `l`: add the selected video to my YouTube Watch Later, or (asking
-    /// first) take it out.
-    ToggleLater,
+    /// `l`: add the selected video to my YouTube Watch Later (if it is
+    /// there already, just say so).
+    AddLater,
+    /// `Ctrl+y x` in Watch Later or a YouTube playlist: take the selected
+    /// video out of it, after asking.
+    RemoveFromList,
+    /// A video taken out of one of my YouTube playlists, or why not.
+    PlaylistEdited {
+        playlist: String,
+        video: Video,
+        result: Result<(), String>,
+    },
     /// Whether a video is in my YouTube Watch Later, asked to YouTube when
     /// the loaded list could not tell.
     LaterChecked {
@@ -620,6 +647,11 @@ pub enum Effect {
     EditLater {
         video: Video,
         add: bool,
+    },
+    /// Take a video out of one of my YouTube playlists (not Watch Later).
+    RemoveFromPlaylist {
+        playlist: String,
+        video: Video,
     },
     SaveHistory(Vec<HistoryEntry>),
     SaveSubs(HashSet<String>),
@@ -1268,7 +1300,7 @@ impl State {
                     return vec![Effect::StartSession { force: true }];
                 }
             }
-            Action::ToggleLater => return self.toggle_later(),
+            Action::AddLater => return self.add_to_later(),
             Action::LaterChecked { video, result } => return self.later_checked(video, result),
             Action::LaterEdited { video, add, result } => self.later_edited(video, add, result),
             Action::ToggleSubscription => return self.toggle_subscription(),
@@ -1290,6 +1322,17 @@ impl State {
                     let removing = self.tr("Quitando de Ver después:", "Removing from Watch Later:");
                     self.status = format!("🗑 {removing} {}…", video.title);
                     return vec![Effect::EditLater { video, add: false }];
+                }
+                Some(Confirm::RemoveFromPlaylist { playlist, video }) if playlist.id == LIKED => {
+                    // Out of Liked videos = no longer liked.
+                    self.status =
+                        format!("{} {}…", self.tr("Quitando el me gusta:", "Removing the like:"), video.title);
+                    return vec![Effect::Rate { video: video.id, title: video.title, rating: Rating::None }];
+                }
+                Some(Confirm::RemoveFromPlaylist { playlist, video }) => {
+                    let removing = self.tr("Quitando de", "Removing from");
+                    self.status = format!("🗑 {removing} {}: {}…", playlist.title, video.title);
+                    return vec![Effect::RemoveFromPlaylist { playlist: playlist.id, video }];
                 }
                 None => {}
             },
@@ -1317,9 +1360,20 @@ impl State {
                 self.update = Some(update);
             }
             Action::ToggleMark => return self.toggle_mark(),
-            Action::Trash if self.listing().is_some_and(|l| l.kind == ListKind::Later) && self.active == 0 => {
-                self.ask_remove_later();
+            // Plain `x` no longer takes videos out of YouTube lists: `Ctrl+y x` does.
+            Action::Trash if self.active == 0 && self.youtube_list_video().is_some() => {
+                self.status = self
+                    .tr(
+                        "Ctrl+y x lo quita de esta lista (pide confirmar)",
+                        "Ctrl+y x removes it from this list (asks first)",
+                    )
+                    .into();
             }
+            Action::CloseTab | Action::RemoveFromList if self.active == 0 && self.youtube_list_video().is_some() => {
+                self.ask_remove_from_list();
+            }
+            Action::RemoveFromList => {}
+            Action::PlaylistEdited { playlist, video, result } => self.playlist_edited(playlist, video, result),
             Action::Trash if self.listing().is_some_and(|l| l.kind == ListKind::History) && self.active == 0 => {
                 return self.forget_selected();
             }
@@ -1574,7 +1628,11 @@ impl State {
                 Some(p) => {
                     let title = p.name(self.lang()).to_owned();
                     // YouTube's Watch Later keeps `l`, `x` and the 🕒 marks in sync.
-                    let kind = if p.id == WATCH_LATER { ListKind::Later } else { ListKind::Plain };
+                    let kind = if p.id == WATCH_LATER {
+                        ListKind::Later
+                    } else {
+                        ListKind::Playlist(PlaylistRef { id: p.id.clone(), title: title.clone() })
+                    };
                     self.load(Source::Playlist(p.id), title, Filter::None, true, kind)
                 }
                 None => Vec::new(),
@@ -2398,6 +2456,14 @@ impl State {
                 if listing.kind == ListKind::History {
                     items.push(item("Quitar del historial", "Remove from history", "x", Action::Trash));
                 }
+                if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_)) {
+                    items.push(item(
+                        "Quitar de esta lista (pide confirmar)",
+                        "Remove from this list (asks first)",
+                        "Ctrl+y x",
+                        Action::RemoveFromList,
+                    ));
+                }
             }
             Items::Channels(channels) if channels.get(selected).is_some() => {
                 items.push(item("Ver sus videos", "Its videos", "Enter", Action::Enter));
@@ -2441,14 +2507,9 @@ impl State {
         let Some(video) = self.selected_video() else { return Vec::new() };
         let mut items = vec![
             if self.later.iter().any(|v| v.id == video.id) {
-                item(
-                    "Quitar de Ver después (pide confirmar)",
-                    "Remove from Watch Later (asks first)",
-                    "l",
-                    Action::ToggleLater,
-                )
+                item("Ya está en Ver después", "Already in Watch Later", "l", Action::AddLater)
             } else {
-                item("Ver después", "Watch Later", "l", Action::ToggleLater)
+                item("Guardar en Ver después", "Save to Watch Later", "l", Action::AddLater)
             },
             item("Descargar", "Download", "d", Action::Download),
             if self.ratings.get(&video.id) == Some(&Rating::Like) {
@@ -2481,14 +2542,14 @@ impl State {
 
     /// `l`: a video not in my YouTube Watch Later goes in; one that is there
     /// comes out after asking. When the loaded list can't tell, YouTube is asked.
-    fn toggle_later(&mut self) -> Vec<Effect> {
+    fn add_to_later(&mut self) -> Vec<Effect> {
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
         if !self.logged_in() {
             self.status = self.sign_in_for_later().into();
             return Vec::new();
         }
         if self.later.iter().any(|v| v.id == video.id) {
-            self.confirm = Some(Confirm::RemoveFromLater(video));
+            self.already_in_later(&video);
             Vec::new()
         } else if self.later_complete {
             self.add_later(video)
@@ -2505,10 +2566,66 @@ impl State {
         vec![Effect::EditLater { video, add: true }]
     }
 
-    /// `x` in Watch Later: take the selected video out, after asking.
-    fn ask_remove_later(&mut self) {
-        if let Some(video) = self.selected_video().cloned() {
-            self.confirm = Some(Confirm::RemoveFromLater(video));
+    fn already_in_later(&mut self, video: &Video) {
+        self.status = format!("🕒 {}: {}", self.tr("Ya está en Ver después", "Already in Watch Later"), video.title);
+    }
+
+    /// The selected video of a YouTube list I can take videos out of
+    /// (Watch Later or a playlist), with that list.
+    fn youtube_list_video(&self) -> Option<(&ListKind, &Video)> {
+        let listing = self.listing().filter(|_| self.focus == Focus::List)?;
+        if !matches!(listing.kind, ListKind::Later | ListKind::Playlist(_)) {
+            return None;
+        }
+        Some((&listing.kind, self.selected_video()?))
+    }
+
+    /// `Ctrl+y x` in Watch Later or a playlist: take the selected video out, after asking.
+    fn ask_remove_from_list(&mut self) {
+        if !self.logged_in() {
+            self.status = self
+                .tr("Sin sesión: elegí un navegador en Configuración", "Not logged in: pick a browser in Settings")
+                .into();
+            return;
+        }
+        let Some((kind, video)) = self.youtube_list_video() else { return };
+        let video = video.clone();
+        self.confirm = Some(match kind {
+            ListKind::Playlist(playlist) => Confirm::RemoveFromPlaylist { playlist: playlist.clone(), video },
+            _ => Confirm::RemoveFromLater(video),
+        });
+    }
+
+    /// The video is out of the playlist on YouTube: out of its list here too.
+    fn playlist_edited(&mut self, playlist: String, video: Video, result: Result<(), String>) {
+        let name = self
+            .stack
+            .iter()
+            .find_map(|l| match &l.kind {
+                ListKind::Playlist(p) if p.id == playlist => Some(p.title.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| playlist.clone());
+        if let Err(error) = result {
+            let failed = self.tr("No se pudo quitar de", "Could not remove from");
+            self.status = format!("❌ {failed} {name} {}: {error}", video.title);
+            return;
+        }
+        self.drop_from_playlist(&playlist, &video.id);
+        self.status = format!("🗑 {} {name}: {}", self.tr("Quitado de", "Removed from"), video.title);
+    }
+
+    /// Takes a video out of the shown lists of a playlist.
+    fn drop_from_playlist(&mut self, playlist: &str, video_id: &str) {
+        for listing in &mut self.stack {
+            let ListKind::Playlist(p) = &listing.kind else { continue };
+            if p.id != playlist {
+                continue;
+            }
+            if let Items::Videos(videos) = &mut listing.items {
+                videos.retain(|v| v.id != video_id);
+                listing.selected = listing.selected.min(videos.len().saturating_sub(1));
+            }
         }
     }
 
@@ -2518,11 +2635,7 @@ impl State {
                 if !self.later.iter().any(|v| v.id == video.id) {
                     self.later.insert(0, video.clone());
                 }
-                self.status =
-                    format!("🕒 {}: {}", self.tr("Ya está en Ver después", "Already in Watch Later"), video.title);
-                if self.confirm.is_none() {
-                    self.confirm = Some(Confirm::RemoveFromLater(video));
-                }
+                self.already_in_later(&video);
                 Vec::new()
             }
             Ok(false) => self.add_later(video),
@@ -2701,6 +2814,10 @@ impl State {
             Rating::None => self.tr("Voto quitado", "Vote taken back"),
         };
         self.status = format!("{done}: {title}");
+        if rating != Rating::Like {
+            // No longer liked: out of a shown "Liked videos".
+            self.drop_from_playlist(LIKED, &video);
+        }
         self.ratings.insert(video, rating);
     }
 
@@ -4063,41 +4180,37 @@ mod tests {
         assert!(!s.stack.iter().any(|l| l.kind == ListKind::Later));
         assert!(s.status.contains("Iniciá sesión"), "{}", s.status);
         let mut s = with_videos(&["a"]);
-        assert!(s.update(Action::ToggleLater).is_empty());
+        assert!(s.update(Action::AddLater).is_empty());
         assert!(s.confirm.is_none() && s.status.contains("Iniciá sesión"));
     }
 
     #[test]
-    fn later_adds_directly_and_removes_after_asking() {
+    fn l_only_adds_to_later() {
         let mut s = logged_with_videos(&["a", "b"]);
         s.later_complete = true;
-        assert_eq!(s.update(Action::ToggleLater), [Effect::EditLater { video: video("a"), add: true }]);
+        assert_eq!(s.update(Action::AddLater), [Effect::EditLater { video: video("a"), add: true }]);
         assert!(s.confirm.is_none(), "adding does not ask");
         s.update(Action::LaterEdited { video: video("a"), add: true, result: Ok(()) });
         assert_eq!(s.later, vec![video("a")]);
         assert!(s.status.contains("Guardado"));
-        // In it now: `l` asks before taking it out; any other key keeps it.
-        assert!(s.update(Action::ToggleLater).is_empty());
-        assert_eq!(s.confirm, Some(Confirm::RemoveFromLater(video("a"))));
-        assert!(s.update(Action::Confirm(false)).is_empty());
-        s.update(Action::ToggleLater);
-        assert_eq!(s.update(Action::Confirm(true)), [Effect::EditLater { video: video("a"), add: false }]);
-        s.update(Action::LaterEdited { video: video("a"), add: false, result: Ok(()) });
-        assert!(s.later.is_empty());
-        assert!(s.status.contains("Quitado"));
+        // In it now: `l` only says so, it never takes it out.
+        assert!(s.update(Action::AddLater).is_empty());
+        assert!(s.confirm.is_none());
+        assert!(s.status.contains("Ya está en Ver después"), "{}", s.status);
+        assert_eq!(s.later, vec![video("a")]);
     }
 
     #[test]
     fn later_asks_youtube_when_the_list_cant_tell() {
         let mut s = logged_with_videos(&["a", "b"]);
         play(&mut s, 1);
-        assert_eq!(s.update(Action::ToggleLater), [Effect::CheckLater(video("b"))], "from the tab too");
+        assert_eq!(s.update(Action::AddLater), [Effect::CheckLater(video("b"))], "from the tab too");
         let checked = |result| Action::LaterChecked { video: video("b"), result };
         assert_eq!(s.update(checked(Ok(false))), [Effect::EditLater { video: video("b"), add: true }]);
         assert!(s.update(checked(Ok(true))).is_empty());
-        assert_eq!(s.confirm, Some(Confirm::RemoveFromLater(video("b"))));
+        assert!(s.confirm.is_none(), "there already: nothing to ask");
+        assert!(s.status.contains("Ya está en Ver después"), "{}", s.status);
         assert_eq!(s.later, vec![video("b")], "remembered as there");
-        s.confirm = None;
         assert!(s.update(checked(Err("YouTube: status 401".into()))).is_empty());
         assert!(s.status.starts_with("❌") && s.status.contains("401"), "{}", s.status);
     }
@@ -4112,13 +4225,16 @@ mod tests {
     }
 
     #[test]
-    fn x_in_watch_later_removes_after_asking_and_the_list_follows() {
+    fn prefix_x_in_watch_later_removes_after_asking_and_the_list_follows() {
         let mut s = state();
         s.config.session.browser = "brave".into();
         let id = load_id(&open(&mut s, Section::VerDespues));
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
         s.update(Action::Down);
+        // Plain `x` no longer removes: it says how.
         assert!(s.update(Action::Trash).is_empty());
+        assert!(s.confirm.is_none() && s.status.contains("Ctrl+y x"), "{}", s.status);
+        assert!(s.update(Action::CloseTab).is_empty(), "Ctrl+y x");
         assert_eq!(s.confirm, Some(Confirm::RemoveFromLater(video("b"))));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::EditLater { video: video("b"), add: false }]);
         s.update(Action::LaterEdited { video: video("b"), add: false, result: Ok(()) });
@@ -4141,10 +4257,78 @@ mod tests {
         assert!(s.later.is_empty() && !s.later_complete);
     }
 
+    /// My playlists, logged in, with "PLx" (Mine) and Liked videos opened: the videos `ids`.
+    fn playlist_with(id: &str, ids: &[&str]) -> State {
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let request = load_id(&open(&mut s, Section::MisListas));
+        let list = crate::domain::Playlist { id: id.into(), title: "Mine".into(), count: None };
+        s.update(Action::Loaded(request, Ok(Items::Playlists(vec![list]))));
+        let request = load_id(&s.update(Action::Enter));
+        s.update(Action::Loaded(request, Ok(Items::Videos(ids.iter().map(|i| video(i)).collect()))));
+        s
+    }
+
+    #[test]
+    fn prefix_x_in_a_playlist_removes_after_asking() {
+        let mut s = playlist_with("PLx", &["a", "b"]);
+        let mine = PlaylistRef { id: "PLx".into(), title: "Mine".into() };
+        assert_eq!(s.listing().unwrap().kind, ListKind::Playlist(mine.clone()));
+        s.update(Action::Down);
+        assert!(s.update(Action::Trash).is_empty());
+        assert!(s.confirm.is_none(), "plain x does not remove");
+        s.update(Action::CloseTab);
+        assert_eq!(s.confirm, Some(Confirm::RemoveFromPlaylist { playlist: mine, video: video("b") }));
+        assert_eq!(
+            s.update(Action::Confirm(true)),
+            [Effect::RemoveFromPlaylist { playlist: "PLx".into(), video: video("b") }]
+        );
+        // A failure keeps it and says why.
+        s.update(Action::PlaylistEdited {
+            playlist: "PLx".into(),
+            video: video("b"),
+            result: Err("STATUS_FAILED".into()),
+        });
+        assert_eq!(s.listing().unwrap().items.len(), 2);
+        assert!(s.status.starts_with("❌") && s.status.contains("Mine"), "{}", s.status);
+        s.update(Action::PlaylistEdited { playlist: "PLx".into(), video: video("b"), result: Ok(()) });
+        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
+        assert_eq!(s.listing().unwrap().selected, 0);
+        assert!(s.status.contains("Quitado de Mine"), "{}", s.status);
+        // The right-click menu offers it too.
+        s.update(Action::ContextMenu { x: 0, y: 0, row: true });
+        let menu = &s.context.as_ref().unwrap().items;
+        assert!(menu.iter().any(|i| i.action == Action::RemoveFromList && i.key == "Ctrl+y x"));
+    }
+
+    #[test]
+    fn out_of_liked_videos_is_unliking() {
+        let mut s = playlist_with(LIKED, &["a", "b"]);
+        s.update(Action::CloseTab);
+        assert!(matches!(&s.confirm, Some(Confirm::RemoveFromPlaylist { video, .. }) if video.id == "a"));
+        assert_eq!(
+            s.update(Action::Confirm(true)),
+            [Effect::Rate { video: "a".into(), title: "title a".into(), rating: Rating::None }]
+        );
+        s.update(Action::Rated { video: "a".into(), title: "title a".into(), rating: Rating::None, result: Ok(()) });
+        assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("b")]));
+    }
+
+    #[test]
+    fn prefix_x_still_closes_the_tab_elsewhere() {
+        let mut s = playlist_with("PLx", &["a"]);
+        let tab = play(&mut s, 0);
+        assert_eq!(s.update(Action::CloseTab), [Effect::Close(tab)], "in a video tab");
+        assert!(s.confirm.is_none());
+        let mut s = with_videos(&["a"]);
+        assert!(s.update(Action::CloseTab).is_empty(), "in a feed: nothing to close, nothing removed");
+        assert!(s.confirm.is_none());
+    }
+
     #[test]
     fn later_needs_a_video() {
         let mut s = state();
-        assert!(s.update(Action::ToggleLater).is_empty());
+        assert!(s.update(Action::AddLater).is_empty());
     }
 
     #[test]
@@ -4567,7 +4751,7 @@ mod tests {
         s.update(Action::Sized("a".into(), Err("falló".into())));
         assert_eq!(s.context.as_ref().unwrap().selected, 1);
         assert_eq!(s.listing().unwrap().selected, 1, "the list did not move");
-        let later = s.context.as_ref().unwrap().items.iter().position(|i| i.action == Action::ToggleLater).unwrap();
+        let later = s.context.as_ref().unwrap().items.iter().position(|i| i.action == Action::AddLater).unwrap();
         s.config.session.browser = "brave".into();
         s.later_complete = true;
         let added = s.update(Action::MenuPick(later));
@@ -4576,7 +4760,7 @@ mod tests {
         s.update(Action::LaterEdited { video: video("b"), add: true, result: Ok(()) });
         s.update(Action::ContextMenu { x: 0, y: 0, row: true });
         assert_eq!(s.context.as_ref().unwrap().items[1].label, "Solo audio");
-        assert!(s.context.as_ref().unwrap().items.iter().any(|i| i.label == "Quitar de Ver después (pide confirmar)"));
+        assert!(s.context.as_ref().unwrap().items.iter().any(|i| i.label == "Ya está en Ver después"));
         s.update(Action::Back);
         assert!(s.context.is_none() && s.listing().is_some(), "Esc closes only the menu");
 
@@ -4685,7 +4869,7 @@ mod tests {
         let tab = s.active_tab().unwrap().id;
         assert_eq!(s.update(Action::NextTrack), [Effect::Command(tab, PlayerCommand::NextTrack)]);
         // No YouTube video: watch later / subscribe do nothing.
-        assert!(s.update(Action::ToggleLater).is_empty());
+        assert!(s.update(Action::AddLater).is_empty());
     }
 
     #[test]

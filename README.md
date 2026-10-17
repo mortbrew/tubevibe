@@ -27,10 +27,12 @@ Every video opens in its own tab.
   watched, all together and taking turns, without the ones you already saw
 - **Ver después / Watch Later**: your real YouTube *Watch Later* playlist
   (needs a login; the old local-only list is no longer shown). `l` adds the
-  selected video to it right away, or, if it is already there, takes it out
-  after asking; inside the list `x` removes the selected video (after asking)
+  selected video to it right away (if it is already there, it just says so);
+  inside the list `Ctrl+y` `x` removes the selected video (after asking)
 - **Mis listas**: your YouTube playlists, plus *Liked videos* and *Watch
-  later*; `Enter` opens one, `x` deletes it from YouTube (after asking)
+  later*; `Enter` opens one, `x` deletes it from YouTube (after asking).
+  Inside one, `Ctrl+y` `x` takes the selected video out of it on YouTube
+  (after asking; in *Liked videos* that takes the like back)
 - **Historial**: everything you watched, newest first, with the day you
   watched it: in tubetui and, logged in, on YouTube too (the browser, the
   phone), more pages coming as you scroll down (`x` removes one from the list)
@@ -72,7 +74,7 @@ Every video opens in its own tab.
   **Right click** opens a menu with what can be done there: play, sound only,
   watch later, download, like, channel, subscribe, close the tab, delete…
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
-  dislike** (`g` / `G`, again takes it back), **YouTube watch later** (`l`, removing asks first),
+  dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`l` adds),
   **download** with subtitles (`d`), open the **channel** (`c`)
 - **Comments**: next to *Up next* when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
@@ -179,7 +181,7 @@ Global commands use a **`Ctrl+y` prefix** (tmux style): press `Ctrl+y`, then:
 | `m` | go to the menu |
 | `f` | fullscreen |
 | `n` `p` `0-9` | next / previous / numbered tab (`0` = Inicio) |
-| `x` | close the tab |
+| `x` | close the tab · in Watch Later or a playlist: remove the selected video (asks first) |
 | `/` | search videos |
 | `l` | English / español |
 | `?` | every shortcut, explained |
@@ -192,9 +194,9 @@ progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
-`l` YouTube watch later (add / remove, removing asks), `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
-audio only. In **History** `x` removes the video; in **Watch Later** it
-removes it from your YouTube Watch Later (after asking); in **Downloads** it cancels
+`l` save to YouTube Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
+audio only. In **History** `x` removes the video; in **Watch Later** and
+**playlists** `Ctrl+y` `x` removes it on YouTube (after asking); in **Downloads** `x` cancels
 the download (or forgets a finished one). In **My videos**
 and **My music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.

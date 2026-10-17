@@ -1487,7 +1487,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Confirm::Trash(_) => key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash"),
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
-            Confirm::RemoveFromLater(_) => key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it"),
+            Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } => {
+                key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
+            }
         };
         vec![yes, key(lang.pick("otra tecla", "other key"), "no", "no")]
     } else if state.help {
@@ -1747,6 +1749,13 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             Span::raw(lang.pick("¿Quitar de Ver después ", "Remove ")),
             Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick("?", " from Watch Later?")),
+        ]),
+        Confirm::RemoveFromPlaylist { playlist, video } => Line::from(vec![
+            Span::raw(lang.pick("¿Quitar ", "Remove ")),
+            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" de ", " from ")),
+            Span::styled(truncate(&playlist.title, 20), Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
         ]),
         Confirm::Trash(paths) => {
             let what = match paths.as_slice() {

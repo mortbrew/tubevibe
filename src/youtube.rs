@@ -3,7 +3,7 @@
 //! API ("InnerTube") like the website does: a search page answers in under a
 //! second, where starting yt-dlp takes several.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 
@@ -724,6 +724,116 @@ pub fn edit_result(reply: &Value) -> Result<(), String> {
     }
 }
 
+/// The `setVideoId` of each video of my playlists looked up so far, by
+/// playlist: they stay the same while the entry is there.
+static SET_VIDEO_IDS: std::sync::Mutex<Option<HashMap<String, HashMap<String, String>>>> = std::sync::Mutex::new(None);
+
+/// Takes a video out of one of my playlists. YouTube wants the entry's
+/// `setVideoId` for that; it is read from the playlist (looked up page by
+/// page until the video shows, kept for next time). Without one, removing
+/// by video id is tried (what Watch Later takes).
+pub fn remove_from_playlist(cookies: &Path, playlist: &str, video_id: &str) -> Result<(), YoutubeError> {
+    let client = InnerTube::new(cookies)?;
+    let known = |video_id: &str| {
+        let cache = SET_VIDEO_IDS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache.as_ref().and_then(|c| c.get(playlist)).and_then(|ids| ids.get(video_id)).cloned()
+    };
+    let set_video_id = match known(video_id) {
+        Some(id) => Some(id),
+        None => {
+            let found = playlist_set_video_ids(&client, playlist, video_id);
+            let mut cache = SET_VIDEO_IDS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            cache.get_or_insert_with(HashMap::new).entry(playlist.to_owned()).or_default().extend(found);
+            drop(cache);
+            known(video_id)
+        }
+    };
+    let reply = client.call("browse/edit_playlist", remove_body(playlist, video_id, set_video_id.as_deref()))?;
+    edit_result(&reply).map_err(YoutubeError::Http)?;
+    let mut cache = SET_VIDEO_IDS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(ids) = cache.as_mut().and_then(|c| c.get_mut(playlist)) {
+        ids.remove(video_id);
+    }
+    Ok(())
+}
+
+/// Most pages of a playlist read looking for one video (100 videos each).
+const SET_ID_PAGES: usize = 50;
+
+/// `video id → setVideoId` of `playlist`, page by page until `wanted` shows.
+/// A page that fails ends the search with what was found.
+fn playlist_set_video_ids(client: &InnerTube, playlist: &str, wanted: &str) -> HashMap<String, String> {
+    let mut found = HashMap::new();
+    let mut page = client.call("browse", json!({ "browseId": format!("VL{playlist}") }));
+    for _ in 0..SET_ID_PAGES {
+        let Ok(reply) = page else { break };
+        let (ids, next) = parse_set_video_ids(&reply);
+        found.extend(ids);
+        match next {
+            Some(token) if !found.contains_key(wanted) => {
+                page = client.call("browse", json!({ "continuation": token }));
+            }
+            _ => break,
+        }
+    }
+    found
+}
+
+/// The `setVideoId` of each video of a playlist page (older
+/// `playlistVideoRenderer`s carry it; in newer "lockups" it sits in the
+/// entry's remove command), and the token of the next page.
+pub fn parse_set_video_ids(page: &Value) -> (HashMap<String, String>, Option<String>) {
+    let mut ids = HashMap::new();
+    let mut next = None;
+    walk(page, &mut |map| {
+        if let Some(r) = map.get("playlistVideoRenderer")
+            && let Some(video) = r["videoId"].as_str()
+            && let Some(set) = r["setVideoId"].as_str().map(str::to_owned).or_else(|| nested_set_video_id(r))
+        {
+            ids.insert(video.to_owned(), set);
+        }
+        if let Some(lockup) = map.get("lockupViewModel")
+            && lockup["contentType"] == "LOCKUP_CONTENT_TYPE_VIDEO"
+            && let Some(video) = lockup["contentId"].as_str()
+            && let Some(set) = nested_set_video_id(lockup)
+        {
+            ids.insert(video.to_owned(), set);
+        }
+        if let Some(item) = map.get("continuationItemRenderer") {
+            walk(item, &mut |inner| {
+                if let Some(token) = inner.get("continuationCommand").and_then(|c| c["token"].as_str()) {
+                    next = Some(token.to_owned());
+                }
+            });
+        }
+    });
+    (ids, next)
+}
+
+/// The first `setVideoId` anywhere inside `value`.
+fn nested_set_video_id(value: &Value) -> Option<String> {
+    let mut found = None;
+    walk(value, &mut |map| {
+        if found.is_none()
+            && let Some(id) = map.get("setVideoId").and_then(Value::as_str)
+        {
+            found = Some(id.to_owned());
+        }
+    });
+    found
+}
+
+/// `browse/edit_playlist` taking one entry out: by its `setVideoId` when
+/// known, else by video id.
+pub fn remove_body(playlist: &str, video_id: &str, set_video_id: Option<&str>) -> Value {
+    match set_video_id {
+        Some(set) => {
+            json!({ "playlistId": playlist, "actions": [{ "action": "ACTION_REMOVE_VIDEO", "setVideoId": set }] })
+        }
+        None => edit_playlist_body(playlist, video_id, false),
+    }
+}
+
 /// Deletes one of my playlists, for good.
 pub fn delete_playlist(cookies: &Path, id: &str) -> Result<(), YoutubeError> {
     InnerTube::new(cookies)?.call("playlist/delete", json!({ "playlistId": id }))?;
@@ -1026,20 +1136,26 @@ pub fn collect_continuations(page: &Value) -> Vec<String> {
 /// Channels listed in the sidebar ("guide").
 pub fn collect_guide_channels(guide: &Value) -> Vec<Channel> {
     let mut channels = Vec::new();
-    walk(guide, &mut |map| {
-        let Some(entry) = map.get("guideEntryRenderer") else { return };
-        let Some(id) = entry["navigationEndpoint"]["browseEndpoint"]["browseId"].as_str() else { return };
-        if id.starts_with("UC") {
-            channels.push(Channel {
-                id: id.to_owned(),
-                name: text(&entry["formattedTitle"]).unwrap_or_else(|| id.to_owned()),
-                url: format!("{ORIGIN}/channel/{id}"),
-                followers: None,
-                handle: None,
-                description: None,
-            });
-        }
-    });
+    // Only its "Subscriptions" section: the others link YouTube's own
+    // channels (Music, Gaming, News, Sports…) and mine ("Your channel").
+    let mut sections = Vec::new();
+    walk(guide, &mut |map| sections.extend(map.get("guideSubscriptionsSectionRenderer")));
+    for section in sections {
+        walk(section, &mut |map| {
+            let Some(entry) = map.get("guideEntryRenderer") else { return };
+            let Some(id) = entry["navigationEndpoint"]["browseEndpoint"]["browseId"].as_str() else { return };
+            if id.starts_with("UC") {
+                channels.push(Channel {
+                    id: id.to_owned(),
+                    name: text(&entry["formattedTitle"]).unwrap_or_else(|| id.to_owned()),
+                    url: format!("{ORIGIN}/channel/{id}"),
+                    followers: None,
+                    handle: None,
+                    description: None,
+                });
+            }
+        });
+    }
     channels
 }
 
@@ -1367,16 +1483,54 @@ mod tests {
     }
 
     #[test]
-    fn collects_channels_from_the_sidebar_only() {
-        let guide = json!({ "items": [
-            { "guideEntryRenderer": { "formattedTitle": { "simpleText": "Inicio" },
-                "navigationEndpoint": { "browseEndpoint": { "browseId": "FEwhat_to_watch" } } } },
-            { "guideEntryRenderer": { "formattedTitle": { "simpleText": "Canal X" },
-                "navigationEndpoint": { "browseEndpoint": { "browseId": "UCx" } } } }
+    fn collects_channels_from_the_sidebar_subscriptions_only() {
+        let guide: Value = serde_json::from_str(include_str!("../tests/fixtures/guide.json")).unwrap();
+        let channels: Vec<(String, String)> =
+            collect_guide_channels(&guide).into_iter().map(|c| (c.id, c.name)).collect();
+        let expected = [
+            ("UCfakeUFDTech000000000000", "UFD Tech"),
+            ("UCXuqSBlHAE6Xw-yeJA0Tunw", "Linus Tech Tips"),
+            ("UCHnyfMqiRRG1u-2MsSQLbXA", "Veritasium"),
+        ]
+        .map(|(id, name)| (id.to_owned(), name.to_owned()));
+        // Not Music, Live, Gaming, News… (Explore) nor "Your channel"; "Show more" ones in.
+        assert_eq!(channels, expected);
+        // A sidebar without that section (signed out): none.
+        let anonymous = json!({ "items": [{ "guideSectionRenderer": { "items": [
+            { "guideEntryRenderer": { "formattedTitle": { "simpleText": "Music" },
+                "navigationEndpoint": { "browseEndpoint": { "browseId": "UC-9-kyTW8ZkZNDHQJ6FgpwQ" } } } }] } }] });
+        assert!(collect_guide_channels(&anonymous).is_empty());
+    }
+
+    #[test]
+    fn playlist_pages_give_set_video_ids_and_the_next_page() {
+        let page = json!({ "contents": [
+            { "playlistVideoRenderer": { "videoId": "a", "setVideoId": "SA" } },
+            { "lockupViewModel": { "contentType": "LOCKUP_CONTENT_TYPE_VIDEO", "contentId": "b",
+                "metadata": { "menu": { "items": [{ "playlistEditEndpoint": { "playlistId": "PLx",
+                    "actions": [{ "action": "ACTION_REMOVE_VIDEO", "setVideoId": "SB" }] } }] } } } },
+            { "lockupViewModel": { "contentType": "LOCKUP_CONTENT_TYPE_VIDEO", "contentId": "c" } },
+            { "continuationItemRenderer": { "continuationEndpoint": {
+                "continuationCommand": { "token": "NEXT" } } } }
         ] });
-        let channels = collect_guide_channels(&guide);
-        assert_eq!(channels.len(), 1);
-        assert_eq!((channels[0].id.as_str(), channels[0].name.as_str()), ("UCx", "Canal X"));
+        let (ids, next) = parse_set_video_ids(&page);
+        assert_eq!(ids.get("a").map(String::as_str), Some("SA"));
+        assert_eq!(ids.get("b").map(String::as_str), Some("SB"), "from the entry's remove command");
+        assert!(!ids.contains_key("c"), "not my playlist: no setVideoId");
+        assert_eq!(next.as_deref(), Some("NEXT"));
+        assert_eq!(parse_set_video_ids(&json!({})), (HashMap::new(), None));
+    }
+
+    #[test]
+    fn removing_uses_the_set_video_id_when_known() {
+        assert_eq!(
+            remove_body("PLx", "a", Some("SA")),
+            json!({ "playlistId": "PLx", "actions": [{ "action": "ACTION_REMOVE_VIDEO", "setVideoId": "SA" }] })
+        );
+        assert_eq!(
+            remove_body("PLx", "a", None),
+            json!({ "playlistId": "PLx", "actions": [{ "action": "ACTION_REMOVE_VIDEO_BY_VIDEO_ID", "removedVideoId": "a" }] })
+        );
     }
 
     fn search_reply() -> Value {
