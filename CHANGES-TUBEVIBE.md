@@ -367,14 +367,17 @@ polblancoo; this fork now carries its own name.
   and network errors stay silent. The setting reads *Look for new versions on
   startup* (*Buscar versiones nuevas al abrir*).
 
-## 0.8.2: tubevibe updates itself with `U` (`self-update`)
+## 0.8.2: tubevibe updates itself from About → Update Now (`self-update`)
 
-- **`U`** (Shift+u, in lists and video tabs, not while typing) installs the
-  new version once the startup check has found one. The status bar says
-  *⬆ tubevibe X available · press U to update* and About shows
-  *Press U to Update Now*, then *⬇ Downloading… N%*, then
-  *✅ tubevibe X Installed · Restart tubevibe to Use It* (or
-  *❌ Could Not Update: …* with the reason; `U` tries again).
+- **About → Update Now**: once the startup check has found a new version,
+  the status bar says *⬆ tubevibe X available · see About* and About shows
+  an **Update Now** button (*Actualizar Ahora*). Opening About selects it
+  (green, between ▶ ◀); `Tab` moves between it and the menu, and `Enter`
+  presses it. While it can't be pressed it is greyed out. After pressing:
+  *⬇ Downloading… N%* (also in the status bar), then
+  *✅ tubevibe X Installed · Restart tubevibe to Use It*, or
+  *❌ Could Not Update: …* with the reason (the button can be pressed again).
+  There is no global hotkey for it.
 - How: the release file for this machine (`tubevibe-x86_64-linux.tar.gz`,
   `tubevibe-aarch64-linux.tar.gz`, `tubevibe-aarch64-macos.tar.gz`,
   `tubevibe-x86_64-windows.zip`) is downloaded in a background thread
@@ -387,7 +390,8 @@ polblancoo; this fork now carries its own name.
   when it exits). New dependencies: `self-replace`, `tar`, `flate2` (already
   used by ureq), and `zip` with only deflate. Downloads use ureq's rustls, so
   there is no OpenSSL in any release build.
-- **When `U` won't replace the program** it says why instead:
+- **When the program can't be replaced** the button is greyed out and About
+  (and Enter on it) says why:
   - run from a cargo `target/release/` or `target/debug/` folder:
     *Built from source: run git pull && cargo build --release*;
   - installed with `cargo install` (`~/.cargo/bin`): reinstall with cargo;
@@ -399,4 +403,5 @@ polblancoo; this fork now carries its own name.
   makes the update check compare releases against that version instead of the
   real one, to try the whole flow against the current release. It changes
   nothing else.
-- Help (`Ctrl+y ?` → *Always*) and the README list `U`.
+- The bottom bar shows *Enter update now* on the button and *Tab select
+  Update Now* from the menu; the README describes the button.

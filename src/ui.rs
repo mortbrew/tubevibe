@@ -1566,7 +1566,11 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
         keys.extend(rows(keymap::ON_VIDEO));
         keys
     } else if state.focus == Focus::Menu || state.listing().is_none() {
-        rows(keymap::IN_MENU)
+        let mut keys = rows(keymap::IN_MENU);
+        if state.listing().is_some_and(|l| l.items == Items::About) && about_button_ready(state) {
+            keys.insert(0, key("Tab", "elegir Actualizar Ahora", "select Update Now"));
+        }
+        keys
     } else {
         let back = key("Esc", "volver", "back");
         match state.listing().map(|l| &l.items) {
@@ -1660,6 +1664,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 }
                 keys.push(back);
                 keys
+            }
+            Some(Items::About) if about_button_ready(state) => {
+                vec![key("Enter", "actualizar ahora", "update now"), key("Tab", "ir al menú", "go to the menu"), back]
             }
             Some(Items::About) => vec![back],
             Some(Items::System) => vec![key("Enter", "revisar de nuevo", "check again"), back],
@@ -2048,12 +2055,29 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
             .fg(GREEN)
             .bold(),
         );
+        // The Update Now button: focused with Tab (like a list), pressed with Enter.
+        let ready = about_button_ready(state);
+        let focused = state.active == 0 && state.focus == Focus::List;
+        let button = format!("  ⬆ {}  ", lang.pick("Actualizar Ahora", "Update Now"));
+        let style = match (ready, focused) {
+            (true, true) => Style::new().fg(Color::Black).bg(GREEN).bold(),
+            (true, false) => Style::new().fg(GREEN).bg(HIGHLIGHT).bold(),
+            (false, _) => Style::new().fg(MUTED).bg(HIGHLIGHT),
+        };
+        let (left, right) = if ready && focused { ("▶ ", " ◀") } else { ("  ", "  ") };
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled(left, Style::new().fg(GREEN).bold()),
+            Span::styled(button, style),
+            Span::styled(right, Style::new().fg(GREEN).bold()),
+        ]));
+        if ready && !focused {
+            lines.push(
+                Line::from(lang.pick("(Tab para elegirlo, Enter para pulsarlo)", "(Tab to Select, Enter to Press)"))
+                    .fg(MUTED),
+            );
+        }
         match &state.self_update {
-            Progress::Idle | Progress::Failed(_) if matches!(update.replace, Replace::Ready(_)) => {
-                lines.push(
-                    Line::from(lang.pick("Pulsá U para actualizar ahora", "Press U to Update Now")).fg(YELLOW).bold(),
-                );
-            }
             Progress::Downloading(percent) => {
                 let text = lang.pick("Descargando…", "Downloading…");
                 lines.push(Line::from(format!("⬇ {text} {percent}%")).fg(YELLOW).bold());
@@ -2063,17 +2087,19 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
                     lang.pick("instalada · reiniciá tubevibe para usarla", "Installed · Restart tubevibe to Use It");
                 lines.push(Line::from(format!("✅ tubevibe {version} {text}")).fg(GREEN).bold());
             }
-            _ => {}
-        }
-        if let Progress::Failed(error) = &state.self_update {
-            lines.push(
-                Line::from(format!("❌ {} {error}", lang.pick("No se pudo actualizar:", "Could Not Update:"))).fg(RED),
-            );
+            Progress::Failed(error) => {
+                lines.push(
+                    Line::from(format!("❌ {} {error}", lang.pick("No se pudo actualizar:", "Could Not Update:")))
+                        .fg(RED),
+                );
+            }
+            Progress::Idle => {}
         }
         if let Some(why) = match update.replace {
-            Replace::FromSource => {
-                Some(lang.pick("Compilado desde el código: U no lo reemplaza", "Built From Source: U Won't Replace It"))
-            }
+            Replace::FromSource => Some(lang.pick(
+                "Compilado desde el código: git pull && cargo build --release",
+                "Built From Source: Run git pull && cargo build --release",
+            )),
             Replace::Cargo => Some(lang.pick("Instalado con cargo install", "Installed With cargo install")),
             Replace::Package => Some(lang.pick(
                 "Instalado con un paquete: actualizalo con el paquete",
@@ -2087,16 +2113,22 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         } {
             lines.push(Line::from(why).fg(MUTED));
         }
-        let (how, value) = match &update.how {
-            Install::Command(command) => (lang.pick("Actualizá con:", "Update with:"), command),
-            Install::Link(url) => (lang.pick("Bajá el instalador:", "Get the installer:"), url),
-        };
-        lines.push(Line::from(how).fg(FG));
-        lines.push(Line::from(value.as_str()).fg(CYAN));
-        lines.push(
-            Line::from(lang.pick("(Shift + arrastrar para seleccionar y copiar)", "(Shift + drag to select and copy)"))
+        lines.push(Line::from(""));
+        // By hand too, until the button has done it.
+        if !matches!(state.self_update, Progress::Done(_)) {
+            let (how, value) = match &update.how {
+                Install::Command(command) => (lang.pick("Actualizá con:", "Update with:"), command),
+                Install::Link(url) => (lang.pick("Bajá el instalador:", "Get the installer:"), url),
+            };
+            lines.push(Line::from(how).fg(FG));
+            lines.push(Line::from(value.as_str()).fg(CYAN));
+            lines.push(
+                Line::from(
+                    lang.pick("(Shift + arrastrar para seleccionar y copiar)", "(Shift + drag to select and copy)"),
+                )
                 .fg(MUTED),
-        );
+            );
+        }
     }
     let wallets = donations();
     if !wallets.is_empty() {
@@ -2121,6 +2153,13 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
     // Wrapped: the update command can be longer than the panel.
     let about = Paragraph::new(lines).alignment(Alignment::Center).wrap(ratatui::widgets::Wrap { trim: false });
     frame.render_widget(about.block(panel(title, PURPLE)), area);
+}
+
+/// The About page's Update Now button can be pressed: a new version is out,
+/// this copy can be replaced, and no update is running or done.
+fn about_button_ready(state: &State) -> bool {
+    state.update.as_ref().is_some_and(|u| matches!(u.replace, Replace::Ready(_)))
+        && matches!(state.self_update, Progress::Idle | Progress::Failed(_))
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
@@ -3027,20 +3066,39 @@ mod tests {
         assert!(screen.contains("Hay una versión nueva: 9.9.9"), "{screen}");
         assert!(screen.contains("cargo install --locked --git https://github.com/mortbrew/tubevibe"), "{screen}");
         assert!(screen.contains("Instalado con un paquete"), "{screen}");
-        assert!(!screen.contains("Pulsá U"), "a package is updated by its manager: {screen}");
+        assert!(screen.contains("Actualizar Ahora"), "shown, but greyed out: {screen}");
+        assert!(!about_button_ready(&s), "a package is updated by its manager");
+        assert!(s.update(Action::Enter).is_empty(), "the greyed-out button does nothing");
+        assert!(s.status.contains("Instalado con un paquete"), "{}", s.status);
         let mut ready = s.update.clone().unwrap();
         ready.replace = Replace::Ready("https://example.com/t.tar.gz".into());
         s.update(Action::UpdateFound(ready));
+        assert!(s.status.contains("9.9.9 disponible · mirá Acerca de"), "{}", s.status);
         s.update(Action::ToggleUiLang);
         s.update(Action::OpenSection(about));
+        assert_eq!(s.focus, Focus::List, "opening About selects the button");
         let screen = render(&s);
-        assert!(screen.contains("Press U to Update Now"), "{screen}");
-        s.update(Action::SelfUpdate);
+        assert!(screen.contains("▶   ⬆ Update Now   ◀"), "focused: {screen}");
+        assert_eq!(hints(&s)[0], ("Enter".to_string(), "update now"));
+        s.update(Action::ToggleFocus);
+        assert_eq!(s.focus, Focus::Menu);
+        let screen = render(&s);
+        assert!(!screen.contains("◀") && screen.contains("⬆ Update Now"), "{screen}");
+        assert!(screen.contains("(Tab to Select, Enter to Press)"), "{screen}");
+        assert_eq!(hints(&s)[0], ("Tab".to_string(), "select Update Now"));
+        s.update(Action::ToggleFocus);
+        assert_eq!(
+            s.update(Action::Enter),
+            [Effect::SelfUpdate { url: "https://example.com/t.tar.gz".into(), version: "9.9.9".into() }]
+        );
         s.update(Action::UpdateProgress(30));
-        assert!(render(&s).contains("⬇ Downloading… 30%"));
+        let screen = render(&s);
+        assert!(screen.contains("⬇ Downloading… 30%") && !screen.contains("◀"), "busy: {screen}");
+        assert!(s.update(Action::Enter).is_empty(), "one at a time");
         s.update(Action::SelfUpdated(Ok("9.9.9".into())));
         let screen = render(&s);
         assert!(screen.contains("tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
+        assert!(!screen.contains("Update with:"), "no command once done: {screen}");
     }
 
     #[test]

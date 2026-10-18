@@ -2,8 +2,8 @@
 //! background) and, when there is one, says how to get it on this machine:
 //! the package that fits how tubevibe was installed here, or building it from
 //! source when none does. Where the release archive fits and the program's
-//! folder is writable, `U` downloads it and puts the new program in place of
-//! the running one ([`install`]).
+//! folder is writable, About's Update Now button downloads it and puts the
+//! new program in place of the running one ([`install`]).
 
 use std::env::consts::{ARCH, OS};
 use std::io::Read;
@@ -21,7 +21,7 @@ pub struct Update {
     /// `0.5.2`.
     pub version: String,
     pub how: Install,
-    /// Whether `U` can put the new version in place here, or why not.
+    /// Whether Update Now can put the new version in place here, or why not.
     pub replace: Replace,
 }
 
@@ -147,7 +147,7 @@ pub fn tarball(os: &str, arch: &str) -> Option<&'static str> {
     }
 }
 
-/// The release file `U` installs on a machine: the archive with just the program.
+/// The release file Update Now installs on a machine: the archive with just the program.
 pub fn asset(os: &str, arch: &str) -> Option<&'static str> {
     match (os, arch) {
         ("windows", "x86_64") => Some("tubevibe-x86_64-windows.zip"),
@@ -186,7 +186,7 @@ pub fn is_package(exe: &str) -> bool {
     MANAGED.iter().any(|dir| exe.starts_with(dir))
 }
 
-/// Whether `U` may replace `exe` with the release's archive for (`os`, `arch`).
+/// Whether Update Now may replace `exe` with the release's archive for (`os`, `arch`).
 /// (Whether its folder is writable is checked apart, on the real machine.)
 pub fn replace_for(exe: &str, os: &str, arch: &str, assets: &[String], tag: &str) -> Replace {
     if is_dev_build(exe) {

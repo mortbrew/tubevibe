@@ -599,7 +599,7 @@ pub enum Action {
     ToggleWatched,
     /// GitHub has a newer version (and how to get it here).
     UpdateFound(Update),
-    /// `U`: put the new version in place of this one.
+    /// About's Update Now button: put the new version in place of this one.
     SelfUpdate,
     /// The self-update's download: percent done.
     UpdateProgress(u8),
@@ -950,7 +950,7 @@ pub struct State {
     pub marked: HashSet<PathBuf>,
     /// A newer version, shown in "Acerca de".
     pub update: Option<Update>,
-    /// The self-update (`U`), once started.
+    /// The self-update (About's Update Now), once started.
     pub self_update: Progress,
     /// Videos I watched, here or on YouTube.
     pub watched: HashSet<String>,
@@ -1450,11 +1450,7 @@ impl State {
                 }
             }
             Action::UpdateFound(update) => {
-                let available = self.tr("disponible", "available");
-                let see = match update.replace {
-                    Replace::Ready(_) => self.tr("U la instala", "press U to update"),
-                    _ => self.tr("mirá Acerca de", "see About"),
-                };
+                let (available, see) = (self.tr("disponible", "available"), self.tr("mirá Acerca de", "see About"));
                 self.status = format!("⬆ tubevibe {} {available} · {see}", update.version);
                 self.update = Some(update);
             }
@@ -1793,7 +1789,8 @@ impl State {
                 Some(setting) => self.change_setting(*setting),
                 None => Vec::new(),
             },
-            Items::About => Vec::new(),
+            // The Update Now button.
+            Items::About => self.self_update(),
             // Check again, after installing something.
             Items::System => vec![Effect::CheckSystem],
         }
@@ -2964,8 +2961,8 @@ impl State {
         }
     }
 
-    /// `U`: start the self-update when a new version is out and this copy
-    /// can be replaced; otherwise say how to update it.
+    /// About's Update Now button (Enter): start the self-update when a new
+    /// version is out and this copy can be replaced; otherwise say why not.
     fn self_update(&mut self) -> Vec<Effect> {
         match &self.self_update {
             Progress::Downloading(_) => {
@@ -3594,7 +3591,7 @@ mod tests {
     }
 
     #[test]
-    fn u_updates_in_place_when_it_can() {
+    fn update_now_updates_in_place_when_it_can() {
         let mut s = state();
         s.config.ui.lang = Some(Lang::En);
         assert!(s.update(Action::SelfUpdate).is_empty(), "nothing new yet");
@@ -3608,14 +3605,14 @@ mod tests {
         assert_eq!(s.status, "⬇ Updating tubevibe to 9.9.9… 42%");
         s.update(Action::SelfUpdated(Err("download: timeout".into())));
         assert_eq!(s.status, "❌ Could not update: download: timeout");
-        assert_eq!(s.update(Action::SelfUpdate).len(), 1, "after a failure, U tries again");
+        assert_eq!(s.update(Action::SelfUpdate).len(), 1, "after a failure, the button tries again");
         s.update(Action::SelfUpdated(Ok("9.9.9".into())));
         assert!(s.status.contains("9.9.9 installed · restart tubevibe"), "{}", s.status);
         assert!(s.update(Action::SelfUpdate).is_empty(), "already done");
     }
 
     #[test]
-    fn u_says_how_to_update_builds_it_cannot_replace() {
+    fn update_now_says_how_to_update_builds_it_cannot_replace() {
         let mut s = state();
         s.config.ui.lang = Some(Lang::En);
         s.update(Action::UpdateFound(update_with(Replace::FromSource)));
