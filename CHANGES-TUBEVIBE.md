@@ -346,6 +346,9 @@ polblancoo; this fork now carries its own name.
 
 ## 0.8.1: red ▶ logo, a blank row above YOUTUBE, whose donations (`v0.8.1`)
 
+- **Fix: Spanish after Edit config.toml**: when the file has no `lang` line
+  (the app follows the system language), reloading it after editing
+  switched the whole app to Spanish. It now keeps the current language.
 - **Logo**: the menu title, the welcome screen and About show a plain ▶
   (U+25B6, no emoji variation selector) in the same red as "tube", instead of
   the orange ▶️ emoji. It is one cell wide everywhere, with one space after
