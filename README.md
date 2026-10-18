@@ -124,7 +124,7 @@ Every video opens in its own tab.
   the list (after asking), or takes a failed one off the list; `space`
   marks several and `x` then does that to all of them with one question.
   `Enter` plays the file. A finished download whose file was moved or
-  deleted (even while the app is open) drops off the list by itself.
+  deleted drops off the list by itself the next time Downloads is opened.
   Quitting with downloads running asks first
 
 **Account and settings**

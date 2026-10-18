@@ -542,9 +542,10 @@ could not update itself either. From now on:
 
 - Finished downloads whose file was moved or deleted while tubevibe was
   open now drop off the list **and** `downloads.json` by themselves, with
-  no question: when Downloads is opened, and every 2 s while it is shown
-  (only the listed finished paths are looked at). Running downloads are
-  never dropped. (At start, missing files were already left out.)
+  no question: each time Downloads is opened, and right after a trash done
+  from it, like My Videos / My Music rescan when opened (no timer; only the
+  listed finished paths are looked at). Running downloads are never
+  dropped. (At start, missing files were already left out.)
 - My Videos / My Music already rescan their folders each time they are
   opened (now covered by a test).
 

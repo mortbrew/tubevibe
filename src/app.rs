@@ -705,7 +705,8 @@ pub enum Effect {
         files: Vec<(u64, PathBuf)>,
         tally: Tally,
     },
-    /// Look at the disk now for the finished downloads' files (Downloads opened).
+    /// Look at the disk now for the finished downloads' files (Downloads
+    /// opened, or a trash just done there).
     CheckDownloads,
     /// Fetch the top comments of a tab's video.
     Comments {
@@ -3720,7 +3721,8 @@ impl State {
         }
         self.sync_downloads();
         self.status = self.tally_status(trashed, gone, &failed, tally);
-        vec![Effect::SaveDownloads(self.downloads.clone())]
+        // Anything else gone meanwhile goes too.
+        vec![Effect::SaveDownloads(self.downloads.clone()), Effect::CheckDownloads]
     }
 
     /// One line on what x did to the marked downloads.
@@ -3831,7 +3833,8 @@ impl State {
         }
         self.downloads.retain(|d| !(d.id == id && matches!(&d.state, DownloadState::Done(p) if *p == path)));
         self.sync_downloads();
-        vec![Effect::SaveDownloads(self.downloads.clone())]
+        // Anything else gone meanwhile goes too.
+        vec![Effect::SaveDownloads(self.downloads.clone()), Effect::CheckDownloads]
     }
 
     /// Shown download lists follow `self.downloads`.
@@ -4284,7 +4287,7 @@ mod tests {
         assert_eq!(s.confirm, Some(Confirm::TrashDownload { id: 0, path: file.clone() }));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::TrashDownload { id: 0, path: file.clone() }]);
         let effects = s.update(Action::DownloadTrashed { id: 0, path: file, result: Ok(()) });
-        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d)] if d.len() == 1));
+        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d), Effect::CheckDownloads] if d.len() == 1));
         assert!(s.status.contains("title a.mp4 moved to the trash") || s.status.contains("title a.mp4 a la papelera"));
         assert_eq!(s.downloading(), 0);
         // The cancelled one has no file: x just takes it off, no question.
@@ -4368,7 +4371,11 @@ mod tests {
             (2, PathBuf::from("/v/c.mp4"), Err(TrashError::Gone)),
             (4, PathBuf::from("/v/e.mp4"), Err(TrashError::Failed("Permission denied".into()))),
         ];
-        s.update(Action::DownloadsTrashed { results, tally });
+        let effects = s.update(Action::DownloadsTrashed { results, tally });
+        assert!(
+            matches!(effects.as_slice(), [Effect::SaveDownloads(_), Effect::CheckDownloads]),
+            "the disk is looked at again right after: {effects:?}"
+        );
         assert_eq!(
             s.status,
             concat!(
@@ -4467,7 +4474,7 @@ mod tests {
         s.update(Action::Trash);
         s.update(Action::Confirm(true));
         let effects = s.update(Action::DownloadTrashed { id: 0, path: file.clone(), result: Err(TrashError::Gone) });
-        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d)] if d.is_empty()));
+        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d), Effect::CheckDownloads] if d.is_empty()));
         assert!(s.status.contains("ya no estaba") || s.status.contains("already gone"), "{}", s.status);
         // A trash error is shown and the item stays.
         let mut s = with_finished_download("/v/a.mp4");
