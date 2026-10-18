@@ -1158,6 +1158,11 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
                 }
                 format!(" {} · {}{note} ", breadcrumb.join(" › "), videos.len())
             }
+            Items::Downloads(_) if !state.marked_download_ids().is_empty() => {
+                let marked = state.marked_download_ids().len();
+                let label = state.lang().pick("marcadas", "marked");
+                format!(" {} · {} · ✗ {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
+            }
             Items::Files(files, _) if files.iter().any(|f| state.marked.contains(&f.path)) => {
                 let marked = files.iter().filter(|f| state.marked.contains(&f.path)).count();
                 let label = state.lang().pick("marcados", "marked");
@@ -1184,7 +1189,10 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
         Items::Files(files, kind) => {
             files.iter().map(|f| file_row(icons, f, *kind, state.marked.contains(&f.path))).collect()
         }
-        Items::Downloads(downloads) => downloads.iter().map(|d| download_row(state, d, state.lang())).collect(),
+        Items::Downloads(downloads) => downloads
+            .iter()
+            .map(|d| download_row(state, d, state.lang(), state.marked_downloads.contains(&d.id)))
+            .collect(),
         Items::About | Items::System => Vec::new(),
     };
     let focused = state.focus == Focus::List;
@@ -1417,9 +1425,11 @@ fn size_line(state: &State, video: &Video) -> Option<Line<'static>> {
     Some(Line::from(text).fg(MUTED))
 }
 
-fn download_row(state: &State, download: &Download, lang: Lang) -> ListItem<'static> {
+fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) -> ListItem<'static> {
     const BAR: usize = 12;
-    let mut spans = match &download.state {
+    // The same mark as My Videos / My Music.
+    let mut spans = vec![Span::styled(if marked { "✗" } else { " " }, Style::new().fg(RED).bold())];
+    spans.extend(match &download.state {
         DownloadState::Running { permille, speed, eta } => {
             let done = usize::from(*permille) * BAR / 1000;
             vec![
@@ -1438,7 +1448,7 @@ fn download_row(state: &State, download: &Download, lang: Lang) -> ListItem<'sta
         DownloadState::Cancelled => {
             vec![Span::styled(pad_cells(&format!(" ✕ {}", lang.pick("cancelada", "cancelled")), 41), MUTED)]
         }
-    };
+    });
     spans.push(Span::styled(download.video.title.clone(), FG));
     spans.push(Span::styled(format!(" · {}", download.video.channel), MAGENTA));
     let size = match &download.state {
@@ -1546,7 +1556,12 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     let mut hints = if let Some(confirm) = &state.confirm {
         let yes = match confirm {
             Confirm::Unsubscribe { .. } => key(lang.pick("s", "y"), "sí, desuscribirme", "yes, unsubscribe"),
-            Confirm::Trash(_) | Confirm::TrashDownload { .. } => {
+            Confirm::TrashDownloads { cancel, remove, .. } if !cancel.is_empty() || !remove.is_empty() => key(
+                lang.pick("s", "y"),
+                "sí (las otras marcadas se cancelan o se quitan)",
+                "yes (the other marked ones get cancelled or taken off)",
+            ),
+            Confirm::Trash(_) | Confirm::TrashDownload { .. } | Confirm::TrashDownloads { .. } => {
                 key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash")
             }
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
@@ -1681,6 +1696,11 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 },
                 back,
             ],
+            Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
+                key(lang.pick("espacio", "space"), "marcar / desmarcar", "mark / unmark"),
+                key("x", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
+                back,
+            ],
             Some(Items::Downloads(downloads)) => {
                 let selected = state.listing().and_then(|l| downloads.get(l.selected)).map(|d| &d.state);
                 let mut keys = Vec::new();
@@ -1694,6 +1714,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                     }
                     Some(_) => keys.push(key("x", "quitar de la lista", "take off the list")),
                     None => {}
+                }
+                if selected.is_some() {
+                    keys.push(key(lang.pick("espacio", "space"), "marcar varios", "mark several"));
                 }
                 keys.push(back);
                 keys
@@ -1844,6 +1867,16 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(truncate(&playlist.title, 20), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
+        ]),
+        Confirm::TrashDownloads { files, .. } => Line::from(vec![
+            Span::raw(lang.pick("¿Mandar ", "Move ")),
+            Span::styled(files.len().to_string(), Style::new().fg(MAGENTA).bold()),
+            Span::raw(match (files.len(), lang) {
+                (1, Lang::Es) => " archivo a la papelera?",
+                (_, Lang::Es) => " archivos a la papelera?",
+                (1, _) => " file to the trash?",
+                _ => " files to the trash?",
+            }),
         ]),
         Confirm::TrashDownload { path, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Mandar a la papelera ", "Move to the trash ")),
@@ -2581,6 +2614,56 @@ mod tests {
         assert_eq!(hint(&files, "x"), Some("los marcados a la papelera (pide confirmar)"));
         files.update(Action::Trash);
         assert_eq!(hint(&files, "s"), Some("sí, a la papelera"));
+    }
+
+    #[test]
+    fn space_shows_on_downloads_my_videos_and_my_music() {
+        let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
+        let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
+        for kind in [MediaKind::Video, MediaKind::Music] {
+            let s = with_items(Items::Files(vec![file("a")], kind));
+            assert_eq!(hint(&s, "espacio"), Some("marcar varios"), "{kind:?}");
+            assert!(render_sized(&s, &VIEW, 100).contains("espacio marcar varios"), "{kind:?} fits at 100 columns");
+        }
+        let states = [
+            DownloadState::Done("/v/a.mp4".into()),
+            DownloadState::Running { permille: 1, speed: String::new(), eta: String::new() },
+            DownloadState::Failed("x".into()),
+        ];
+        for state in states {
+            let mut s = with_items(Items::Downloads(vec![Download { id: 0, video: video("a"), state }]));
+            assert_eq!(hint(&s, "espacio"), Some("marcar varios"));
+            s.update(Action::ToggleUiLang);
+            let screen = render_sized(&s, &VIEW, 100);
+            assert!(screen.contains("space mark several"), "{screen}");
+            assert!(screen.contains("every shortcut"), "whole hints only, the last one kept");
+        }
+    }
+
+    #[test]
+    fn marked_downloads_show_the_mark_the_count_and_one_question() {
+        let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
+        let done = |id: u64, n: &str| Download {
+            id,
+            video: video(n),
+            state: DownloadState::Done(format!("/v/{n}.mp4").into()),
+        };
+        let mut s = with_items(Items::Downloads(vec![done(0, "a"), done(1, "b"), done(2, "c")]));
+        s.update(Action::ToggleUiLang);
+        s.marked_downloads.extend([0, 2]);
+        let screen = render(&s);
+        assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
+        assert_eq!(screen.matches("✗ ✓ done").count(), 2, "{screen}");
+        assert_eq!(hint(&s, "x"), Some("the marked ones: trash (asks first)"));
+        assert_eq!(hint(&s, "space"), Some("mark / unmark"));
+        let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
+        s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
+        assert!(render(&s).contains("Move 3 files to the trash?"));
+        assert_eq!(hint(&s, "y"), Some("yes, to the trash"));
+        s.confirm = Some(Confirm::TrashDownloads { files, cancel: vec![7], remove: Vec::new() });
+        assert_eq!(hint(&s, "y"), Some("yes (the other marked ones get cancelled or taken off)"));
+        s.update(Action::ToggleUiLang);
+        assert!(render(&s).contains("¿Mandar 3 archivos a la papelera?"));
     }
 
     #[test]

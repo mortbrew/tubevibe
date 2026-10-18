@@ -52,6 +52,8 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const SUBS_POLL: Duration = Duration::from_secs(15 * 60);
 /// How often the Omarchy theme file is looked at (a `stat`; read only when it changed).
 const THEME_POLL: Duration = Duration::from_secs(2);
+/// How often the open Downloads screen looks at its files on disk.
+const DOWNLOADS_CHECK: Duration = Duration::from_secs(2);
 const SUBS_FIRST_POLL: Duration = Duration::from_secs(60);
 /// A running download reports its progress at most this often (each report redraws).
 const DOWNLOAD_REPORT: Duration = Duration::from_millis(500);
@@ -186,6 +188,7 @@ struct Runtime {
     /// Follows the Omarchy theme while colour sync is on.
     theme: Option<tubevibe::theme::Watcher>,
     next_theme_poll: Instant,
+    next_downloads_check: Instant,
     /// Colour sync was on at the last look (turned on again: read the theme anew).
     theme_synced: bool,
     /// The video waiting to be weighed, since when; one yt-dlp at a time.
@@ -268,6 +271,7 @@ impl Runtime {
             next_poll: Instant::now() + SUBS_FIRST_POLL,
             theme: tubevibe::theme::Watcher::system(),
             next_theme_poll: Instant::now(),
+            next_downloads_check: Instant::now(),
             theme_synced: false,
             size_wait: None,
             sizing: false,
@@ -464,6 +468,7 @@ impl Runtime {
             pending.extend(self.segments_to_skip());
             self.poll_subs();
             pending.extend(self.poll_theme());
+            pending.extend(self.check_downloads());
             self.ask_size();
             self.ask_summary();
             self.retry_with_cookies(terminal.size()?.into());
@@ -542,6 +547,18 @@ impl Runtime {
         }
         self.next_theme_poll = Instant::now() + THEME_POLL;
         watcher.poll().map(Action::Palette)
+    }
+
+    /// While Downloads is shown, every few seconds: finished files gone from
+    /// disk drop off the list (only the listed paths are looked at).
+    fn check_downloads(&mut self) -> Option<Action> {
+        if Instant::now() < self.next_downloads_check {
+            return None;
+        }
+        let files = self.state.shown_download_files()?;
+        self.next_downloads_check = Instant::now() + DOWNLOADS_CHECK;
+        let missing: Vec<PathBuf> = files.into_iter().filter(|p| std::fs::symlink_metadata(p).is_err()).collect();
+        (!missing.is_empty()).then_some(Action::DownloadsChecked(missing))
     }
 
     /// Checks my channels for new videos now and then, in the background.
@@ -724,6 +741,19 @@ impl Runtime {
             Effect::Trash(paths) => {
                 self.background(move || {
                     Action::Trashed(trash::delete_all(&paths).map(|()| paths).map_err(|e| e.to_string()))
+                });
+            }
+            Effect::CheckDownloads => self.next_downloads_check = Instant::now(),
+            Effect::TrashDownloads { files, tally } => {
+                self.background(move || {
+                    let results = files
+                        .into_iter()
+                        .map(|(id, path)| {
+                            let result = tubevibe::media::trash_file(&path);
+                            (id, path, result)
+                        })
+                        .collect();
+                    Action::DownloadsTrashed { results, tally }
                 });
             }
             Effect::TrashDownload { id, path } => {

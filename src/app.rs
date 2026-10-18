@@ -388,6 +388,15 @@ impl Listing {
     }
 }
 
+/// What x on the marked downloads did besides the trash.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Tally {
+    pub cancelled: usize,
+    pub removed: usize,
+    /// Finished ones left alone: their video is downloading again.
+    pub skipped: usize,
+}
+
 /// A yes/no question before something hard to undo.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Confirm {
@@ -401,6 +410,13 @@ pub enum Confirm {
     TrashDownload {
         id: u64,
         path: PathBuf,
+    },
+    /// The marked downloads: finished ones' files go to the trash, running
+    /// ones are cancelled, the rest leave the list.
+    TrashDownloads {
+        files: Vec<(u64, PathBuf)>,
+        cancel: Vec<u64>,
+        remove: Vec<u64>,
     },
     /// Quitting stops this many downloads.
     Quit(usize),
@@ -481,6 +497,9 @@ pub enum Action {
     CookiesImported(Result<String, String>),
     /// `config.toml` was edited outside the app.
     ConfigReloaded(Result<Config, String>),
+    /// These finished downloads' files are not on disk any more (moved or
+    /// deleted while the app was open): their entries go.
+    DownloadsChecked(Vec<PathBuf>),
     /// Settings in `config.toml` that were skipped (unknown or broken).
     ConfigWarnings(Vec<crate::config::ConfigWarning>),
     /// `l`: add the selected video to my YouTube Watch Later (if it is
@@ -627,6 +646,12 @@ pub enum Action {
     /// The files went to the trash (or the reason they did not).
     Trashed(Result<Vec<PathBuf>, String>),
     /// A finished download's file went to the trash (or why it did not).
+    /// The marked finished downloads went to the trash (or why not), and
+    /// what was already done with the other marked ones.
+    DownloadsTrashed {
+        results: Vec<(u64, PathBuf, Result<(), TrashError>)>,
+        tally: Tally,
+    },
     DownloadTrashed {
         id: u64,
         path: PathBuf,
@@ -675,6 +700,13 @@ pub enum Effect {
         id: u64,
         path: PathBuf,
     },
+    /// The same for several finished downloads, one after the other.
+    TrashDownloads {
+        files: Vec<(u64, PathBuf)>,
+        tally: Tally,
+    },
+    /// Look at the disk now for the finished downloads' files (Downloads opened).
+    CheckDownloads,
     /// Fetch the top comments of a tab's video.
     Comments {
         tab: TabId,
@@ -974,6 +1006,8 @@ pub struct State {
     pub context: Option<ContextMenu>,
     /// Local files marked (space) for the next delete.
     pub marked: HashSet<PathBuf>,
+    /// Downloads marked (space) for the next x.
+    pub marked_downloads: HashSet<u64>,
     /// A newer version, shown in "Acerca de".
     pub update: Option<Update>,
     /// The colours the interface is shown in.
@@ -1045,6 +1079,7 @@ impl State {
             confirm: None,
             context: None,
             marked: HashSet::new(),
+            marked_downloads: HashSet::new(),
             update: None,
             palette: Palette::default(),
             up_to_date: false,
@@ -1450,6 +1485,9 @@ impl State {
                     self.status = format!("🗑 {} {}…", self.tr("A la papelera:", "To the trash:"), paths.len());
                     return vec![Effect::Trash(paths)];
                 }
+                Some(Confirm::TrashDownloads { files, cancel, remove }) => {
+                    return self.trash_marked_downloads(files, &cancel, &remove);
+                }
                 Some(Confirm::TrashDownload { id, path }) => {
                     if let Some(why) = self.refuse_trash_download(id, &path) {
                         self.status = why;
@@ -1556,6 +1594,8 @@ impl State {
             Action::Trash => self.ask_trash(),
             Action::PlaylistDeleted { id, title, result } => self.playlist_deleted(id, title, result),
             Action::Trashed(result) => self.trashed(result),
+            Action::DownloadsChecked(missing) => return self.drop_missing_downloads(&missing),
+            Action::DownloadsTrashed { results, tally } => return self.downloads_trashed(results, tally),
             Action::DownloadTrashed { id, path, result } => return self.download_trashed(id, path, result),
             Action::SubscriptionDone { channel_id, name, result } => {
                 return self.subscription_done(channel_id, name, result);
@@ -1949,7 +1989,8 @@ impl State {
                         )
                         .into();
                 }
-                Vec::new()
+                // Files may have been moved or deleted meanwhile.
+                vec![Effect::CheckDownloads]
             }
             Section::MisVideos => self.scan_media(title, MediaKind::Video),
             Section::MiMusica => self.scan_media(title, MediaKind::Music),
@@ -2754,6 +2795,7 @@ impl State {
             Items::Downloads(downloads) => match downloads.get(selected).map(|d| &d.state) {
                 Some(DownloadState::Done(_)) => {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
+                    items.push(item("Marcar / desmarcar", "Mark / Unmark", "espacio", Action::ToggleMark));
                     items.push(item(
                         "A la papelera (pide confirmar)",
                         "Move to Trash (Asks First)",
@@ -2761,7 +2803,10 @@ impl State {
                         Action::Trash,
                     ));
                 }
-                Some(_) => items.push(item("Cancelar / quitar", "Cancel / remove", "x", Action::Trash)),
+                Some(_) => {
+                    items.push(item("Marcar / desmarcar", "Mark / Unmark", "espacio", Action::ToggleMark));
+                    items.push(item("Cancelar / quitar", "Cancel / Remove", "x", Action::Trash));
+                }
                 None => {}
             },
             Items::Profiles(profiles) if profiles.get(selected).is_some() => {
@@ -3096,6 +3141,15 @@ impl State {
     }
 
     fn toggle_mark(&mut self) -> Vec<Effect> {
+        if let Some(id) = self.selected_download_id() {
+            if !self.marked_downloads.remove(&id) {
+                self.marked_downloads.insert(id);
+            }
+            let marked = self.marked_download_ids().len();
+            self.status =
+                format!("{marked} {}", self.tr("marcadas · x: actuar sobre todas", "marked · x: act on all of them"));
+            return self.move_selection(1);
+        }
         let Some(path) = self.selected_file().map(|f| f.path.clone()) else { return Vec::new() };
         if !self.marked.remove(&path) {
             self.marked.insert(path);
@@ -3542,7 +3596,161 @@ impl State {
 
     /// `x` in "Descargas": stops the selected download, or takes a finished
     /// one off the list (the file stays).
+    /// Finished downloads whose file is gone leave the list and
+    /// `downloads.json`, quietly. Running ones are never touched.
+    fn drop_missing_downloads(&mut self, missing: &[PathBuf]) -> Vec<Effect> {
+        let before = self.downloads.len();
+        self.downloads.retain(|d| !matches!(&d.state, DownloadState::Done(p) if missing.contains(p)));
+        if self.downloads.len() == before {
+            return Vec::new();
+        }
+        self.sync_downloads();
+        vec![Effect::SaveDownloads(self.downloads.clone())]
+    }
+
+    /// The finished downloads' files, while the Downloads screen is shown:
+    /// what the disk check looks at.
+    pub fn shown_download_files(&self) -> Option<Vec<PathBuf>> {
+        let listing = self.stack.last().filter(|l| l.kind == ListKind::Downloads && self.active == 0)?;
+        let Items::Downloads(shown) = &listing.items else { return None };
+        Some(
+            shown
+                .iter()
+                .filter_map(|d| match &d.state {
+                    DownloadState::Done(path) => Some(path.clone()),
+                    _ => None,
+                })
+                .collect(),
+        )
+    }
+
+    /// The selected download, on the Downloads screen.
+    fn selected_download_id(&self) -> Option<u64> {
+        match self.stack.last() {
+            Some(Listing { items: Items::Downloads(shown), selected, .. })
+                if self.active == 0 && self.focus == Focus::List =>
+            {
+                shown.get(*selected).map(|d| d.id)
+            }
+            _ => None,
+        }
+    }
+
+    /// The marked downloads of the shown list, in its order.
+    pub(crate) fn marked_download_ids(&self) -> Vec<u64> {
+        match self.stack.last() {
+            Some(Listing { items: Items::Downloads(shown), .. }) if self.active == 0 => {
+                shown.iter().filter(|d| self.marked_downloads.contains(&d.id)).map(|d| d.id).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// x with downloads marked: one question when files would go to the
+    /// trash; with none, cancel and take off right away.
+    fn act_on_marked_downloads(&mut self, ids: Vec<u64>) -> Vec<Effect> {
+        let (mut files, mut cancel, mut remove) = (Vec::new(), Vec::new(), Vec::new());
+        for id in ids {
+            match self.downloads.iter().find(|d| d.id == id).map(|d| &d.state) {
+                Some(DownloadState::Running { .. }) => cancel.push(id),
+                Some(DownloadState::Done(path)) => files.push((id, path.clone())),
+                Some(_) => remove.push(id),
+                None => {}
+            }
+        }
+        if files.is_empty() {
+            return self.trash_marked_downloads(files, &cancel, &remove);
+        }
+        self.confirm = Some(Confirm::TrashDownloads { files, cancel, remove });
+        Vec::new()
+    }
+
+    /// Does what x on the marked downloads means (after the yes, when asked).
+    fn trash_marked_downloads(&mut self, files: Vec<(u64, PathBuf)>, cancel: &[u64], remove: &[u64]) -> Vec<Effect> {
+        self.marked_downloads.clear();
+        let mut tally = Tally::default();
+        let mut effects = Vec::new();
+        // Each one is checked again: it may have changed while asking.
+        for d in self.downloads.iter_mut().filter(|d| cancel.contains(&d.id)) {
+            if matches!(d.state, DownloadState::Running { .. }) {
+                d.state = DownloadState::Cancelled;
+                effects.push(Effect::CancelDownload(d.id));
+                tally.cancelled += 1;
+            }
+        }
+        let before = self.downloads.len();
+        self.downloads.retain(|d| {
+            !(remove.contains(&d.id) && matches!(d.state, DownloadState::Failed(_) | DownloadState::Cancelled))
+        });
+        tally.removed = before - self.downloads.len();
+        let (files, skipped): (Vec<_>, Vec<_>) =
+            files.into_iter().partition(|(id, path)| self.refuse_trash_download(*id, path).is_none());
+        tally.skipped = skipped.len();
+        self.sync_downloads();
+        if tally.removed > 0 {
+            effects.push(Effect::SaveDownloads(self.downloads.clone()));
+        }
+        if files.is_empty() {
+            self.status = self.tally_status(0, 0, &[], tally);
+        } else {
+            let trash = crate::ui::icons(self.config.ui.icons).trash;
+            self.status = format!("{trash} {} {}…", self.tr("A la papelera:", "To the trash:"), files.len());
+            effects.push(Effect::TrashDownloads { files, tally });
+        }
+        effects
+    }
+
+    fn downloads_trashed(&mut self, results: Vec<(u64, PathBuf, Result<(), TrashError>)>, tally: Tally) -> Vec<Effect> {
+        let (mut trashed, mut gone, mut failed) = (0, 0, Vec::new());
+        for (id, path, result) in results {
+            match result {
+                Ok(()) => trashed += 1,
+                Err(TrashError::Gone) => gone += 1,
+                Err(TrashError::NotAFile) => {
+                    let what = self.tr("no es un archivo", "not a file");
+                    failed.push(format!("{} ({what})", file_name(&path)));
+                    continue;
+                }
+                Err(TrashError::Failed(error)) => {
+                    failed.push(format!("{}: {error}", file_name(&path)));
+                    continue;
+                }
+            }
+            self.downloads.retain(|d| !(d.id == id && matches!(&d.state, DownloadState::Done(p) if *p == path)));
+        }
+        self.sync_downloads();
+        self.status = self.tally_status(trashed, gone, &failed, tally);
+        vec![Effect::SaveDownloads(self.downloads.clone())]
+    }
+
+    /// One line on what x did to the marked downloads.
+    fn tally_status(&self, trashed: usize, gone: usize, failed: &[String], tally: Tally) -> String {
+        let trash = crate::ui::icons(self.config.ui.icons).trash;
+        let mut parts = Vec::new();
+        let mut say = |n: usize, es: &'static str, en: &'static str| {
+            if n > 0 {
+                parts.push(format!("{n} {}", self.tr(es, en)));
+            }
+        };
+        say(trashed, "a la papelera", "moved to the trash");
+        say(gone, "ya no estaban (quitadas de la lista)", "already gone (taken off the list)");
+        say(tally.cancelled, "canceladas", "cancelled");
+        say(tally.removed, "quitadas de la lista", "taken off the list");
+        say(tally.skipped, "sin tocar (se descargan de nuevo)", "left alone (downloading again)");
+        let mut line = format!("{trash} {}", parts.join(" · "));
+        if let Some(first) = failed.first() {
+            let label = self.tr("no se pudieron mandar a la papelera", "could not go to the trash");
+            let sep = if parts.is_empty() { "" } else { " · " };
+            line = format!("{line}{sep}❌ {} {label}: {first}", failed.len());
+        }
+        line
+    }
+
     fn cancel_or_forget_download(&mut self) -> Vec<Effect> {
+        let marked = self.marked_download_ids();
+        if !marked.is_empty() {
+            return self.act_on_marked_downloads(marked);
+        }
         let Some(Listing { items: Items::Downloads(shown), selected, .. }) = self.stack.last() else {
             return Vec::new();
         };
@@ -3628,6 +3836,8 @@ impl State {
 
     /// Shown download lists follow `self.downloads`.
     fn sync_downloads(&mut self) {
+        let ids: HashSet<u64> = self.downloads.iter().map(|d| d.id).collect();
+        self.marked_downloads.retain(|id| ids.contains(id));
         for listing in self.stack.iter_mut().filter(|l| l.kind == ListKind::Downloads) {
             listing.items = Items::Downloads(self.downloads.clone());
             listing.selected = listing.selected.min(self.downloads.len().saturating_sub(1));
@@ -4083,6 +4293,159 @@ mod tests {
     }
 
     /// Downloads with one finished item, shown and selected.
+    /// Downloads with these states (ids 0, 1, …), shown and selected from the top.
+    fn with_downloads(states: Vec<DownloadState>) -> State {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        s.downloads = states
+            .into_iter()
+            .enumerate()
+            .map(|(i, state)| Download { id: i as u64, video: video(&format!("v{i}")), state })
+            .collect();
+        assert_eq!(open(&mut s, Section::Descargas), [Effect::CheckDownloads], "looks at the disk on opening");
+        s.update(Action::GoTab(0));
+        s
+    }
+
+    fn done(path: &str) -> DownloadState {
+        DownloadState::Done(PathBuf::from(path))
+    }
+
+    fn running() -> DownloadState {
+        DownloadState::Running { permille: 10, speed: String::new(), eta: String::new() }
+    }
+
+    #[test]
+    fn space_marks_downloads() {
+        let mut s = with_downloads(vec![done("/v/a.mp4"), done("/v/b.mp4"), done("/v/c.mp4")]);
+        s.update(Action::ToggleMark); // a, and moves to b
+        assert_eq!(s.listing().unwrap().selected, 1);
+        s.update(Action::ToggleMark); // b
+        assert_eq!(s.marked_download_ids(), [0, 1]);
+        assert!(s.status.starts_with("2 "), "{}", s.status);
+        s.listing_mut().selected = 0;
+        s.update(Action::ToggleMark); // a again: unmarked
+        assert_eq!(s.marked_download_ids(), [1]);
+        // Not on Downloads: no download marks.
+        open(&mut s, Section::Configuracion);
+        assert!(s.marked_download_ids().is_empty());
+    }
+
+    #[test]
+    fn x_on_marked_downloads_asks_once_and_acts_on_each_kind() {
+        let mut s = with_downloads(vec![
+            done("/v/a.mp4"),
+            running(),
+            done("/v/c.mp4"),
+            DownloadState::Failed("boom".into()),
+            done("/v/e.mp4"),
+            done("/v/keep.mp4"),
+        ]);
+        for i in 0..5 {
+            s.listing_mut().selected = i;
+            s.update(Action::ToggleMark);
+        }
+        assert!(s.update(Action::Trash).is_empty(), "asks first");
+        let files: Vec<(u64, PathBuf)> = [(0, "/v/a.mp4"), (2, "/v/c.mp4"), (4, "/v/e.mp4")]
+            .into_iter()
+            .map(|(id, p)| (id, PathBuf::from(p)))
+            .collect();
+        assert_eq!(s.confirm, Some(Confirm::TrashDownloads { files: files.clone(), cancel: vec![1], remove: vec![3] }));
+        // No: nothing changes and the marks stay.
+        assert!(s.update(Action::Confirm(false)).is_empty());
+        assert_eq!((s.downloads.len(), s.marked_download_ids().len()), (6, 5));
+        s.update(Action::Trash);
+        let effects = s.update(Action::Confirm(true));
+        let tally = Tally { cancelled: 1, removed: 1, skipped: 0 };
+        assert!(
+            matches!(effects.as_slice(), [Effect::CancelDownload(1), Effect::SaveDownloads(d), Effect::TrashDownloads { files: f, tally: t }]
+                if d.len() == 5 && *f == files && *t == tally),
+            "{effects:?}"
+        );
+        assert!(s.marked_download_ids().is_empty(), "marks cleared after acting");
+        let results = vec![
+            (0, PathBuf::from("/v/a.mp4"), Ok(())),
+            (2, PathBuf::from("/v/c.mp4"), Err(TrashError::Gone)),
+            (4, PathBuf::from("/v/e.mp4"), Err(TrashError::Failed("Permission denied".into()))),
+        ];
+        s.update(Action::DownloadsTrashed { results, tally });
+        assert_eq!(
+            s.status,
+            concat!(
+                "🗑 1 moved to the trash · 1 already gone (taken off the list) · 1 cancelled · ",
+                "1 taken off the list · ❌ 1 could not go to the trash: e.mp4: Permission denied"
+            )
+        );
+        let left: Vec<u64> = s.downloads.iter().map(|d| d.id).collect();
+        assert_eq!(left, [1, 4, 5], "the cancelled one, the one that failed, the unmarked one");
+    }
+
+    #[test]
+    fn marked_downloads_without_files_go_without_asking() {
+        let mut s = with_downloads(vec![running(), DownloadState::Cancelled, done("/v/c.mp4")]);
+        s.update(Action::ToggleMark);
+        s.update(Action::ToggleMark);
+        let effects = s.update(Action::Trash);
+        assert_eq!(s.confirm, None);
+        assert!(matches!(effects.as_slice(), [Effect::CancelDownload(0), Effect::SaveDownloads(d)] if d.len() == 2));
+        assert!(s.status.contains("1 cancelled · 1 taken off the list"), "{}", s.status);
+        assert!(s.marked_download_ids().is_empty());
+    }
+
+    #[test]
+    fn marked_downloads_skip_a_video_downloading_again() {
+        let mut s = with_downloads(vec![done("/v/a.mp4"), done("/v/b.mp4")]);
+        s.update(Action::ToggleMark);
+        s.update(Action::ToggleMark);
+        s.update(Action::Trash);
+        // While asking, video 0 starts downloading again.
+        s.downloads.push(Download { id: 9, video: video("v0"), state: running() });
+        let effects = s.update(Action::Confirm(true));
+        assert!(
+            matches!(effects.as_slice(), [Effect::TrashDownloads { files, tally }]
+                if *files == [(1, PathBuf::from("/v/b.mp4"))] && tally.skipped == 1),
+            "{effects:?}"
+        );
+        s.update(Action::DownloadsTrashed {
+            results: vec![(1, "/v/b.mp4".into(), Ok(()))],
+            tally: Tally { skipped: 1, ..Tally::default() },
+        });
+        assert!(s.status.contains("1 left alone (downloading again)"), "{}", s.status);
+        assert!(s.downloads.iter().any(|d| d.id == 0), "kept");
+    }
+
+    #[test]
+    fn finished_downloads_gone_from_disk_drop_off_quietly() {
+        let mut s = with_downloads(vec![done("/v/a.mp4"), running(), done("/v/c.mp4"), done("/v/d.mp4")]);
+        assert_eq!(
+            s.shown_download_files().unwrap(),
+            [PathBuf::from("/v/a.mp4"), PathBuf::from("/v/c.mp4"), PathBuf::from("/v/d.mp4")],
+            "only finished files are looked at"
+        );
+        s.listing_mut().selected = 2;
+        s.update(Action::ToggleMark);
+        let status = s.status.clone();
+        let effects = s.update(Action::DownloadsChecked(vec!["/v/a.mp4".into(), "/v/c.mp4".into()]));
+        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d)] if d.len() == 2), "{effects:?}");
+        assert_eq!(s.downloads.iter().map(|d| d.id).collect::<Vec<_>>(), [1, 3], "running ones never go");
+        assert!(matches!(&s.listing().unwrap().items, Items::Downloads(d) if d.len() == 2));
+        assert!(s.marked_download_ids().is_empty(), "a mark on a dropped one goes too");
+        assert_eq!(s.confirm, None);
+        assert_eq!(s.status, status, "no prompt, no message");
+        assert!(s.update(Action::DownloadsChecked(vec!["/v/zzz.mp4".into()])).is_empty(), "nothing to drop");
+        // Elsewhere nothing is looked at.
+        open(&mut s, Section::Configuracion);
+        assert_eq!(s.shown_download_files(), None);
+    }
+
+    #[test]
+    fn my_videos_and_music_rescan_each_time_they_open() {
+        let mut s = state();
+        for section in [Section::MisVideos, Section::MiMusica, Section::MisVideos] {
+            assert!(matches!(open(&mut s, section).as_slice(), [Effect::ScanMedia { .. }]), "{section:?}");
+        }
+    }
+
     fn with_finished_download(path: &str) -> State {
         let mut s = with_videos(&["a"]);
         s.update(Action::Download);

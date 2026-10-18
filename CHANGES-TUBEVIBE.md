@@ -510,3 +510,41 @@ could not update itself either. From now on:
   keep unknown keys and sections and their comments as they were.
 - Warnings are listed in file order (`toml` `preserve_order` feature).
 
+## Unreleased
+
+### Mark several downloads with `space` (`downloads-multi-select`)
+
+- **Downloads**: `space` marks the selected download (the same red ✗ as
+  My Videos / My Music) and moves down; the list title shows
+  *"✗ 2 marked"*. Marks of entries that leave the list go with them.
+- **`x` with marks** acts on all the marked ones:
+  - finished ones → **one** question, *"Move 3 files to the trash?"*
+    (*"¿Mandar 3 archivos a la papelera?"*), then each file goes to the
+    system trash with the same rules as one (regular files only, the exact
+    recorded path, left alone if its video is downloading again);
+  - running ones → cancelled; failed / cancelled ones → off the list. When
+    there are also finished ones these happen on the same *yes* (the hint
+    says *"yes (the other marked ones get cancelled or taken off)"*);
+    with none, right away without asking;
+  - one summary line, e.g. *"🗑 2 moved to the trash · 1 already gone
+    (taken off the list) · 1 cancelled · ❌ 1 could not go to the trash:
+    e.mp4: Permission denied"* (the icon follows the icon set).
+  - Marks are cleared after acting (kept on *no*). Like My Videos / My
+    Music, marks are not cleared just by leaving the screen.
+- **No marks**: `x` works on the selected download exactly as before.
+- **Hints**: Downloads shows *"space mark several"* (and, with marks,
+  *"space mark / unmark · x the marked ones: trash (asks first)"*); My
+  Videos / My Music already showed it. The bar drops whole hints from the
+  end when narrow, never cuts one. Right-click menu: *Mark / Unmark*. Help:
+  *"mark several (videos, music, downloads)"*.
+
+### Downloads follows the disk
+
+- Finished downloads whose file was moved or deleted while tubevibe was
+  open now drop off the list **and** `downloads.json` by themselves, with
+  no question: when Downloads is opened, and every 2 s while it is shown
+  (only the listed finished paths are looked at). Running downloads are
+  never dropped. (At start, missing files were already left out.)
+- My Videos / My Music already rescan their folders each time they are
+  opened (now covered by a test).
+

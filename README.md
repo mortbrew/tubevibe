@@ -121,9 +121,11 @@ Every video opens in its own tab.
 - **Descargas**: what you download with `d`, with live progress, speed and
   time left, and its size. `x` cancels one (its half-downloaded pieces are
   deleted), moves a finished one's file to the system trash and takes it off
-  the list (after asking), or takes a failed one off the list, `Enter`
-  plays the file. Quitting with downloads running asks
-  first
+  the list (after asking), or takes a failed one off the list; `space`
+  marks several and `x` then does that to all of them with one question.
+  `Enter` plays the file. A finished download whose file was moved or
+  deleted (even while the app is open) drops off the list by itself.
+  Quitting with downloads running asks first
 
 **Account and settings**
 - Log in with any installed browser (Brave, Chrome, Chromium, Vivaldi, Edge,
@@ -265,7 +267,7 @@ audio only. In **History** `x` removes the video; in YouTube's **Watch Later** a
 **playlists** `Ctrl+y` `x` removes it on YouTube (after asking), in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** `x` cancels
 the download, or moves a finished one's file to the system trash after asking
 (only that file, never a folder or link; a file that is already gone just
-leaves the list). In **My Videos**
+leaves the list); `space` marks several downloads for one `x`. In **My Videos**
 and **My Music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
 In a video tab that is not playing yet (or closed), `Enter` or `space` plays it.
