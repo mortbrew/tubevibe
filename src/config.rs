@@ -158,6 +158,8 @@ pub struct UiConfig {
     pub splash: bool,
     /// Ask GitHub, each time the app opens, whether there is a newer version.
     pub check_updates: bool,
+    /// Follow the current Omarchy theme's colours (Tokyo Night otherwise).
+    pub omarchy_theme: bool,
     /// Inicio, Descubrir and Suscripciones leave out the videos I watched
     /// (`v` shows them for a while).
     pub hide_watched: bool,
@@ -336,6 +338,7 @@ impl Default for UiConfig {
             mouse: true,
             splash: true,
             check_updates: true,
+            omarchy_theme: true,
             hide_watched: true,
             hide_later: true,
             hide_shorts: true,

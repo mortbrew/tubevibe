@@ -17,6 +17,7 @@ use crate::i18n::Lang;
 use crate::keymap::KeyContext;
 use crate::media::{LocalFile, MediaKind, parse_dirs};
 use crate::sponsorblock::Segment;
+use crate::theme::Palette;
 use crate::update::{Progress, Replace, Update};
 use crate::youtube::{Comment, HistoryPage, Items, Rating, SearchPage, Source, WATCH_LATER, Watch};
 
@@ -167,6 +168,7 @@ pub enum Setting {
     Autoplay,
     AppLang,
     Icons,
+    OmarchyTheme,
     Thumbnails,
     Mouse,
     Splash,
@@ -188,7 +190,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 32] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -202,6 +204,7 @@ impl Setting {
         Self::Autoplay,
         Self::AppLang,
         Self::Icons,
+        Self::OmarchyTheme,
         Self::Thumbnails,
         Self::Mouse,
         Self::Splash,
@@ -239,6 +242,7 @@ impl Setting {
             Self::Autoplay => ("Enter en un video", "Enter on a video"),
             Self::AppLang => ("Idioma de la app (Ctrl+y + l)", "App language (Ctrl+y + l)"),
             Self::Icons => ("Íconos", "Icons"),
+            Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
             Self::Thumbnails => ("Portadas de los videos (kitty)", "Video thumbnails (kitty)"),
             Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to copy text: Shift)"),
             Self::Splash => ("Logo al abrir la app", "Logo when the app opens"),
@@ -599,6 +603,8 @@ pub enum Action {
     ToggleWatched,
     /// GitHub has a newer version (and how to get it here).
     UpdateFound(Update),
+    /// The colours to show (the Omarchy theme changed, or Tokyo Night).
+    Palette(Palette),
     /// GitHub's latest release is this version: nothing newer.
     UpToDate,
     /// About's Update Now button: put the new version in place of this one.
@@ -952,6 +958,8 @@ pub struct State {
     pub marked: HashSet<PathBuf>,
     /// A newer version, shown in "Acerca de".
     pub update: Option<Update>,
+    /// The colours the interface is shown in.
+    pub palette: Palette,
     /// The startup check confirmed this is the latest release (not set while
     /// it runs, nor when it could not ask GitHub).
     pub up_to_date: bool,
@@ -1020,6 +1028,7 @@ impl State {
             context: None,
             marked: HashSet::new(),
             update: None,
+            palette: Palette::default(),
             up_to_date: false,
             self_update: Progress::Idle,
             watched: HashSet::new(),
@@ -1184,6 +1193,10 @@ impl State {
             }
             Setting::CheckUpdates => {
                 let (es, en) = on_off(self.config.ui.check_updates);
+                self.tr(es, en).into()
+            }
+            Setting::OmarchyTheme => {
+                let (es, en) = on_off(self.config.ui.omarchy_theme);
                 self.tr(es, en).into()
             }
             Setting::SystemCheck => match &self.system {
@@ -1461,6 +1474,11 @@ impl State {
                 self.update = Some(update);
             }
             Action::UpToDate => self.up_to_date = self.update.is_none(),
+            Action::Palette(palette) => {
+                if self.config.ui.omarchy_theme {
+                    self.palette = palette;
+                }
+            }
             Action::SelfUpdate => return self.self_update(),
             Action::UpdateProgress(percent) => {
                 if let (Progress::Downloading(_), Some(update)) = (&self.self_update, &self.update) {
@@ -2033,6 +2051,14 @@ impl State {
             Setting::CheckUpdates => {
                 self.config.ui.check_updates = !self.config.ui.check_updates;
                 save("ui", "check_updates", SettingValue::Bool(self.config.ui.check_updates))
+            }
+            Setting::OmarchyTheme => {
+                self.config.ui.omarchy_theme = !self.config.ui.omarchy_theme;
+                // Off: Tokyo Night right away. On: the runtime reads the theme again.
+                if !self.config.ui.omarchy_theme {
+                    self.palette = Palette::default();
+                }
+                save("ui", "omarchy_theme", SettingValue::Bool(self.config.ui.omarchy_theme))
             }
             Setting::FxStartup | Setting::FxPages | Setting::FxDialogs => {
                 match effect_flag(&mut self.config.effects, setting) {
@@ -4019,6 +4045,28 @@ mod tests {
         open(&mut s, Section::Suscripciones);
         assert_eq!(s.loading.as_deref(), Some("Subscriptions"));
         assert_eq!(s.status, "Loading Subscriptions…");
+    }
+
+    #[test]
+    fn omarchy_colour_sync_can_be_turned_off() {
+        let mut s = state();
+        assert!(s.config.ui.omarchy_theme, "on by default");
+        let gruvbox = Palette { fg: ratatui::style::Color::Rgb(0xd4, 0xbe, 0x98), ..Palette::default() };
+        s.update(Action::Palette(gruvbox));
+        assert_eq!(s.palette, gruvbox);
+        open(&mut s, Section::Configuracion);
+        s.stack[0].selected = Setting::ALL.iter().position(|x| *x == Setting::OmarchyTheme).unwrap();
+        assert_eq!(
+            s.update(Action::Enter),
+            [Effect::SaveSetting { table: "ui", key: "omarchy_theme", value: SettingValue::Bool(false) }]
+        );
+        assert_eq!(s.palette, Palette::default(), "Tokyo Night right away");
+        s.update(Action::Palette(gruvbox));
+        assert_eq!(s.palette, Palette::default(), "off: theme changes are ignored");
+        assert_eq!(Setting::OmarchyTheme.label(Lang::En), "Omarchy Theme Colors");
+        assert_eq!(Setting::OmarchyTheme.label(Lang::Es), "Colores del tema de Omarchy");
+        s.update(Action::Enter);
+        assert!(s.config.ui.omarchy_theme);
     }
 
     #[test]

@@ -50,6 +50,8 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// How often my channels are checked for new videos (`ui.notify_new`), and
 /// the first time, once the login was read.
 const SUBS_POLL: Duration = Duration::from_secs(15 * 60);
+/// How often the Omarchy theme file is looked at (a `stat`; read only when it changed).
+const THEME_POLL: Duration = Duration::from_secs(2);
 const SUBS_FIRST_POLL: Duration = Duration::from_secs(60);
 /// A running download reports its progress at most this often (each report redraws).
 const DOWNLOAD_REPORT: Duration = Duration::from_millis(500);
@@ -176,6 +178,11 @@ struct Runtime {
     videos: HashMap<TabId, String>,
     /// When to check my channels for new videos next.
     next_poll: Instant,
+    /// Follows the Omarchy theme while colour sync is on.
+    theme: Option<tubevibe::theme::Watcher>,
+    next_theme_poll: Instant,
+    /// Colour sync was on at the last look (turned on again: read the theme anew).
+    theme_synced: bool,
     /// The video waiting to be weighed, since when; one yt-dlp at a time.
     size_wait: Option<(String, Instant)>,
     sizing: bool,
@@ -238,7 +245,7 @@ impl Runtime {
         state.splash = state.config.ui.splash;
         state.set_downloads(store::load_downloads(&paths.downloads));
         let (tx, rx) = mpsc::channel();
-        let runtime = Self {
+        let mut runtime = Self {
             config_path,
             paths,
             state,
@@ -254,6 +261,9 @@ impl Runtime {
             videos: HashMap::new(),
             downloads: HashMap::new(),
             next_poll: Instant::now() + SUBS_FIRST_POLL,
+            theme: tubevibe::theme::Watcher::system(),
+            next_theme_poll: Instant::now(),
+            theme_synced: false,
             size_wait: None,
             sizing: false,
             summary_wait: None,
@@ -271,6 +281,10 @@ impl Runtime {
         };
         if let Some(error) = &saved_error {
             dbg(format!("later.json: {error}"));
+        }
+        // The theme's colours from the first frame (the logo) on.
+        if let Some(palette) = runtime.poll_theme() {
+            runtime.state.update(palette);
         }
         runtime.start_session(false);
         runtime.send(Action::AskBrowser);
@@ -444,6 +458,7 @@ impl Runtime {
             self.state.clock = now();
             pending.extend(self.segments_to_skip());
             self.poll_subs();
+            pending.extend(self.poll_theme());
             self.ask_size();
             self.ask_summary();
             self.retry_with_cookies(terminal.size()?.into());
@@ -499,6 +514,29 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    /// The Omarchy theme's colours when they changed (or Tokyo Night when it
+    /// went away); nothing while colour sync is off.
+    fn poll_theme(&mut self) -> Option<Action> {
+        let watcher = self.theme.as_mut()?;
+        if !self.state.config.ui.omarchy_theme {
+            // Turned off (in Settings, or by editing config.toml): Tokyo Night.
+            if std::mem::take(&mut self.theme_synced) {
+                self.state.palette = tubevibe::theme::Palette::default();
+            }
+            return None;
+        }
+        if !self.theme_synced {
+            self.theme_synced = true;
+            watcher.reset();
+            self.next_theme_poll = Instant::now();
+        }
+        if Instant::now() < self.next_theme_poll {
+            return None;
+        }
+        self.next_theme_poll = Instant::now() + THEME_POLL;
+        watcher.poll().map(Action::Palette)
     }
 
     /// Checks my channels for new videos now and then, in the background.
