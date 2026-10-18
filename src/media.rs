@@ -2,6 +2,34 @@
 
 use std::path::{Path, PathBuf};
 
+/// Why a file could not go to the trash.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrashError {
+    /// It was not there any more.
+    Gone,
+    /// A folder, link or other non-file: never trashed.
+    NotAFile,
+    Failed(String),
+}
+
+/// Moves exactly `path` to the system trash when it is a regular file
+/// (not a folder, not a symlink).
+pub fn trash_file(path: &Path) -> Result<(), TrashError> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(TrashError::Gone),
+        Err(e) => return Err(TrashError::Failed(e.to_string())),
+    };
+    if !meta.file_type().is_file() {
+        return Err(TrashError::NotAFile);
+    }
+    match trash::delete(path) {
+        Ok(()) => Ok(()),
+        Err(_) if std::fs::symlink_metadata(path).is_err() => Err(TrashError::Gone),
+        Err(e) => Err(TrashError::Failed(e.to_string())),
+    }
+}
+
 /// Deep enough for `Música/Artista/Disco/01.flac`, shallow enough to stay fast.
 const MAX_DEPTH: usize = 6;
 
@@ -81,6 +109,26 @@ pub fn parse_dirs(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trash_file_takes_only_a_regular_file() {
+        let dir = std::env::temp_dir().join(format!("tubevibe-trash-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("folder")).unwrap();
+        // Refused before the trash is ever touched.
+        assert_eq!(trash_file(&dir.join("missing.mp4")), Err(TrashError::Gone));
+        assert_eq!(trash_file(&dir.join("folder")), Err(TrashError::NotAFile));
+        assert!(dir.join("folder").is_dir());
+        #[cfg(unix)]
+        {
+            let target = dir.join("song.mp3");
+            std::fs::write(&target, b"x").unwrap();
+            std::os::unix::fs::symlink(&target, dir.join("link.mp3")).unwrap();
+            assert_eq!(trash_file(&dir.join("link.mp3")), Err(TrashError::NotAFile));
+            assert!(target.exists() && dir.join("link.mp3").exists());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
     use crate::config::temp_dir;
 

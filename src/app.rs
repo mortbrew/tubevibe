@@ -6,7 +6,7 @@
 //! the settings screen is just state changes plus `SaveSetting` effects.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::{
     Config, EffectsConfig, Language, PlayerMode, codec_name, language_name, next_codec, next_language, next_quality,
@@ -15,7 +15,7 @@ use crate::doctor::{Check, Manager};
 use crate::domain::{Download, DownloadState, HistoryEntry, Size, TabId, Video, clock, resume_point};
 use crate::i18n::Lang;
 use crate::keymap::KeyContext;
-use crate::media::{LocalFile, MediaKind, parse_dirs};
+use crate::media::{LocalFile, MediaKind, TrashError, parse_dirs};
 use crate::sponsorblock::Segment;
 use crate::theme::Palette;
 use crate::update::{Progress, Replace, Update};
@@ -397,6 +397,11 @@ pub enum Confirm {
     },
     /// Local files to move to the trash.
     Trash(Vec<PathBuf>),
+    /// A finished download's file to move to the trash (and its entry to drop).
+    TrashDownload {
+        id: u64,
+        path: PathBuf,
+    },
     /// Quitting stops this many downloads.
     Quit(usize),
     /// One of my YouTube playlists, deleted for good.
@@ -476,6 +481,8 @@ pub enum Action {
     CookiesImported(Result<String, String>),
     /// `config.toml` was edited outside the app.
     ConfigReloaded(Result<Config, String>),
+    /// Settings in `config.toml` that were skipped (unknown or broken).
+    ConfigWarnings(Vec<crate::config::ConfigWarning>),
     /// `l`: add the selected video to my YouTube Watch Later (if it is
     /// there already, just say so).
     AddLater,
@@ -619,6 +626,12 @@ pub enum Action {
     Trash,
     /// The files went to the trash (or the reason they did not).
     Trashed(Result<Vec<PathBuf>, String>),
+    /// A finished download's file went to the trash (or why it did not).
+    DownloadTrashed {
+        id: u64,
+        path: PathBuf,
+        result: Result<(), TrashError>,
+    },
     /// Open this section of the menu (a click on it).
     OpenSection(usize),
     /// Select this row of the list (a click on it).
@@ -657,6 +670,11 @@ pub enum Effect {
     SaveWatched(String),
     /// Move these files to the system trash.
     Trash(Vec<PathBuf>),
+    /// Move this finished download's file (only that path) to the system trash.
+    TrashDownload {
+        id: u64,
+        path: PathBuf,
+    },
     /// Fetch the top comments of a tab's video.
     Comments {
         tab: TabId,
@@ -1401,6 +1419,12 @@ impl State {
                     return vec![Effect::StartSession { force: true }];
                 }
             }
+            Action::ConfigWarnings(warnings) => {
+                if let Some(warning) = crate::config::ConfigWarning::summary(&warnings, self.lang()) {
+                    let reloaded = self.tr("Configuración recargada", "Settings reloaded");
+                    self.status = if self.status == reloaded { format!("{reloaded} · {warning}") } else { warning };
+                }
+            }
             Action::AddLater => return self.add_to_later(),
             Action::SaveForLater => return self.save_for_later(),
             Action::Trash if self.active == 0 && self.saved_list_video().is_some() => {
@@ -1425,6 +1449,16 @@ impl State {
                 Some(Confirm::Trash(paths)) => {
                     self.status = format!("🗑 {} {}…", self.tr("A la papelera:", "To the trash:"), paths.len());
                     return vec![Effect::Trash(paths)];
+                }
+                Some(Confirm::TrashDownload { id, path }) => {
+                    if let Some(why) = self.refuse_trash_download(id, &path) {
+                        self.status = why;
+                        return Vec::new();
+                    }
+                    let trash = crate::ui::icons(self.config.ui.icons).trash;
+                    self.status =
+                        format!("{trash} {} {}…", self.tr("A la papelera:", "To the trash:"), file_name(&path));
+                    return vec![Effect::TrashDownload { id, path }];
                 }
                 Some(Confirm::Quit(_)) => self.quit = true,
                 Some(Confirm::DeletePlaylist { id, title }) => {
@@ -1522,6 +1556,7 @@ impl State {
             Action::Trash => self.ask_trash(),
             Action::PlaylistDeleted { id, title, result } => self.playlist_deleted(id, title, result),
             Action::Trashed(result) => self.trashed(result),
+            Action::DownloadTrashed { id, path, result } => return self.download_trashed(id, path, result),
             Action::SubscriptionDone { channel_id, name, result } => {
                 return self.subscription_done(channel_id, name, result);
             }
@@ -2433,7 +2468,8 @@ impl State {
             self.status =
                 format!("⚠ {}: {}", self.tr("Falta o hay que actualizar", "Missing or outdated"), lacking.join(", "));
             self.show_system();
-        } else if !on_screen && extras > 0 {
+        } else if !on_screen && extras > 0 && !self.status.starts_with('⚠') {
+            // (a config warning already showing matters more)
             let note = self.tr(
                 "opcionales sin instalar · Configuración → Revisar el sistema",
                 "optional tools not installed · Settings → Check the system",
@@ -2718,7 +2754,12 @@ impl State {
             Items::Downloads(downloads) => match downloads.get(selected).map(|d| &d.state) {
                 Some(DownloadState::Done(_)) => {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
-                    items.push(item("Quitar de la lista", "Remove from the list", "x", Action::Trash));
+                    items.push(item(
+                        "A la papelera (pide confirmar)",
+                        "Move to Trash (Asks First)",
+                        "x",
+                        Action::Trash,
+                    ));
                 }
                 Some(_) => items.push(item("Cancelar / quitar", "Cancel / remove", "x", Action::Trash)),
                 None => {}
@@ -3512,14 +3553,77 @@ impl State {
             self.downloads[i].state = DownloadState::Cancelled;
             self.status = format!("⏹ {}: {title}", self.tr("Descarga cancelada", "Download cancelled"));
             vec![Effect::CancelDownload(id)]
+        } else if let DownloadState::Done(path) = &self.downloads[i].state {
+            // A finished one: its file goes to the trash, after asking.
+            self.confirm = Some(Confirm::TrashDownload { id, path: path.clone() });
+            return Vec::new();
         } else {
             self.downloads.remove(i);
-            let note = self.tr("(el archivo queda)", "(the file stays)");
-            self.status = format!("🗑 {}: {title} {note}", self.tr("Quitado de la lista", "Taken off the list"));
+            self.status = format!("🗑 {}: {title}", self.tr("Quitado de la lista", "Taken off the list"));
             vec![Effect::SaveDownloads(self.downloads.clone())]
         };
         self.sync_downloads();
         effects
+    }
+
+    /// Why a finished download's file must not go to the trash right now, if so.
+    fn refuse_trash_download(&self, id: u64, path: &Path) -> Option<String> {
+        let Some(record) = self.downloads.iter().find(|d| d.id == id) else {
+            return Some(self.tr("Esa descarga ya no está en la lista", "That download is no longer listed").into());
+        };
+        if !matches!(&record.state, DownloadState::Done(p) if p == path) {
+            return Some(
+                self.tr("Esa descarga cambió: no se tocó nada", "That download changed: nothing touched").into(),
+            );
+        }
+        let again = self
+            .downloads
+            .iter()
+            .any(|d| d.id != id && matches!(d.state, DownloadState::Running { .. }) && d.video.id == record.video.id);
+        again.then(|| {
+            self.tr(
+                "Se está descargando de nuevo: esperá o cancelala (x)",
+                "It is downloading again: wait or cancel it (x)",
+            )
+            .into()
+        })
+    }
+
+    fn download_trashed(&mut self, id: u64, path: PathBuf, result: Result<(), TrashError>) -> Vec<Effect> {
+        let name = file_name(&path);
+        let trash = crate::ui::icons(self.config.ui.icons).trash;
+        match result {
+            Ok(()) => {
+                self.status = format!(
+                    "{trash} {name} {}",
+                    self.tr(
+                        "a la papelera (se recupera desde la papelera del sistema)",
+                        "moved to the trash (recover it from the system trash)"
+                    )
+                );
+            }
+            Err(TrashError::Gone) => {
+                self.status = format!(
+                    "{trash} {name} {}",
+                    self.tr("ya no estaba: quitado de la lista", "was already gone: taken off the list")
+                );
+            }
+            Err(TrashError::NotAFile) => {
+                self.status =
+                    format!("❌ {name} {}", self.tr("no es un archivo: no se tocó", "is not a file: left alone"));
+                return Vec::new();
+            }
+            Err(TrashError::Failed(error)) => {
+                self.status = format!(
+                    "❌ {} {name}: {error}",
+                    self.tr("No se pudo mandar a la papelera", "Could not move to the trash")
+                );
+                return Vec::new();
+            }
+        }
+        self.downloads.retain(|d| !(d.id == id && matches!(&d.state, DownloadState::Done(p) if *p == path)));
+        self.sync_downloads();
+        vec![Effect::SaveDownloads(self.downloads.clone())]
     }
 
     /// Shown download lists follow `self.downloads`.
@@ -3604,6 +3708,11 @@ pub fn language_label(language: Language, lang: Lang) -> &'static str {
         Language::Dubbed => ("audio doblado", "dubbed audio"),
     };
     lang.pick(es, en)
+}
+
+/// The file name of `path`, for messages.
+fn file_name(path: &Path) -> String {
+    path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -3960,8 +4069,74 @@ mod tests {
             other => panic!("{other:?}"),
         }
         s.update(Action::GoTab(0));
-        assert!(matches!(s.update(Action::Trash).as_slice(), [Effect::SaveDownloads(d)] if d.len() == 1));
+        // A finished one: x asks, then its file goes to the trash.
+        assert!(s.update(Action::Trash).is_empty());
+        assert_eq!(s.confirm, Some(Confirm::TrashDownload { id: 0, path: file.clone() }));
+        assert_eq!(s.update(Action::Confirm(true)), [Effect::TrashDownload { id: 0, path: file.clone() }]);
+        let effects = s.update(Action::DownloadTrashed { id: 0, path: file, result: Ok(()) });
+        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d)] if d.len() == 1));
+        assert!(s.status.contains("title a.mp4 moved to the trash") || s.status.contains("title a.mp4 a la papelera"));
         assert_eq!(s.downloading(), 0);
+        // The cancelled one has no file: x just takes it off, no question.
+        assert!(matches!(s.update(Action::Trash).as_slice(), [Effect::SaveDownloads(d)] if d.is_empty()));
+        assert_eq!(s.confirm, None);
+    }
+
+    /// Downloads with one finished item, shown and selected.
+    fn with_finished_download(path: &str) -> State {
+        let mut s = with_videos(&["a"]);
+        s.update(Action::Download);
+        s.update(Action::Downloaded { id: 0, result: Ok(PathBuf::from(path)) });
+        open(&mut s, Section::Descargas);
+        s.update(Action::GoTab(0));
+        s
+    }
+
+    #[test]
+    fn trashing_a_download_handles_no_gone_and_errors() {
+        let file = PathBuf::from("/v/a.mp4");
+        // No: nothing happens.
+        let mut s = with_finished_download("/v/a.mp4");
+        s.update(Action::Trash);
+        assert!(s.update(Action::Confirm(false)).is_empty());
+        assert_eq!(s.downloads.len(), 1);
+        // Already gone: it leaves the list, saying so.
+        s.update(Action::Trash);
+        s.update(Action::Confirm(true));
+        let effects = s.update(Action::DownloadTrashed { id: 0, path: file.clone(), result: Err(TrashError::Gone) });
+        assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d)] if d.is_empty()));
+        assert!(s.status.contains("ya no estaba") || s.status.contains("already gone"), "{}", s.status);
+        // A trash error is shown and the item stays.
+        let mut s = with_finished_download("/v/a.mp4");
+        s.update(Action::Trash);
+        s.update(Action::Confirm(true));
+        let failed = Err(TrashError::Failed("Permission denied".into()));
+        assert!(s.update(Action::DownloadTrashed { id: 0, path: file.clone(), result: failed }).is_empty());
+        assert!(s.status.starts_with("❌") && s.status.contains("Permission denied"), "{}", s.status);
+        assert_eq!(s.downloads.len(), 1);
+        // Not a regular file: left alone, still listed.
+        assert!(s.update(Action::DownloadTrashed { id: 0, path: file, result: Err(TrashError::NotAFile) }).is_empty());
+        assert_eq!(s.downloads.len(), 1);
+    }
+
+    #[test]
+    fn trashing_a_download_uses_the_icon_set_and_refuses_while_downloading_again() {
+        let mut s = with_finished_download("/v/a.mp4");
+        s.config.ui.icons = crate::config::IconSet::Nerd;
+        s.update(Action::Trash);
+        s.update(Action::Confirm(true));
+        s.update(Action::DownloadTrashed { id: 0, path: "/v/a.mp4".into(), result: Ok(()) });
+        assert!(s.status.starts_with('\u{f1f8}'), "{}", s.status);
+        // The same video downloading again: its old file is not touched.
+        let mut s = with_finished_download("/v/a.mp4");
+        s.update(Action::Trash);
+        s.downloads.push(Download {
+            id: 7,
+            video: s.downloads[0].video.clone(),
+            state: DownloadState::Running { permille: 0, speed: String::new(), eta: String::new() },
+        });
+        assert!(s.update(Action::Confirm(true)).is_empty());
+        assert!(s.status.contains("downloading again") || s.status.contains("descargando de nuevo"), "{}", s.status);
     }
 
     #[test]
@@ -5597,6 +5772,22 @@ mod tests {
         assert_eq!(s.update(Action::ConfigReloaded(Ok(edited))), [Effect::StartSession { force: true }]);
         s.update(Action::ConfigReloaded(Err("línea 3".into())));
         assert_eq!(s.status, "línea 3");
+    }
+
+    #[test]
+    fn config_warnings_show_in_the_status_bar() {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        s.status = "kept".into();
+        assert!(s.update(Action::ConfigWarnings(Vec::new())).is_empty());
+        assert_eq!(s.status, "kept", "nothing to say");
+        let (config, warnings) = Config::parse("[ui]\nlang = \"en\"\nfuture_glow = true\n").unwrap();
+        s.update(Action::ConfigWarnings(warnings.clone()));
+        assert_eq!(s.status, "⚠ Ignored unknown setting ui.future_glow in config.toml (made by a newer tubevibe?)");
+        // After Edit config.toml: it says both.
+        s.update(Action::ConfigReloaded(Ok(config)));
+        s.update(Action::ConfigWarnings(warnings));
+        assert!(s.status.starts_with("Settings reloaded · ⚠ Ignored unknown setting ui.future_glow"), "{}", s.status);
     }
 
     #[test]

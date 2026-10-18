@@ -93,6 +93,8 @@ pub struct Icons {
     pub downloading: &'static str,
     /// The update failed.
     pub failed: &'static str,
+    /// A file moved to the trash.
+    pub trash: &'static str,
 }
 
 impl Icons {
@@ -132,6 +134,7 @@ const EMOJI: Icons = Icons {
     update: "⬆",
     downloading: "⬇",
     failed: "❌",
+    trash: "🗑",
 };
 
 const NERD: Icons = Icons {
@@ -180,6 +183,7 @@ const NERD: Icons = Icons {
     update: "\u{f0aa}",
     downloading: "\u{f0ab}",
     failed: "\u{f057}",
+    trash: "\u{f1f8}",
 };
 
 const UNICODE: Icons = Icons {
@@ -206,6 +210,7 @@ const UNICODE: Icons = Icons {
     update: "↑",
     downloading: "↓",
     failed: "✘",
+    trash: "✕",
 };
 
 pub fn icons(set: IconSet) -> &'static Icons {
@@ -1541,7 +1546,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     let mut hints = if let Some(confirm) = &state.confirm {
         let yes = match confirm {
             Confirm::Unsubscribe { .. } => key(lang.pick("s", "y"), "sí, desuscribirme", "yes, unsubscribe"),
-            Confirm::Trash(_) => key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash"),
+            Confirm::Trash(_) | Confirm::TrashDownload { .. } => {
+                key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash")
+            }
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
             Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } | Confirm::RemoveFromSaved(_) => {
@@ -1683,11 +1690,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                     }
                     Some(DownloadState::Done(_)) => {
                         keys.push(key("Enter", "ver", "play"));
-                        keys.push(key(
-                            "x",
-                            "quitar de la lista (el archivo queda)",
-                            "take off the list (the file stays)",
-                        ));
+                        keys.push(key("x", "a la papelera (pide confirmar)", "move to trash (asks first)"));
                     }
                     Some(_) => keys.push(key("x", "quitar de la lista", "take off the list")),
                     None => {}
@@ -1840,6 +1843,14 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(truncate(&playlist.title, 20), Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
+        ]),
+        Confirm::TrashDownload { path, .. } => Line::from(vec![
+            Span::raw(lang.pick("¿Mandar a la papelera ", "Move to the trash ")),
+            Span::styled(
+                truncate(&path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()), 30),
+                Style::new().fg(MAGENTA).bold(),
+            ),
             Span::raw("?"),
         ]),
         Confirm::Trash(paths) => {
@@ -2570,6 +2581,20 @@ mod tests {
         assert_eq!(hint(&files, "x"), Some("los marcados a la papelera (pide confirmar)"));
         files.update(Action::Trash);
         assert_eq!(hint(&files, "s"), Some("sí, a la papelera"));
+    }
+
+    #[test]
+    fn downloads_hint_and_ask_before_the_trash() {
+        let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
+        let done = Download { id: 0, video: video("a"), state: DownloadState::Done("/v/a.mp4".into()) };
+        let mut s = with_items(Items::Downloads(vec![done]));
+        assert_eq!(hint(&s, "x"), Some("a la papelera (pide confirmar)"));
+        s.confirm = Some(Confirm::TrashDownload { id: 0, path: "/v/a.mp4".into() });
+        assert_eq!(hint(&s, "s"), Some("sí, a la papelera"));
+        s.update(Action::ToggleUiLang);
+        let screen = render(&s);
+        assert!(screen.contains("Move to the trash a.mp4?"), "{screen}");
+        assert_eq!(hint(&s, "x"), None, "the question owns the bar");
     }
 
     #[test]

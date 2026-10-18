@@ -457,3 +457,56 @@ polblancoo; this fork now carries its own name.
   4 forms, Tokyo Night, Catppuccin Latte in 2 and 4, Rose Pine), in
   `tests/fixtures/omarchy/`.
 
+## 0.8.4: `x` on Downloads moves the file to the trash (`downloads-trash`)
+
+Before, `x` on a finished download only took it off the list and the file
+stayed on disk. Now it works like `x` on My Videos / My Music:
+
+- **Finished download** → *"Move to the trash <file>?"* (*"¿Mandar a la
+  papelera <archivo>?"*); on *yes* that file goes to the system trash
+  (`trash` crate, recoverable from there) and the entry leaves the list and
+  `downloads.json`. Status: *"🗑 <file> moved to the trash (recover it from
+  the system trash)"*; the icon follows the icon set (🗑, Nerd Font
+  U+F1F8, ✕).
+- **Running download** → `x` still cancels it, as before.
+- **Failed / cancelled download** (no file) → `x` still just takes it off the
+  list, without asking.
+- **File already gone** → the entry leaves the list, saying so.
+- **Trash error** → shown (❌ …) and the entry stays.
+- Only the exact recorded path goes to the trash, and only a regular file:
+  never a folder or a symlink, no other files next to it
+  (`media::trash_file`). Nothing is touched if the same video is being
+  downloaded again.
+- Hint bar on a finished download: *"x move to trash (asks first)"*; the
+  right-click menu says *Move to Trash (Asks First)*. The help screen's
+  `x  Del` row already reads *"to the trash (asks y)"*.
+- `d` is still Download everywhere; My Videos / My Music are unchanged.
+
+### An older tubevibe opens a newer config.toml (`downloads-trash`)
+
+0.8.2 refused to start with a config.toml written by 0.8.3
+(*unknown field `omarchy_theme`*), and since the app never opened it
+could not update itself either. From now on:
+
+- **Unknown keys and sections are skipped, never fatal.** All
+  `deny_unknown_fields` are gone (config structs and `donate.toml`'s
+  wallets). Each `[section]` is read key by key (`config::section`, with
+  `serde_ignored`), so a key this version doesn't know (a typo, or a
+  setting from a newer tubevibe) is left out and the rest still apply.
+- **A wrong-type value for a known key** (`sidebar = 3`,
+  `mode = "fullscreen"`, `ui = 5`) falls back to that key's default
+  instead of stopping the app.
+- **Typos are still caught**: a status-bar line on start, e.g.
+  *"⚠ Ignored unknown setting ui.future_glow in config.toml (made by a newer
+  tubevibe?)"* / *"⚠ Se ignoró el ajuste desconocido ui.future_glow de
+  config.toml (¿de un tubevibe más nuevo?)"*, or *"⚠ Bad value for
+  player.max_height in config.toml: using the default"*, with *(+N more)*
+  when there are several. Each one also goes to the debug log
+  (`TUBEVIBE_DEBUG`).
+- **Settings → Edit config.toml** reloads the same way:
+  *"Settings reloaded · ⚠ Ignored unknown setting …"*.
+- Only a file that is not valid TOML still stops the app, naming the file.
+- Settings changed from the app (`config::set_value`, via `toml_edit`)
+  keep unknown keys and sections and their comments as they were.
+- Warnings are listed in file order (`toml` `preserve_order` feature).
+
