@@ -120,7 +120,8 @@ Every video opens in its own tab.
   (several per kind); music plays from the chosen song to the end of the list
 - **Descargas**: what you download with `d`, with live progress, speed and
   time left, and its size. `x` cancels one (its half-downloaded pieces are
-  deleted) or removes a finished one from the list (the file stays), `Enter`
+  deleted), moves a finished one's file to the system trash and takes it off
+  the list (after asking), or takes a failed one off the list, `Enter`
   plays the file. Quitting with downloads running asks
   first
 
@@ -262,7 +263,9 @@ In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
 `w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
 audio only. In **History** `x` removes the video; in YouTube's **Watch Later** and
 **playlists** `Ctrl+y` `x` removes it on YouTube (after asking), in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** `x` cancels
-the download (or forgets a finished one). In **My Videos**
+the download, or moves a finished one's file to the system trash after asking
+(only that file, never a folder or link; a file that is already gone just
+leaves the list). In **My Videos**
 and **My Music**: `space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
 In a video tab that is not playing yet (or closed), `Enter` or `space` plays it.

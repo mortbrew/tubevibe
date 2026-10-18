@@ -721,6 +721,12 @@ impl Runtime {
                     Action::Trashed(trash::delete_all(&paths).map(|()| paths).map_err(|e| e.to_string()))
                 });
             }
+            Effect::TrashDownload { id, path } => {
+                self.background(move || {
+                    let result = tubevibe::media::trash_file(&path);
+                    Action::DownloadTrashed { id, path, result }
+                });
+            }
             Effect::Comments { tab, token } => {
                 let hl = self.state.lang().as_str();
                 self.background(move || {

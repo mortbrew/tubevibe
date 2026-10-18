@@ -457,3 +457,28 @@ polblancoo; this fork now carries its own name.
   4 forms, Tokyo Night, Catppuccin Latte in 2 and 4, Rose Pine), in
   `tests/fixtures/omarchy/`.
 
+## 0.8.4: `x` on Downloads moves the file to the trash (`downloads-trash`)
+
+Before, `x` on a finished download only took it off the list and the file
+stayed on disk. Now it works like `x` on My Videos / My Music:
+
+- **Finished download** → *"Move to the trash <file>?"* (*"¿Mandar a la
+  papelera <archivo>?"*); on *yes* that file goes to the system trash
+  (`trash` crate, recoverable from there) and the entry leaves the list and
+  `downloads.json`. Status: *"🗑 <file> moved to the trash (recover it from
+  the system trash)"*; the icon follows the icon set (🗑, Nerd Font
+  U+F1F8, ✕).
+- **Running download** → `x` still cancels it, as before.
+- **Failed / cancelled download** (no file) → `x` still just takes it off the
+  list, without asking.
+- **File already gone** → the entry leaves the list, saying so.
+- **Trash error** → shown (❌ …) and the entry stays.
+- Only the exact recorded path goes to the trash, and only a regular file:
+  never a folder or a symlink, no other files next to it
+  (`media::trash_file`). Nothing is touched if the same video is being
+  downloaded again.
+- Hint bar on a finished download: *"x move to trash (asks first)"*; the
+  right-click menu says *Move to Trash (Asks First)*. The help screen's
+  `x  Del` row already reads *"to the trash (asks y)"*.
+- `d` is still Download everywhere; My Videos / My Music are unchanged.
+
