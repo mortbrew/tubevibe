@@ -510,7 +510,7 @@ could not update itself either. From now on:
   keep unknown keys and sections and their comments as they were.
 - Warnings are listed in file order (`toml` `preserve_order` feature).
 
-## Unreleased
+## 0.8.5: Downloads multi-select and missing files drop off (2026-10-18)
 
 ### Mark several downloads with `space` (`downloads-multi-select`)
 
