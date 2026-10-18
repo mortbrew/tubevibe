@@ -17,7 +17,7 @@ use crate::i18n::Lang;
 use crate::keymap::KeyContext;
 use crate::media::{LocalFile, MediaKind, parse_dirs};
 use crate::sponsorblock::Segment;
-use crate::update::Update;
+use crate::update::{Progress, Replace, Update};
 use crate::youtube::{Comment, HistoryPage, Items, Rating, SearchPage, Source, WATCH_LATER, Watch};
 
 /// Lists that are filtered afterwards ask YouTube for more videos.
@@ -599,6 +599,12 @@ pub enum Action {
     ToggleWatched,
     /// GitHub has a newer version (and how to get it here).
     UpdateFound(Update),
+    /// `U`: put the new version in place of this one.
+    SelfUpdate,
+    /// The self-update's download: percent done.
+    UpdateProgress(u8),
+    /// The self-update finished: the version now installed, or what failed.
+    SelfUpdated(Result<String, String>),
     /// Mark / unmark the selected local file and go to the next one.
     ToggleMark,
     /// Ask to move the marked files (or the selected one) to the trash.
@@ -734,6 +740,12 @@ pub enum Effect {
     Reopen(TabId, Playback),
     Close(TabId),
     Command(TabId, PlayerCommand),
+    /// Download the release archive at `url` and swap its program (which
+    /// must say it is `version`) in for the running one.
+    SelfUpdate {
+        url: String,
+        version: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -938,6 +950,8 @@ pub struct State {
     pub marked: HashSet<PathBuf>,
     /// A newer version, shown in "Acerca de".
     pub update: Option<Update>,
+    /// The self-update (`U`), once started.
+    pub self_update: Progress,
     /// Videos I watched, here or on YouTube.
     pub watched: HashSet<String>,
     /// The last system check.
@@ -1001,6 +1015,7 @@ impl State {
             context: None,
             marked: HashSet::new(),
             update: None,
+            self_update: Progress::Idle,
             watched: HashSet::new(),
             system: None,
             tabs: Vec::new(),
@@ -1435,9 +1450,31 @@ impl State {
                 }
             }
             Action::UpdateFound(update) => {
-                let (available, see) = (self.tr("disponible", "available"), self.tr("mirá Acerca de", "see About"));
+                let available = self.tr("disponible", "available");
+                let see = match update.replace {
+                    Replace::Ready(_) => self.tr("U la instala", "press U to update"),
+                    _ => self.tr("mirá Acerca de", "see About"),
+                };
                 self.status = format!("⬆ tubevibe {} {available} · {see}", update.version);
                 self.update = Some(update);
+            }
+            Action::SelfUpdate => return self.self_update(),
+            Action::UpdateProgress(percent) => {
+                if let (Progress::Downloading(_), Some(update)) = (&self.self_update, &self.update) {
+                    self.self_update = Progress::Downloading(percent);
+                    let updating = self.tr("Actualizando tubevibe a", "Updating tubevibe to");
+                    self.status = format!("⬇ {updating} {}… {percent}%", update.version);
+                }
+            }
+            Action::SelfUpdated(Ok(version)) => {
+                let restart = self.tr("reiniciá tubevibe para usarla", "restart tubevibe to use it");
+                self.status = format!("✅ tubevibe {version} {} · {restart}", self.tr("instalada", "installed"));
+                self.self_update = Progress::Done(version);
+            }
+            Action::SelfUpdated(Err(error)) => {
+                let failed = self.tr("No se pudo actualizar", "Could not update");
+                self.status = format!("❌ {failed}: {error}");
+                self.self_update = Progress::Failed(error);
             }
             Action::ToggleMark => return self.toggle_mark(),
             // Plain `x` no longer takes videos out of YouTube lists: `Ctrl+y x` does.
@@ -2927,6 +2964,66 @@ impl State {
         }
     }
 
+    /// `U`: start the self-update when a new version is out and this copy
+    /// can be replaced; otherwise say how to update it.
+    fn self_update(&mut self) -> Vec<Effect> {
+        match &self.self_update {
+            Progress::Downloading(_) => {
+                self.status = self.tr("⬇ Ya se está actualizando…", "⬇ Already updating…").into();
+                return Vec::new();
+            }
+            Progress::Done(version) => {
+                let restart = self.tr("reiniciá tubevibe para usarla", "restart tubevibe to use it");
+                self.status =
+                    format!("✅ tubevibe {version} {} · {restart}", self.tr("ya está instalada", "is installed"));
+                return Vec::new();
+            }
+            Progress::Idle | Progress::Failed(_) => {}
+        }
+        let Some(update) = &self.update else {
+            self.status = format!(
+                "{} {}",
+                self.tr("No hay una versión nueva · tubevibe", "No new version out · tubevibe"),
+                env!("CARGO_PKG_VERSION")
+            );
+            return Vec::new();
+        };
+        let see = self.tr("mirá Acerca de", "see About");
+        self.status = match &update.replace {
+            Replace::Ready(url) => {
+                let effect = Effect::SelfUpdate { url: url.clone(), version: update.version.clone() };
+                let updating = self.tr("Actualizando tubevibe a", "Updating tubevibe to");
+                self.status = format!("⬇ {updating} {}…", update.version);
+                self.self_update = Progress::Downloading(0);
+                return vec![effect];
+            }
+            Replace::FromSource => self
+                .tr(
+                    "Compilado desde el código: git pull && cargo build --release",
+                    "Built from source: run git pull && cargo build --release",
+                )
+                .into(),
+            Replace::Cargo => {
+                format!("{} · {see}", self.tr("Instalado con cargo install", "Installed with cargo install"))
+            }
+            Replace::Package => format!(
+                "{} · {see}",
+                self.tr(
+                    "Instalado con un paquete: actualizá el paquete",
+                    "Installed from a package: update the package"
+                )
+            ),
+            Replace::ReadOnly => format!(
+                "{} · {see}",
+                self.tr("No puedo escribir en la carpeta de tubevibe", "Can't write to tubevibe's folder")
+            ),
+            Replace::NoAsset => {
+                format!("{} · {see}", self.tr("No hay descarga para este sistema", "No download for this system"))
+            }
+        };
+        Vec::new()
+    }
+
     fn toggle_mark(&mut self) -> Vec<Effect> {
         let Some(path) = self.selected_file().map(|f| f.path.clone()) else { return Vec::new() };
         if !self.marked.remove(&path) {
@@ -3490,6 +3587,44 @@ mod tests {
         let mut config = Config::default();
         config.player.autoplay = true;
         State::new(config, Vec::new())
+    }
+
+    fn update_with(replace: Replace) -> Update {
+        Update { version: "9.9.9".into(), how: crate::update::Install::Command("curl … | tar xz".into()), replace }
+    }
+
+    #[test]
+    fn u_updates_in_place_when_it_can() {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        assert!(s.update(Action::SelfUpdate).is_empty(), "nothing new yet");
+        assert!(s.status.starts_with("No new version out"), "{}", s.status);
+        let url = "https://github.com/mortbrew/tubevibe/releases/download/v9.9.9/tubevibe-x86_64-linux.tar.gz";
+        s.update(Action::UpdateFound(update_with(Replace::Ready(url.into()))));
+        assert_eq!(s.update(Action::SelfUpdate), [Effect::SelfUpdate { url: url.into(), version: "9.9.9".into() }]);
+        assert_eq!(s.self_update, Progress::Downloading(0));
+        assert!(s.update(Action::SelfUpdate).is_empty(), "one at a time");
+        s.update(Action::UpdateProgress(42));
+        assert_eq!(s.status, "⬇ Updating tubevibe to 9.9.9… 42%");
+        s.update(Action::SelfUpdated(Err("download: timeout".into())));
+        assert_eq!(s.status, "❌ Could not update: download: timeout");
+        assert_eq!(s.update(Action::SelfUpdate).len(), 1, "after a failure, U tries again");
+        s.update(Action::SelfUpdated(Ok("9.9.9".into())));
+        assert!(s.status.contains("9.9.9 installed · restart tubevibe"), "{}", s.status);
+        assert!(s.update(Action::SelfUpdate).is_empty(), "already done");
+    }
+
+    #[test]
+    fn u_says_how_to_update_builds_it_cannot_replace() {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        s.update(Action::UpdateFound(update_with(Replace::FromSource)));
+        assert!(s.update(Action::SelfUpdate).is_empty());
+        assert_eq!(s.status, "Built from source: run git pull && cargo build --release");
+        s.update(Action::UpdateFound(update_with(Replace::Package)));
+        assert!(s.update(Action::SelfUpdate).is_empty());
+        assert!(s.status.contains("update the package"), "{}", s.status);
+        assert_eq!(s.self_update, Progress::Idle);
     }
 
     /// tubevibe's default: Enter opens the tab, Enter again plays.

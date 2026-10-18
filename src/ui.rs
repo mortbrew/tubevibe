@@ -20,7 +20,7 @@ use crate::i18n::Lang;
 use crate::media::{LocalFile, MediaKind};
 use crate::player::Info;
 use crate::sponsorblock::Segment;
-use crate::update::Install;
+use crate::update::{Install, Progress, Replace};
 #[cfg(test)]
 use crate::youtube::Watch;
 use crate::youtube::{Items, Rating, compact};
@@ -2048,6 +2048,45 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
             .fg(GREEN)
             .bold(),
         );
+        match &state.self_update {
+            Progress::Idle | Progress::Failed(_) if matches!(update.replace, Replace::Ready(_)) => {
+                lines.push(
+                    Line::from(lang.pick("Pulsá U para actualizar ahora", "Press U to Update Now")).fg(YELLOW).bold(),
+                );
+            }
+            Progress::Downloading(percent) => {
+                let text = lang.pick("Descargando…", "Downloading…");
+                lines.push(Line::from(format!("⬇ {text} {percent}%")).fg(YELLOW).bold());
+            }
+            Progress::Done(version) => {
+                let text =
+                    lang.pick("instalada · reiniciá tubevibe para usarla", "Installed · Restart tubevibe to Use It");
+                lines.push(Line::from(format!("✅ tubevibe {version} {text}")).fg(GREEN).bold());
+            }
+            _ => {}
+        }
+        if let Progress::Failed(error) = &state.self_update {
+            lines.push(
+                Line::from(format!("❌ {} {error}", lang.pick("No se pudo actualizar:", "Could Not Update:"))).fg(RED),
+            );
+        }
+        if let Some(why) = match update.replace {
+            Replace::FromSource => {
+                Some(lang.pick("Compilado desde el código: U no lo reemplaza", "Built From Source: U Won't Replace It"))
+            }
+            Replace::Cargo => Some(lang.pick("Instalado con cargo install", "Installed With cargo install")),
+            Replace::Package => Some(lang.pick(
+                "Instalado con un paquete: actualizalo con el paquete",
+                "Installed From a Package: Update It With the Package",
+            )),
+            Replace::ReadOnly => {
+                Some(lang.pick("La carpeta de tubevibe no se puede escribir", "tubevibe's Folder Isn't Writable"))
+            }
+            Replace::NoAsset => Some(lang.pick("No hay descarga para este sistema", "No Download for This System")),
+            Replace::Ready(_) => None,
+        } {
+            lines.push(Line::from(why).fg(MUTED));
+        }
         let (how, value) = match &update.how {
             Install::Command(command) => (lang.pick("Actualizá con:", "Update with:"), command),
             Install::Link(url) => (lang.pick("Bajá el instalador:", "Get the installer:"), url),
@@ -2976,6 +3015,7 @@ mod tests {
         let update = crate::update::Update {
             version: "9.9.9".into(),
             how: Install::Command("cargo install --locked --git https://github.com/mortbrew/tubevibe".into()),
+            replace: Replace::Package,
         };
         s.update(Action::UpdateFound(update));
         assert!(s.status.contains("⬆ tubevibe 9.9.9 disponible"), "{}", s.status);
@@ -2986,6 +3026,21 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("Hay una versión nueva: 9.9.9"), "{screen}");
         assert!(screen.contains("cargo install --locked --git https://github.com/mortbrew/tubevibe"), "{screen}");
+        assert!(screen.contains("Instalado con un paquete"), "{screen}");
+        assert!(!screen.contains("Pulsá U"), "a package is updated by its manager: {screen}");
+        let mut ready = s.update.clone().unwrap();
+        ready.replace = Replace::Ready("https://example.com/t.tar.gz".into());
+        s.update(Action::UpdateFound(ready));
+        s.update(Action::ToggleUiLang);
+        s.update(Action::OpenSection(about));
+        let screen = render(&s);
+        assert!(screen.contains("Press U to Update Now"), "{screen}");
+        s.update(Action::SelfUpdate);
+        s.update(Action::UpdateProgress(30));
+        assert!(render(&s).contains("⬇ Downloading… 30%"));
+        s.update(Action::SelfUpdated(Ok("9.9.9".into())));
+        let screen = render(&s);
+        assert!(screen.contains("tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
     }
 
     #[test]

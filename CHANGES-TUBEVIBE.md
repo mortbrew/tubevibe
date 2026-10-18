@@ -366,3 +366,37 @@ polblancoo; this fork now carries its own name.
   the cache folder is deleted. No release yet (404), rate limits (403, 429)
   and network errors stay silent. The setting reads *Look for new versions on
   startup* (*Buscar versiones nuevas al abrir*).
+
+## 0.8.2: tubevibe updates itself with `U` (`self-update`)
+
+- **`U`** (Shift+u, in lists and video tabs, not while typing) installs the
+  new version once the startup check has found one. The status bar says
+  *⬆ tubevibe X available · press U to update* and About shows
+  *Press U to Update Now*, then *⬇ Downloading… N%*, then
+  *✅ tubevibe X Installed · Restart tubevibe to Use It* (or
+  *❌ Could Not Update: …* with the reason; `U` tries again).
+- How: the release file for this machine (`tubevibe-x86_64-linux.tar.gz`,
+  `tubevibe-aarch64-linux.tar.gz`, `tubevibe-aarch64-macos.tar.gz`,
+  `tubevibe-x86_64-windows.zip`) is downloaded in a background thread
+  (`Effect::SelfUpdate` → `Action::UpdateProgress` / `Action::SelfUpdated`),
+  the program is taken out of it (`tubevibe/tubevibe`, or `tubevibe.exe`),
+  written next to the running one, run once with `--version` to check it
+  starts here and is the expected version, and then swapped in with the
+  `self-replace` crate (a rename on Linux and macOS, so a failure leaves the
+  old program; on Windows the running `.exe` is moved aside and cleaned up
+  when it exits). New dependencies: `self-replace`, `tar`, `flate2` (already
+  used by ureq), and `zip` with only deflate. Downloads use ureq's rustls, so
+  there is no OpenSSL in any release build.
+- **When `U` won't replace the program** it says why instead:
+  - run from a cargo `target/release/` or `target/debug/` folder:
+    *Built from source: run git pull && cargo build --release*;
+  - installed with `cargo install` (`~/.cargo/bin`): reinstall with cargo;
+  - installed by a package manager (`/usr/bin`, `/usr/lib`, `/nix/store`,
+    `/snap`, Homebrew): update the package (About keeps showing the command);
+  - the program's folder can't be written to, or the release has no file
+    for this system.
+- **`TUBEVIBE_FAKE_VERSION`** (e.g. `TUBEVIBE_FAKE_VERSION=0.0.1 tubevibe`)
+  makes the update check compare releases against that version instead of the
+  real one, to try the whole flow against the current release. It changes
+  nothing else.
+- Help (`Ctrl+y ?` → *Always*) and the README list `U`.

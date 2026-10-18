@@ -198,6 +198,16 @@ release is out; when there is one, the **About** page shows the command that
 updates it for how it was installed (Settings → *Look for new versions on
 startup* turns this off).
 
+**`U` updates tubevibe in place** (from 0.8.2): it downloads the new release
+file for your system (Linux x86_64 / aarch64, macOS Apple Silicon, Windows
+x86_64), checks that the new program runs, swaps it in for the running one
+and asks you to restart tubevibe. It only does this for a copy installed from
+a release file (for example the one-liner into `~/.local/bin`, or the
+Windows installer). A copy built from source (`target/release/`) says to run
+`git pull && cargo build --release` instead; one installed with
+`cargo install`, the `.deb` (`/usr/bin`) or Homebrew says to update it the
+same way; and a copy in a folder you can't write to says so.
+
 (The original tubetui has its own packages on its
 [website](https://polblancoo.github.io/tubetui/#descargas); those install
 tubetui, not this fork.)
@@ -232,6 +242,9 @@ plays / opens, the wheel scrolls lists and sets the volume over the video,
 a click on the video pauses (double click: fullscreen), a click on the
 progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
+
+`U` (Shift+u, no prefix) updates tubevibe when a new version is out (see
+[Install](#install)).
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
 `w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as

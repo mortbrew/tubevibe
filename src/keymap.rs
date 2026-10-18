@@ -185,6 +185,7 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         KeyCode::Char('d') => return Some(Action::Download),
         KeyCode::Char('a') => return Some(Action::Listen),
         KeyCode::Char('c') => return Some(Action::OpenChannel),
+        KeyCode::Char('U') => return Some(Action::SelfUpdate),
         _ => {}
     }
     match (ctx.in_tab, ctx.related) {
@@ -278,7 +279,19 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
         (lang.pick("Pestaña de video", "Video tab"), rows(IN_TAB, lang)),
         (lang.pick("Cuadro de búsqueda", "Search box"), rows(IN_SEARCH, lang)),
         ("Mouse", rows(WITH_MOUSE, lang)),
-        (lang.pick("Siempre", "Always"), vec![("Ctrl+c".into(), lang.pick("salir", "quit"))]),
+        (
+            lang.pick("Siempre", "Always"),
+            vec![
+                ("Ctrl+c".into(), lang.pick("salir", "quit")),
+                (
+                    "U".into(),
+                    lang.pick(
+                        "actualizar tubevibe (si hay versión nueva)",
+                        "update tubevibe (when a new version is out)",
+                    ),
+                ),
+            ],
+        ),
     ]
 }
 
@@ -392,6 +405,15 @@ mod tests {
             assert_eq!(map(char('a'), ctx), Some(Action::Listen));
             assert_eq!(map(char('c'), ctx), Some(Action::OpenChannel));
         }
+    }
+
+    #[test]
+    fn shift_u_updates_tubevibe_but_not_while_typing() {
+        for ctx in [LISTS, TAB] {
+            assert_eq!(map(char('U'), ctx), Some(Action::SelfUpdate));
+        }
+        assert_eq!(map(char('U'), TYPING), Some(Action::Input('U')));
+        assert!(help(Lang::En).iter().any(|(_, rows)| rows.iter().any(|(k, _)| k == "U")), "in the help");
     }
 
     #[test]
