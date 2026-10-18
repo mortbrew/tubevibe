@@ -94,10 +94,13 @@ fn main() -> anyhow::Result<()> {
         dbg(format!("copied {} → {}", old.display(), new.display()));
     }
     let config_path = cli.config.or_else(Config::default_path);
-    let mut config = match &config_path {
-        Some(path) => Config::load(path).inspect_err(|e| wait_on_error(e))?,
-        None => Config::default(),
+    let (mut config, config_warnings) = match &config_path {
+        Some(path) => Config::load_with_warnings(path).inspect_err(|e| wait_on_error(e))?,
+        None => (Config::default(), Vec::new()),
     };
+    for warning in &config_warnings {
+        dbg(format!("config.toml: {warning}"));
+    }
     // Until a language is chosen, follow the system's.
     config.ui.lang.get_or_insert_with(|| {
         let locale =
@@ -116,6 +119,8 @@ fn main() -> anyhow::Result<()> {
     log_panics(crash_log.clone());
 
     let mut runtime = Runtime::new(config, config_path, paths);
+    // Unknown or broken settings never stop the app: a line in the status bar.
+    runtime.state.update(Action::ConfigWarnings(config_warnings));
     let mut terminal = ratatui::init();
     let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle("tubevibe"));
     set_focus_reports(true);
@@ -1101,11 +1106,18 @@ impl Runtime {
         let status = std::process::Command::new(program).args(words).arg(&path).status();
         *terminal = ratatui::init();
         set_focus_reports(true);
-        let result = match status {
-            Ok(_) => Config::load(&path).map_err(|e| e.to_string()),
-            Err(e) => Err(format!("{} {program}: {e}", self.tr("no se pudo abrir", "could not open"))),
+        let (result, warnings) = match status {
+            Ok(_) => match Config::load_with_warnings(&path) {
+                Ok((config, warnings)) => (Ok(config), warnings),
+                Err(e) => (Err(e.to_string()), Vec::new()),
+            },
+            Err(e) => (Err(format!("{} {program}: {e}", self.tr("no se pudo abrir", "could not open"))), Vec::new()),
         };
+        for warning in &warnings {
+            dbg(format!("config.toml: {warning}"));
+        }
         self.send(Action::ConfigReloaded(result));
+        self.send(Action::ConfigWarnings(warnings));
         Ok(())
     }
 

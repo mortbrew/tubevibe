@@ -481,6 +481,8 @@ pub enum Action {
     CookiesImported(Result<String, String>),
     /// `config.toml` was edited outside the app.
     ConfigReloaded(Result<Config, String>),
+    /// Settings in `config.toml` that were skipped (unknown or broken).
+    ConfigWarnings(Vec<crate::config::ConfigWarning>),
     /// `l`: add the selected video to my YouTube Watch Later (if it is
     /// there already, just say so).
     AddLater,
@@ -1415,6 +1417,12 @@ impl State {
                 self.status = self.tr("Configuración recargada", "Settings reloaded").into();
                 if session_changed {
                     return vec![Effect::StartSession { force: true }];
+                }
+            }
+            Action::ConfigWarnings(warnings) => {
+                if let Some(warning) = crate::config::ConfigWarning::summary(&warnings, self.lang()) {
+                    let reloaded = self.tr("Configuración recargada", "Settings reloaded");
+                    self.status = if self.status == reloaded { format!("{reloaded} · {warning}") } else { warning };
                 }
             }
             Action::AddLater => return self.add_to_later(),
@@ -2460,7 +2468,8 @@ impl State {
             self.status =
                 format!("⚠ {}: {}", self.tr("Falta o hay que actualizar", "Missing or outdated"), lacking.join(", "));
             self.show_system();
-        } else if !on_screen && extras > 0 {
+        } else if !on_screen && extras > 0 && !self.status.starts_with('⚠') {
+            // (a config warning already showing matters more)
             let note = self.tr(
                 "opcionales sin instalar · Configuración → Revisar el sistema",
                 "optional tools not installed · Settings → Check the system",
@@ -5763,6 +5772,22 @@ mod tests {
         assert_eq!(s.update(Action::ConfigReloaded(Ok(edited))), [Effect::StartSession { force: true }]);
         s.update(Action::ConfigReloaded(Err("línea 3".into())));
         assert_eq!(s.status, "línea 3");
+    }
+
+    #[test]
+    fn config_warnings_show_in_the_status_bar() {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        s.status = "kept".into();
+        assert!(s.update(Action::ConfigWarnings(Vec::new())).is_empty());
+        assert_eq!(s.status, "kept", "nothing to say");
+        let (config, warnings) = Config::parse("[ui]\nlang = \"en\"\nfuture_glow = true\n").unwrap();
+        s.update(Action::ConfigWarnings(warnings.clone()));
+        assert_eq!(s.status, "⚠ Ignored unknown setting ui.future_glow in config.toml (made by a newer tubevibe?)");
+        // After Edit config.toml: it says both.
+        s.update(Action::ConfigReloaded(Ok(config)));
+        s.update(Action::ConfigWarnings(warnings));
+        assert!(s.status.starts_with("Settings reloaded · ⚠ Ignored unknown setting ui.future_glow"), "{}", s.status);
     }
 
     #[test]

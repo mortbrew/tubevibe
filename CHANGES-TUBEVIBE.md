@@ -482,3 +482,31 @@ stayed on disk. Now it works like `x` on My Videos / My Music:
   `x  Del` row already reads *"to the trash (asks y)"*.
 - `d` is still Download everywhere; My Videos / My Music are unchanged.
 
+### An older tubevibe opens a newer config.toml (`downloads-trash`)
+
+0.8.2 refused to start with a config.toml written by 0.8.3
+(*unknown field `omarchy_theme`*), and since the app never opened it
+could not update itself either. From now on:
+
+- **Unknown keys and sections are skipped, never fatal.** All
+  `deny_unknown_fields` are gone (config structs and `donate.toml`'s
+  wallets). Each `[section]` is read key by key (`config::section`, with
+  `serde_ignored`), so a key this version doesn't know (a typo, or a
+  setting from a newer tubevibe) is left out and the rest still apply.
+- **A wrong-type value for a known key** (`sidebar = 3`,
+  `mode = "fullscreen"`, `ui = 5`) falls back to that key's default
+  instead of stopping the app.
+- **Typos are still caught**: a status-bar line on start, e.g.
+  *"⚠ Ignored unknown setting ui.future_glow in config.toml (made by a newer
+  tubevibe?)"* / *"⚠ Se ignoró el ajuste desconocido ui.future_glow de
+  config.toml (¿de un tubevibe más nuevo?)"*, or *"⚠ Bad value for
+  player.max_height in config.toml: using the default"*, with *(+N more)*
+  when there are several. Each one also goes to the debug log
+  (`TUBEVIBE_DEBUG`).
+- **Settings → Edit config.toml** reloads the same way:
+  *"Settings reloaded · ⚠ Ignored unknown setting …"*.
+- Only a file that is not valid TOML still stops the app, naming the file.
+- Settings changed from the app (`config::set_value`, via `toml_edit`)
+  keep unknown keys and sections and their comments as they were.
+- Warnings are listed in file order (`toml` `preserve_order` feature).
+

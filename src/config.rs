@@ -1,7 +1,10 @@
 //! User configuration, read from `config.toml`.
 //!
 //! Every field has a default, so a missing file or a partial file is fine.
-//! Unknown keys are rejected to surface typos instead of silently ignoring them.
+//! Unknown keys and sections (a typo, or a setting from a newer tubevibe) and
+//! values of the wrong type are skipped with a [`ConfigWarning`] shown in the
+//! status bar: an older tubevibe still opens with a newer config. Only a file
+//! that is not valid TOML stops the app.
 //! Settings changed from the app are written back with [`set_value`], which
 //! keeps the user's comments and formatting.
 
@@ -12,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::i18n::{Lang, Text};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct Config {
     pub session: SessionConfig,
     pub player: PlayerConfig,
@@ -24,7 +27,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct MediaConfig {
     /// Folders with videos to play; empty means the system videos folder.
     pub video_dirs: Vec<String>,
@@ -33,7 +36,7 @@ pub struct MediaConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct SessionConfig {
     /// Where the YouTube login comes from, in yt-dlp `--cookies-from-browser`
     /// syntax: `BROWSER[+KEYRING][:PROFILE]`, e.g. `brave+GNOMEKEYRING:Default`.
@@ -51,7 +54,7 @@ pub struct SessionConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct PlayerConfig {
     pub mode: PlayerMode,
     /// Upper bound for the video height, e.g. 480, 720, 1080.
@@ -143,7 +146,7 @@ impl Language {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct UiConfig {
     pub sidebar: bool,
     pub max_tabs: usize,
@@ -175,7 +178,7 @@ pub struct UiConfig {
 
 /// Short animations, each one can be turned off.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct EffectsConfig {
     /// The menu and the welcome screen appear when the app starts.
     pub startup: bool,
@@ -249,7 +252,6 @@ pub fn language_name(code: &str, lang: Lang) -> String {
 
 /// A donation address, shown on the About page.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Wallet {
     pub network: String,
     pub address: String,
@@ -295,7 +297,7 @@ pub fn codec_name(codec: &str, lang: Lang) -> &str {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct SearchConfig {
     /// Videos fetched per list.
     pub results: u32,
@@ -304,7 +306,7 @@ pub struct SearchConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct DownloadConfig {
     /// Empty means the system videos folder (`~/Videos`).
     pub dir: String,
@@ -364,19 +366,121 @@ pub enum ConfigError {
     Write { path: PathBuf, reason: String },
 }
 
+/// Something in `config.toml` that was skipped instead of stopping the app.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigWarning {
+    /// `section.key` (or a whole section) this version does not know.
+    Unknown(String),
+    /// `section.key` with a value of the wrong type: its default is used.
+    BadValue { key: String, error: String },
+}
+
+impl ConfigWarning {
+    /// One line for the status bar: the first warning, and how many more.
+    pub fn summary(warnings: &[Self], lang: Lang) -> Option<String> {
+        let first = warnings.first()?;
+        let text = match first {
+            Self::Unknown(key) => format!(
+                "⚠ {}",
+                lang.pick(
+                    &format!("Se ignoró el ajuste desconocido {key} de config.toml (¿de un tubevibe más nuevo?)"),
+                    &format!("Ignored unknown setting {key} in config.toml (made by a newer tubevibe?)"),
+                )
+            ),
+            Self::BadValue { key, .. } => format!(
+                "⚠ {}",
+                lang.pick(
+                    &format!("Valor inválido en {key} de config.toml: se usa el predeterminado"),
+                    &format!("Bad value for {key} in config.toml: using the default"),
+                )
+            ),
+        };
+        Some(match warnings.len() - 1 {
+            0 => text,
+            more => format!("{text} (+{more} {})", lang.pick("más", "more")),
+        })
+    }
+}
+
+impl std::fmt::Display for ConfigWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown(key) => write!(f, "unknown setting {key} ignored"),
+            Self::BadValue { key, error } => write!(f, "bad value for {key} ({error}): default used"),
+        }
+    }
+}
+
+/// One `[section]`: each key is tried on its own, so an unknown or broken
+/// one is skipped (and reported) while the rest still apply.
+fn section<T: serde::de::DeserializeOwned + Default>(
+    name: &str,
+    value: toml::Value,
+    warnings: &mut Vec<ConfigWarning>,
+) -> T {
+    let toml::Value::Table(table) = value else {
+        warnings.push(ConfigWarning::BadValue { key: name.into(), error: "not a [section]".into() });
+        return T::default();
+    };
+    let mut good = toml::Table::new();
+    for (key, value) in table {
+        let path = format!("{name}.{key}");
+        let one = toml::Table::from_iter([(key.clone(), value.clone())]);
+        let mut unknown = false;
+        let tried: Result<T, toml::de::Error> = serde_ignored::deserialize(toml::Value::Table(one), |_| unknown = true);
+        match tried {
+            Ok(_) if unknown => warnings.push(ConfigWarning::Unknown(path)),
+            Ok(_) => {
+                good.insert(key, value);
+            }
+            Err(error) => {
+                warnings.push(ConfigWarning::BadValue { key: path, error: error.message().trim().to_owned() });
+            }
+        }
+    }
+    T::deserialize(toml::Value::Table(good)).unwrap_or_default()
+}
+
 impl Config {
+    /// Reads a config, skipping (without reporting) what it can't use.
     pub fn from_toml(text: &str) -> Result<Self, toml::de::Error> {
-        toml::from_str(text)
+        Self::parse(text).map(|(config, _)| config)
+    }
+
+    /// Reads a config and lists what was skipped; only invalid TOML fails.
+    pub fn parse(text: &str) -> Result<(Self, Vec<ConfigWarning>), toml::de::Error> {
+        let table: toml::Table = toml::from_str(text)?;
+        let mut warnings = Vec::new();
+        let mut c = Self::default();
+        for (name, value) in table {
+            let w = &mut warnings;
+            match name.as_str() {
+                "session" => c.session = section(&name, value, w),
+                "player" => c.player = section(&name, value, w),
+                "ui" => c.ui = section(&name, value, w),
+                "search" => c.search = section(&name, value, w),
+                "download" => c.download = section(&name, value, w),
+                "media" => c.media = section(&name, value, w),
+                "effects" => c.effects = section(&name, value, w),
+                _ => w.push(ConfigWarning::Unknown(name)),
+            }
+        }
+        Ok((c, warnings))
     }
 
     /// Loads `path`; a missing file yields the defaults.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
+        Self::load_with_warnings(path).map(|(config, _)| config)
+    }
+
+    /// Loads `path` and lists the settings that were skipped.
+    pub fn load_with_warnings(path: &Path) -> Result<(Self, Vec<ConfigWarning>), ConfigError> {
         let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((Self::default(), Vec::new())),
             Err(source) => return Err(ConfigError::Read { path: path.into(), source }),
         };
-        Self::from_toml(&text).map_err(|source| ConfigError::Parse { path: path.into(), source })
+        Self::parse(&text).map_err(|source| ConfigError::Parse { path: path.into(), source })
     }
 
     /// `~/.config/tubevibe/config.toml` on Linux, the platform equivalent elsewhere.
@@ -533,9 +637,89 @@ mod tests {
     }
 
     #[test]
-    fn typos_are_rejected() {
-        assert!(Config::from_toml("[player]\nmax_heigth = 480\n").is_err());
-        assert!(Config::from_toml("[player]\nmode = \"fullscreen\"\n").is_err());
+    fn typos_are_skipped_and_reported() {
+        let (c, w) = Config::parse("[player]\nmax_heigth = 480\nhwdec = false\n").unwrap();
+        assert_eq!(w, [ConfigWarning::Unknown("player.max_heigth".into())]);
+        assert_eq!(c.player.max_height, 720, "the typo is not applied");
+        assert!(!c.player.hwdec, "the rest still is");
+        let (c, w) = Config::parse("[player]\nmode = \"fullscreen\"\nmax_height = 480\n").unwrap();
+        assert!(matches!(&w[..], [ConfigWarning::BadValue { key, .. }] if key == "player.mode"), "{w:?}");
+        assert_eq!((c.player.mode, c.player.max_height), (PlayerMode::Window, 480));
+    }
+
+    #[test]
+    fn a_newer_config_still_opens() {
+        // What an older tubevibe sees in a config written by a newer one:
+        // a key it never heard of, a whole new section, and a new top-level key.
+        let text = "[ui]\nicons = \"nerd\"\nfuture_glow = true\n\n[future]\nlevel = 3\n\n[player]\nmax_height = 1080\n";
+        let (c, w) = Config::parse(&format!("version = 2\n{text}")).unwrap();
+        assert_eq!(c.ui.icons, IconSet::Nerd);
+        assert_eq!(c.player.max_height, 1080);
+        assert_eq!(
+            w,
+            [
+                ConfigWarning::Unknown("version".into()),
+                ConfigWarning::Unknown("ui.future_glow".into()),
+                ConfigWarning::Unknown("future".into()),
+            ]
+        );
+        assert_eq!(Config::from_toml(text).unwrap().ui.icons, IconSet::Nerd);
+        let path = temp_dir("newer").join("config.toml");
+        std::fs::write(&path, text).unwrap();
+        let (c, w) = Config::load_with_warnings(&path).unwrap();
+        assert_eq!((c.ui.icons, w.len()), (IconSet::Nerd, 2));
+    }
+
+    #[test]
+    fn wrong_types_fall_back_to_their_default() {
+        let (c, w) = Config::parse("[ui]\nsidebar = 3\nlang = \"klingon\"\nmouse = false\nplayer = 1\n").unwrap();
+        assert_eq!((c.ui.sidebar, c.ui.lang, c.ui.mouse), (true, None, false));
+        let keys: Vec<_> = w
+            .iter()
+            .map(|w| match w {
+                ConfigWarning::BadValue { key, .. } | ConfigWarning::Unknown(key) => key.as_str(),
+            })
+            .collect();
+        assert_eq!(keys, ["ui.sidebar", "ui.lang", "ui.player"]);
+        // A section that is not a table.
+        let (c, w) = Config::parse("ui = 5\n").unwrap();
+        assert_eq!(c, Config::default());
+        assert!(matches!(&w[..], [ConfigWarning::BadValue { key, .. }] if key == "ui"));
+    }
+
+    #[test]
+    fn warnings_read_as_one_status_line() {
+        let unknown = ConfigWarning::Unknown("ui.foo".into());
+        let bad = ConfigWarning::BadValue { key: "player.max_height".into(), error: "invalid type".into() };
+        assert_eq!(ConfigWarning::summary(&[], Lang::En), None);
+        assert_eq!(
+            ConfigWarning::summary(std::slice::from_ref(&unknown), Lang::En).unwrap(),
+            "⚠ Ignored unknown setting ui.foo in config.toml (made by a newer tubevibe?)"
+        );
+        assert_eq!(
+            ConfigWarning::summary(std::slice::from_ref(&unknown), Lang::Es).unwrap(),
+            "⚠ Se ignoró el ajuste desconocido ui.foo de config.toml (¿de un tubevibe más nuevo?)"
+        );
+        assert_eq!(
+            ConfigWarning::summary(&[bad, unknown], Lang::En).unwrap(),
+            "⚠ Bad value for player.max_height in config.toml: using the default (+1 more)"
+        );
+    }
+
+    #[test]
+    fn set_value_keeps_unknown_settings() {
+        let path = temp_dir("unknown").join("config.toml");
+        std::fs::write(&path, "[ui]\nfuture_glow = true\n\n[future]\nlevel = 3 # new\n").unwrap();
+        set_value(&path, "ui", "icons", "nerd").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("future_glow = true") && text.contains("[future]\nlevel = 3 # new"), "{text}");
+        assert_eq!(Config::from_toml(&text).unwrap().ui.icons, IconSet::Nerd);
+    }
+
+    #[test]
+    fn donations_ignore_unknown_wallet_fields() {
+        let wallets = parse_donations("[[wallet]]\nnetwork = \"BTC\"\naddress = \"bc1q\"\nlabel = \"new\"\n");
+        assert_eq!(wallets, [Wallet { network: "BTC".into(), address: "bc1q".into() }]);
     }
 
     #[test]
@@ -554,7 +738,7 @@ mod tests {
     #[test]
     fn invalid_file_reports_path() {
         let path = temp_dir("invalid").join("config.toml");
-        std::fs::write(&path, "[ui]\nsidebar = 3\n").unwrap();
+        std::fs::write(&path, "[ui\nsidebar = true\n").unwrap();
         let err = Config::load(&path).unwrap_err().to_string();
         assert!(err.contains("config.toml"), "{err}");
     }
