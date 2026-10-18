@@ -357,3 +357,9 @@ polblancoo; this fork now carries its own name.
 - **Donations**: About, README, `donate.toml` and the old website page (`docs/index.html`) say the addresses belong to
   polblancoo, the original tubetui developer, and that donations go to him,
   not to the tubevibe fork maintainer (mortbrew). The addresses are unchanged.
+- **Update check on every start**: GitHub is asked each time the app opens
+  (in the background, as before) instead of once a day, so a new release shows
+  up right away. Nothing is cached any more: the old `latest-release.txt` in
+  the cache folder is deleted. No release yet (404), rate limits (403, 429)
+  and network errors stay silent. The setting reads *Look for new versions on
+  startup* (*Buscar versiones nuevas al abrir*).

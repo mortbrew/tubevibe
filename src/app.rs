@@ -260,7 +260,7 @@ impl Setting {
             Self::HideShorts => ("Ocultar los Shorts", "Hide Shorts"),
             Self::NotifyNew => ("Avisar de videos nuevos de mis canales", "Tell me about new videos from my channels"),
             Self::FavoritesFirst => ("Primero mis canales más vistos", "My most watched channels first"),
-            Self::CheckUpdates => ("Buscar versiones nuevas (una vez por día)", "Look for new versions (once a day)"),
+            Self::CheckUpdates => ("Buscar versiones nuevas al abrir", "Look for new versions on startup"),
             Self::EditFile => ("Editar config.toml", "Edit config.toml"),
         };
         lang.pick(es, en)
