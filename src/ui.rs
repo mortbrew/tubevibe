@@ -81,6 +81,14 @@ pub struct Icons {
     pub muted: &'static str,
     /// A video already watched.
     pub watched: &'static str,
+    /// About: the latest version is installed (also: an update just installed).
+    pub up_to_date: &'static str,
+    /// A newer version is out.
+    pub update: &'static str,
+    /// The update is downloading.
+    pub downloading: &'static str,
+    /// The update failed.
+    pub failed: &'static str,
 }
 
 impl Icons {
@@ -116,6 +124,10 @@ const EMOJI: Icons = Icons {
     volume: "🔊",
     muted: "🔇",
     watched: "👀",
+    up_to_date: "✅",
+    update: "⬆",
+    downloading: "⬇",
+    failed: "❌",
 };
 
 const NERD: Icons = Icons {
@@ -159,6 +171,11 @@ const NERD: Icons = Icons {
     volume: "\u{f028}",
     muted: "\u{f026}",
     watched: "\u{f06e}",
+    // nf-fa-check_circle, arrow_circle_up, arrow_circle_down, times_circle.
+    up_to_date: "\u{f058}",
+    update: "\u{f0aa}",
+    downloading: "\u{f0ab}",
+    failed: "\u{f057}",
 };
 
 const UNICODE: Icons = Icons {
@@ -181,6 +198,10 @@ const UNICODE: Icons = Icons {
     volume: "♪",
     muted: "✕",
     watched: "◉",
+    up_to_date: "✔",
+    update: "↑",
+    downloading: "↓",
+    failed: "✘",
 };
 
 pub fn icons(set: IconSet) -> &'static Icons {
@@ -824,7 +845,7 @@ fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option
             label.push_str(&format!(" ({} ⬇)", state.downloading()));
         }
         if *section == Section::AcercaDe && state.update.is_some() {
-            label.push_str(" ⬆");
+            label.push_str(&format!(" {}", icons.update));
         }
         let selected = i == state.menu;
         let focused = selected && on_inicio && state.focus == Focus::Menu;
@@ -2048,7 +2069,8 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         lines.push(Line::from(""));
         lines.push(
             Line::from(format!(
-                "⬆ {} {}",
+                "{} {} {}",
+                icons.update,
                 lang.pick("Hay una versión nueva:", "A new version is out:"),
                 update.version
             ))
@@ -2058,7 +2080,7 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         // The Update Now button: focused with Tab (like a list), pressed with Enter.
         let ready = about_button_ready(state);
         let focused = state.active == 0 && state.focus == Focus::List;
-        let button = format!("  ⬆ {}  ", lang.pick("Actualizar Ahora", "Update Now"));
+        let button = format!("  {} {}  ", icons.update, lang.pick("Actualizar Ahora", "Update Now"));
         let style = match (ready, focused) {
             (true, true) => Style::new().fg(Color::Black).bg(GREEN).bold(),
             (true, false) => Style::new().fg(GREEN).bg(HIGHLIGHT).bold(),
@@ -2080,17 +2102,21 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         match &state.self_update {
             Progress::Downloading(percent) => {
                 let text = lang.pick("Descargando…", "Downloading…");
-                lines.push(Line::from(format!("⬇ {text} {percent}%")).fg(YELLOW).bold());
+                lines.push(Line::from(format!("{} {text} {percent}%", icons.downloading)).fg(YELLOW).bold());
             }
             Progress::Done(version) => {
                 let text =
                     lang.pick("instalada · reiniciá tubevibe para usarla", "Installed · Restart tubevibe to Use It");
-                lines.push(Line::from(format!("✅ tubevibe {version} {text}")).fg(GREEN).bold());
+                lines.push(Line::from(format!("{} tubevibe {version} {text}", icons.up_to_date)).fg(GREEN).bold());
             }
             Progress::Failed(error) => {
                 lines.push(
-                    Line::from(format!("❌ {} {error}", lang.pick("No se pudo actualizar:", "Could Not Update:")))
-                        .fg(RED),
+                    Line::from(format!(
+                        "{} {} {error}",
+                        icons.failed,
+                        lang.pick("No se pudo actualizar:", "Could Not Update:")
+                    ))
+                    .fg(RED),
                 );
             }
             Progress::Idle => {}
@@ -2113,9 +2139,10 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         } {
             lines.push(Line::from(why).fg(MUTED));
         }
-        lines.push(Line::from(""));
-        // By hand too, until the button has done it.
-        if !matches!(state.self_update, Progress::Done(_)) {
+        // By hand only where the button can't do it (or just failed to).
+        let by_hand = !matches!(update.replace, Replace::Ready(_)) || matches!(state.self_update, Progress::Failed(_));
+        if by_hand {
+            lines.push(Line::from(""));
             let (how, value) = match &update.how {
                 Install::Command(command) => (lang.pick("Actualizá con:", "Update with:"), command),
                 Install::Link(url) => (lang.pick("Bajá el instalador:", "Get the installer:"), url),
@@ -2129,6 +2156,10 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
                 .fg(MUTED),
             );
         }
+    } else if state.up_to_date {
+        lines.push(Line::from(""));
+        let text = lang.pick("Tenés la última versión", "You're on the Latest Version");
+        lines.push(Line::from(format!("{} {text}", icons.up_to_date)).fg(GREEN).bold());
     }
     let wallets = donations();
     if !wallets.is_empty() {
@@ -3059,12 +3090,13 @@ mod tests {
         s.update(Action::UpdateFound(update));
         assert!(s.status.contains("⬆ tubevibe 9.9.9 disponible"), "{}", s.status);
         let screen = render(&s);
-        assert!(screen.contains("Acerca de ⬆"), "{screen}");
+        assert!(screen.contains("Acerca de ↑"), "{screen}");
         let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();
         s.update(Action::OpenSection(about));
         let screen = render(&s);
-        assert!(screen.contains("Hay una versión nueva: 9.9.9"), "{screen}");
+        assert!(screen.contains("↑ Hay una versión nueva: 9.9.9"), "the icon set's arrow: {screen}");
         assert!(screen.contains("cargo install --locked --git https://github.com/mortbrew/tubevibe"), "{screen}");
+        assert!(screen.contains("Actualizá con:"), "greyed out: the command by hand stays: {screen}");
         assert!(screen.contains("Instalado con un paquete"), "{screen}");
         assert!(screen.contains("Actualizar Ahora"), "shown, but greyed out: {screen}");
         assert!(!about_button_ready(&s), "a package is updated by its manager");
@@ -3078,12 +3110,13 @@ mod tests {
         s.update(Action::OpenSection(about));
         assert_eq!(s.focus, Focus::List, "opening About selects the button");
         let screen = render(&s);
-        assert!(screen.contains("▶   ⬆ Update Now   ◀"), "focused: {screen}");
+        assert!(screen.contains("▶   ↑ Update Now   ◀"), "focused: {screen}");
+        assert!(!screen.contains("Update with:") && !screen.contains("Shift + drag"), "the button does it: {screen}");
         assert_eq!(hints(&s)[0], ("Enter".to_string(), "update now"));
         s.update(Action::ToggleFocus);
         assert_eq!(s.focus, Focus::Menu);
         let screen = render(&s);
-        assert!(!screen.contains("◀") && screen.contains("⬆ Update Now"), "{screen}");
+        assert!(!screen.contains("◀") && screen.contains("↑ Update Now"), "{screen}");
         assert!(screen.contains("(Tab to Select, Enter to Press)"), "{screen}");
         assert_eq!(hints(&s)[0], ("Tab".to_string(), "select Update Now"));
         s.update(Action::ToggleFocus);
@@ -3091,14 +3124,45 @@ mod tests {
             s.update(Action::Enter),
             [Effect::SelfUpdate { url: "https://example.com/t.tar.gz".into(), version: "9.9.9".into() }]
         );
+        s.update(Action::SelfUpdated(Err("download: timeout".into())));
+        let screen = render(&s);
+        assert!(screen.contains("✘ Could Not Update: download: timeout"), "{screen}");
+        assert!(screen.contains("Update with:"), "after a failure, by hand too: {screen}");
+        s.update(Action::Enter);
         s.update(Action::UpdateProgress(30));
         let screen = render(&s);
-        assert!(screen.contains("⬇ Downloading… 30%") && !screen.contains("◀"), "busy: {screen}");
+        assert!(screen.contains("↓ Downloading… 30%") && !screen.contains("◀"), "busy: {screen}");
         assert!(s.update(Action::Enter).is_empty(), "one at a time");
         s.update(Action::SelfUpdated(Ok("9.9.9".into())));
         let screen = render(&s);
-        assert!(screen.contains("tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
+        assert!(screen.contains("✔ tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
         assert!(!screen.contains("Update with:"), "no command once done: {screen}");
+    }
+
+    #[test]
+    fn about_says_up_to_date_only_once_github_confirmed_it() {
+        let mut s = state();
+        let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();
+        s.update(Action::OpenSection(about));
+        assert!(!render(&s).contains("última versión"), "still checking, or the check failed");
+        s.update(Action::UpToDate);
+        assert!(render(&s).contains("✔ Tenés la última versión"));
+        s.update(Action::ToggleUiLang);
+        s.update(Action::OpenSection(about));
+        assert!(render(&s).contains("✔ You're on the Latest Version"));
+        s.update(Action::UpdateFound(crate::update::Update {
+            version: "9.9.9".into(),
+            how: Install::Command("x".into()),
+            replace: Replace::Package,
+        }));
+        assert!(!render(&s).contains("Latest Version"), "a newer one wins");
+        // Every icon set has its own glyphs for the update lines.
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let i = icons(set);
+            assert!([i.up_to_date, i.update, i.downloading, i.failed].iter().all(|g| !g.is_empty()));
+        }
+        assert_eq!(icons(IconSet::Emoji).up_to_date, "✅");
+        assert_eq!(icons(IconSet::Nerd).up_to_date, "\u{f058}");
     }
 
     #[test]

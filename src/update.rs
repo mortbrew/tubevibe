@@ -72,16 +72,41 @@ pub enum Install {
     Link(String),
 }
 
-/// The newer release for this machine, if any. Anything that keeps GitHub
-/// from answering (no release yet, offline, rate limits) is no news.
-pub fn check() -> Option<Update> {
-    let (tag, assets) = fetch_latest().ok()??;
+/// What asking GitHub found out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Checked {
+    /// A newer release, and how to get it here.
+    Newer(Update),
+    /// GitHub's latest release is this version (or older): up to date.
+    Latest,
+    /// No answer worth telling: offline, no release yet, rate limited, or a
+    /// release whose tag isn't a version.
+    Unknown,
+}
+
+/// Is there a newer release for this machine? Anything that keeps GitHub
+/// from answering (no release yet, offline, rate limits) is `Unknown`.
+pub fn check() -> Checked {
+    let Ok(Some((tag, assets))) = fetch_latest() else { return Checked::Unknown };
+    let current = current_version();
     let exe = running_exe();
-    let mut update = update_for(&current_version(), &tag, &assets, &exe.display().to_string(), OS, ARCH)?;
-    if matches!(update.replace, Replace::Ready(_)) && !exe.parent().is_some_and(writable) {
-        update.replace = Replace::ReadOnly;
+    match update_for(&current, &tag, &assets, &exe.display().to_string(), OS, ARCH) {
+        Some(mut update) => {
+            if matches!(update.replace, Replace::Ready(_)) && !exe.parent().is_some_and(writable) {
+                update.replace = Replace::ReadOnly;
+            }
+            Checked::Newer(update)
+        }
+        None => latest_or_unknown(&current, &tag),
     }
-    Some(update)
+}
+
+/// No newer release: up to date when the tag really is a version.
+fn latest_or_unknown(current: &str, tag: &str) -> Checked {
+    match (version(tag), version(current)) {
+        (Some(latest), Some(mine)) if latest <= mine => Checked::Latest,
+        _ => Checked::Unknown,
+    }
 }
 
 /// The program running, with links followed (a Homebrew link → its Cellar).
@@ -461,6 +486,13 @@ mod tests {
         for name in names.into_iter().flatten() {
             assert!(script.contains(name), "{name} is not in install.sh");
         }
+    }
+
+    #[test]
+    fn up_to_date_only_on_a_real_version() {
+        assert_eq!(latest_or_unknown("0.8.2", "v0.8.2"), Checked::Latest);
+        assert_eq!(latest_or_unknown("0.8.2", "v0.8.1"), Checked::Latest, "a dev build ahead of the release");
+        assert_eq!(latest_or_unknown("0.8.2", "nightly"), Checked::Unknown);
     }
 
     #[test]

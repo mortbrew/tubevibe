@@ -405,3 +405,17 @@ polblancoo; this fork now carries its own name.
   nothing else.
 - The bottom bar shows *Enter update now* on the button and *Tab select
   Update Now* from the menu; the README describes the button.
+- **Up to date**: when the startup check confirms GitHub's latest release is
+  this version (or older), About shows *✅ You're on the Latest Version*
+  (*Tenés la última versión*) in green. Not while the check runs, and not when
+  it could not ask GitHub (offline, rate limited, no release): `update::check`
+  now answers `Newer`, `Latest` or `Unknown`.
+- **Icons**: About's update lines follow the icon set (new `Icons` entries
+  `up_to_date`, `update`, `downloading`, `failed`): emoji ✅ ⬆ ⬇ ❌, Nerd Font
+  check-circle / arrow-circle-up / arrow-circle-down / times-circle
+  (U+F058, U+F0AA, U+F0AB, U+F057), plain Unicode ✔ ↑ ↓ ✘. The ⬆ after
+  *About* in the menu does too.
+- **The command by hand** (*Update with: …* and the Shift + drag hint) only
+  shows when the button can't update this copy (built from source, package,
+  cargo, read-only folder, no file for this system), or right after the
+  button failed. When the button can do it, About doesn't show the command.

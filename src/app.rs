@@ -599,6 +599,8 @@ pub enum Action {
     ToggleWatched,
     /// GitHub has a newer version (and how to get it here).
     UpdateFound(Update),
+    /// GitHub's latest release is this version: nothing newer.
+    UpToDate,
     /// About's Update Now button: put the new version in place of this one.
     SelfUpdate,
     /// The self-update's download: percent done.
@@ -950,6 +952,9 @@ pub struct State {
     pub marked: HashSet<PathBuf>,
     /// A newer version, shown in "Acerca de".
     pub update: Option<Update>,
+    /// The startup check confirmed this is the latest release (not set while
+    /// it runs, nor when it could not ask GitHub).
+    pub up_to_date: bool,
     /// The self-update (About's Update Now), once started.
     pub self_update: Progress,
     /// Videos I watched, here or on YouTube.
@@ -1015,6 +1020,7 @@ impl State {
             context: None,
             marked: HashSet::new(),
             update: None,
+            up_to_date: false,
             self_update: Progress::Idle,
             watched: HashSet::new(),
             system: None,
@@ -1454,6 +1460,7 @@ impl State {
                 self.status = format!("⬆ tubevibe {} {available} · {see}", update.version);
                 self.update = Some(update);
             }
+            Action::UpToDate => self.up_to_date = self.update.is_none(),
             Action::SelfUpdate => return self.self_update(),
             Action::UpdateProgress(percent) => {
                 if let (Progress::Downloading(_), Some(update)) = (&self.self_update, &self.update) {
