@@ -549,3 +549,30 @@ could not update itself either. From now on:
 - My Videos / My Music already rescan their folders each time they are
   opened (now covered by a test).
 
+
+## Unreleased: Watch Later fails with a clear message, errors in English (`watch-later-null-fix`)
+
+- **Watch Later that YouTube won't hand over.** When yt-dlp can't read a
+  whole list with `--dump-single-json --ignore-errors`, it prints `null` on
+  stdout (exit 1) and the reason on stderr. tubevibe took the `null` as a
+  list and showed *"respuesta inesperada: invalid type: null, expected
+  struct FlatList"*. For Watch Later (`WL`) and Liked videos (`LL`) the
+  reason is *"YouTube said: The playlist does not exist."*: they only exist
+  for a login YouTube takes. Now:
+  - a `null` list with a failed run reports yt-dlp's own `ERROR:` line;
+  - for `WL`/`LL` it says *"YouTube returned no data for your Watch Later:
+    check that you're signed in (⚙ Settings → Log in with a browser)"*, and
+    counts as a stale login, so the browser's cookies are read again once
+    and the list retried before giving up;
+  - a `null` from a run that succeeded is an empty list, not an error.
+- **The failed section's own title.** A section opened from the menu that
+  fails to load now shows an empty list under its own title, not the
+  previous section's (Watch Later used to sit under *"My Recommendations ·
+  0"*). Reloading the list on screen still keeps it.
+- **Errors follow the language.** yt-dlp/YouTube errors were Spanish
+  whatever the language (*"no se pudo ejecutar yt-dlp"*, *"yt-dlp falló"*,
+  *"respuesta inesperada"*, *"sin sesión…"*, *"sin detalle"*, *"yt-dlp sin
+  salida"*). Also channel-search follower counts (*"1,2 M suscriptores"* →
+  *"1.2 M subscribers"*, views/likes numbers too), the startup *"no se
+  encontró la carpeta personal"* and the updater's *"respuesta de GitHub sin
+  versión"*.

@@ -2390,6 +2390,12 @@ impl State {
             Ok(items) => items,
             Err(error) => {
                 self.status = error;
+                // Opened from the menu: an empty list under its own title, not
+                // the last one's (that read as if it were the other section).
+                // Reloading the list shown keeps it.
+                if !pending.push && self.listing().is_none_or(|l| l.title != pending.title) {
+                    self.show(Listing::new(pending.title, Items::Videos(Vec::new()), pending.kind));
+                }
                 return Vec::new();
             }
         };
@@ -4677,6 +4683,19 @@ mod tests {
         s.update(Action::Loaded(id, Err("sin sesión".into())));
         assert_eq!(s.status, "sin sesión");
         assert_eq!(s.listing().unwrap().title, "Suscripciones");
+    }
+
+    #[test]
+    fn a_section_that_fails_to_load_shows_its_own_title_not_the_last_one() {
+        let mut s = with_videos(&["a"]);
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::VerDespues));
+        s.update(Action::Loaded(id, Err("YouTube returned no data".into())));
+        assert_eq!(s.status, "YouTube returned no data");
+        let listing = s.listing().unwrap();
+        assert_ne!(listing.title, "Suscripciones", "not the list from before");
+        assert_eq!(listing.kind, ListKind::Later);
+        assert!(listing.items.is_empty());
     }
 
     #[test]

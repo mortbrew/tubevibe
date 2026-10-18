@@ -641,10 +641,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     }
     let mut numbers = Vec::new();
     if let Some(views) = watch.and_then(|w| w.views) {
-        numbers.push(format!("{} {}", compact(views), lang.pick("vistas", "views")));
+        numbers.push(format!("{} {}", compact(views, lang), lang.pick("vistas", "views")));
     }
     if let Some(likes) = watch.and_then(|w| w.likes) {
-        numbers.push(format!("👍 {}", compact(likes)));
+        numbers.push(format!("👍 {}", compact(likes, lang)));
     }
     let mut when = vec![length_label(state, video)];
     if let Some(ts) = watch.and_then(|w| w.published).or(video.published) {

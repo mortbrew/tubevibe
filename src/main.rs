@@ -114,7 +114,9 @@ fn main() -> anyhow::Result<()> {
             let _ = config::set_value(path, "session", "cookies_file", config.session.cookies_file.as_str());
         }
     }
-    let paths = Paths::system().context("no se encontró la carpeta personal")?;
+    let lang = config.ui.lang.unwrap_or_default();
+    let paths =
+        Paths::system().context(lang.pick("no se encontró la carpeta personal", "couldn't find the home folder"))?;
     let crash_log = paths.cache.join("crash.log");
     log_panics(crash_log.clone());
 

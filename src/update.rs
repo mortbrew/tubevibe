@@ -139,7 +139,7 @@ fn fetch_latest() -> Result<Option<(String, Vec<String>)>, String> {
     };
     let text = reply.into_body().read_to_string().map_err(|e| e.to_string())?;
     let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    parse_latest(&json).map(Some).ok_or_else(|| "respuesta de GitHub sin versión".into())
+    parse_latest(&json).map(Some).ok_or_else(|| "GitHub replied without a version".into())
 }
 
 /// GitHub statuses that just mean "nothing to say": no release published
