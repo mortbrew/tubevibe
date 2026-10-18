@@ -395,6 +395,13 @@ mod tests {
     }
 
     #[test]
+    fn there_is_no_update_hotkey() {
+        // Updating is About's Update Now button, never a stray key.
+        assert_eq!(map(char('U'), LISTS), None);
+        assert_ne!(map(char('U'), TAB), Some(Action::SelfUpdate));
+    }
+
+    #[test]
     fn player_controls_in_tab() {
         assert_eq!(map(char(' '), TAB), Some(Action::TogglePause));
         assert_eq!(map(key(KeyCode::Left), TAB), Some(Action::Seek(-SEEK_SECONDS)));

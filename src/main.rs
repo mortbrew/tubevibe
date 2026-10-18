@@ -283,10 +283,14 @@ impl Runtime {
         if runtime.state.config.ui.check_updates {
             // Quietly: no network or no news means nothing to say.
             let tx = runtime.tx.clone();
-            std::thread::spawn(move || {
-                if let Some(update) = tubevibe::update::check() {
+            std::thread::spawn(move || match tubevibe::update::check() {
+                tubevibe::update::Checked::Newer(update) => {
                     let _ = tx.send(Action::UpdateFound(update));
                 }
+                tubevibe::update::Checked::Latest => {
+                    let _ = tx.send(Action::UpToDate);
+                }
+                tubevibe::update::Checked::Unknown => {}
             });
         }
         runtime
@@ -592,6 +596,19 @@ impl Runtime {
         // Signed-in requests answer in the language chosen now (it can change any time).
         youtube::set_language(self.state.lang());
         match effect {
+            Effect::SelfUpdate { url, version } => {
+                let tx = self.tx.clone();
+                std::thread::spawn(move || {
+                    let progress = |percent| {
+                        let _ = tx.send(Action::UpdateProgress(percent));
+                    };
+                    let result = tubevibe::update::install(&url, &version, progress);
+                    if let Err(e) = &result {
+                        dbg(format!("self-update from {url}: {e}"));
+                    }
+                    let _ = tx.send(Action::SelfUpdated(result.map(|_| version)));
+                });
+            }
             Effect::Load { id, source, limit } => {
                 let cookies = self.cookies.clone();
                 let reread = self.browser_spec().filter(|_| source.needs_login());

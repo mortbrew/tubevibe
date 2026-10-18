@@ -198,6 +198,19 @@ release is out; when there is one, the **About** page shows the command that
 updates it for how it was installed (Settings → *Look for new versions on
 startup* turns this off).
 
+**About → Update Now updates tubevibe in place** (from 0.8.2). Open
+**About** in the menu (the menu entry shows ⬆ when a new version is out):
+the **Update Now** button is selected (`Tab` moves between it and the menu)
+and `Enter` presses it. It downloads the new release file for your system
+(Linux x86_64 / aarch64, macOS Apple Silicon, Windows x86_64), checks that
+the new program runs, swaps it in for the running one and asks you to
+restart tubevibe. The button only works for a copy installed from a release
+file (for example the one-liner into `~/.local/bin`, or the Windows
+installer); otherwise it is greyed out and About says why: a copy built from
+source (`target/release/`) says to run `git pull && cargo build --release`;
+one installed with `cargo install`, the `.deb` (`/usr/bin`) or Homebrew says
+to update it the same way; and a copy in a folder you can't write to says so.
+
 (The original tubetui has its own packages on its
 [website](https://polblancoo.github.io/tubetui/#descargas); those install
 tubetui, not this fork.)

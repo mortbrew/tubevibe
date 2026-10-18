@@ -366,3 +366,56 @@ polblancoo; this fork now carries its own name.
   the cache folder is deleted. No release yet (404), rate limits (403, 429)
   and network errors stay silent. The setting reads *Look for new versions on
   startup* (*Buscar versiones nuevas al abrir*).
+
+## 0.8.2: tubevibe updates itself from About → Update Now (`self-update`)
+
+- **About → Update Now**: once the startup check has found a new version,
+  the status bar says *⬆ tubevibe X available · see About* and About shows
+  an **Update Now** button (*Actualizar Ahora*). Opening About selects it
+  (green, between ▶ ◀); `Tab` moves between it and the menu, and `Enter`
+  presses it. While it can't be pressed it is greyed out. After pressing:
+  *⬇ Downloading… N%* (also in the status bar), then
+  *✅ tubevibe X Installed · Restart tubevibe to Use It*, or
+  *❌ Could Not Update: …* with the reason (the button can be pressed again).
+  There is no global hotkey for it.
+- How: the release file for this machine (`tubevibe-x86_64-linux.tar.gz`,
+  `tubevibe-aarch64-linux.tar.gz`, `tubevibe-aarch64-macos.tar.gz`,
+  `tubevibe-x86_64-windows.zip`) is downloaded in a background thread
+  (`Effect::SelfUpdate` → `Action::UpdateProgress` / `Action::SelfUpdated`),
+  the program is taken out of it (`tubevibe/tubevibe`, or `tubevibe.exe`),
+  written next to the running one, run once with `--version` to check it
+  starts here and is the expected version, and then swapped in with the
+  `self-replace` crate (a rename on Linux and macOS, so a failure leaves the
+  old program; on Windows the running `.exe` is moved aside and cleaned up
+  when it exits). New dependencies: `self-replace`, `tar`, `flate2` (already
+  used by ureq), and `zip` with only deflate. Downloads use ureq's rustls, so
+  there is no OpenSSL in any release build.
+- **When the program can't be replaced** the button is greyed out and About
+  (and Enter on it) says why:
+  - run from a cargo `target/release/` or `target/debug/` folder:
+    *Built from source: run git pull && cargo build --release*;
+  - installed with `cargo install` (`~/.cargo/bin`): reinstall with cargo;
+  - installed by a package manager (`/usr/bin`, `/usr/lib`, `/nix/store`,
+    `/snap`, Homebrew): update the package (About keeps showing the command);
+  - the program's folder can't be written to, or the release has no file
+    for this system.
+- **`TUBEVIBE_FAKE_VERSION`** (e.g. `TUBEVIBE_FAKE_VERSION=0.0.1 tubevibe`)
+  makes the update check compare releases against that version instead of the
+  real one, to try the whole flow against the current release. It changes
+  nothing else.
+- The bottom bar shows *Enter update now* on the button and *Tab select
+  Update Now* from the menu; the README describes the button.
+- **Up to date**: when the startup check confirms GitHub's latest release is
+  this version (or older), About shows *✅ You're on the Latest Version*
+  (*Tenés la última versión*) in green. Not while the check runs, and not when
+  it could not ask GitHub (offline, rate limited, no release): `update::check`
+  now answers `Newer`, `Latest` or `Unknown`.
+- **Icons**: About's update lines follow the icon set (new `Icons` entries
+  `up_to_date`, `update`, `downloading`, `failed`): emoji ✅ ⬆ ⬇ ❌, Nerd Font
+  check-circle / arrow-circle-up / arrow-circle-down / times-circle
+  (U+F058, U+F0AA, U+F0AB, U+F057), plain Unicode ✔ ↑ ↓ ✘. The ⬆ after
+  *About* in the menu does too.
+- **The command by hand** (*Update with: …* and the Shift + drag hint) only
+  shows when the button can't update this copy (built from source, package,
+  cargo, read-only folder, no file for this system), or right after the
+  button failed. When the button can do it, About doesn't show the command.
