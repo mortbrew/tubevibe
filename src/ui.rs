@@ -101,7 +101,8 @@ const EMOJI: Icons = Icons {
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "📷", "🐭", "🎦", "✨", "🌊",
         "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
     ],
-    logo: "▶️",
+    // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
+    logo: "▶",
     tab: "🎬",
     live: "🔴",
     upcoming: "⏳",
@@ -802,9 +803,8 @@ fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option
     for (i, section) in Section::ALL.iter().enumerate() {
         if group != Some(section.group()) {
             group = Some(section.group());
-            if i > 0 {
-                items.push((ListItem::new(""), None));
-            }
+            // A blank row above every group, the first too (under the title).
+            items.push((ListItem::new(""), None));
             if section.group() != Group::App {
                 items.push((
                     ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()),
@@ -857,7 +857,7 @@ fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option
 fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
     let items = sidebar_items(state, icons).into_iter().map(|(item, _)| item);
     let title = Line::from(vec![
-        Span::raw(format!(" {} ", icons.logo)),
+        Span::styled(format!(" {} ", icons.logo), Style::new().fg(RED).bold()),
         Span::styled("tube", Style::new().fg(RED).bold()),
         Span::styled("vibe ", Style::new().fg(FG).bold()),
     ]);
@@ -1064,7 +1064,7 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::raw(format!("{}  ", icons.logo)),
+            Span::styled(format!("{} ", icons.logo), Style::new().fg(RED).bold()),
             Span::styled("tube", Style::new().fg(RED).bold()),
             Span::styled("vibe", Style::new().fg(FG).bold()),
         ]),
@@ -1999,6 +1999,14 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: false }), inner);
 }
 
+/// Whose the donation addresses are (they came with tubetui, unchanged).
+const DONATIONS_NOTE: (&str, &str) = (
+    "Estas direcciones son de polblancoo, el desarrollador original de tubetui: las donaciones van para él, \
+     no para el mantenedor del fork tubevibe (mortbrew).",
+    "These addresses belong to polblancoo, the original tubetui developer: donations go to him, \
+     not to the tubevibe fork maintainer (mortbrew).",
+);
+
 /// Version, links and the donation addresses from `donate.toml`.
 fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
     let lang = state.lang();
@@ -2006,7 +2014,7 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::raw(format!("{}  ", icons.logo)),
+            Span::styled(format!("{} ", icons.logo), Style::new().fg(RED).bold()),
             Span::styled("tube", Style::new().fg(RED).bold()),
             Span::styled("vibe", Style::new().fg(FG).bold()),
             Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), MUTED),
@@ -2056,12 +2064,13 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         lines.push(Line::from(""));
         lines.push(
             Line::from(lang.pick(
-                "☕ ¿Te sirve? Podés apoyar el proyecto con una donación:",
-                "☕ Find it useful? You can support the project with a donation:",
+                "☕ ¿Te sirve? Podés apoyar a polblancoo, el autor original de tubetui, con una donación:",
+                "☕ Find it useful? You can support polblancoo, tubetui's original author, with a donation:",
             ))
             .fg(YELLOW)
             .bold(),
         );
+        lines.push(Line::from(lang.pick(DONATIONS_NOTE.0, DONATIONS_NOTE.1)).fg(MUTED));
         for wallet in wallets {
             lines.push(Line::from(vec![
                 Span::styled(format!("{:>12}  ", wallet.network), MAGENTA),
@@ -2658,6 +2667,86 @@ mod tests {
         let (y, line) = screen.lines().enumerate().find(|(_, l)| l.contains(text)).unwrap();
         let x = line[..line.find(text).unwrap()].chars().count();
         (x as u16, y as u16)
+    }
+
+    #[test]
+    fn the_menu_starts_after_a_blank_row_and_clicks_hit_every_entry() {
+        let screen_area = Rect::new(0, 0, 130, 40);
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let mut s = state();
+            s.config.ui.icons = set;
+            let screen = render(&s);
+            let (_, title) = find(&screen, "tube");
+            let (_, header) = find(&screen, " YOUTUBE");
+            assert_eq!(header, title + 2, "one blank row between the title and YOUTUBE:\n{screen}");
+            let blank = screen.lines().nth(usize::from(title + 1)).unwrap();
+            assert!(blank.chars().take(20).all(|c| c == ' ' || c == '│'), "{blank:?}");
+            assert_eq!(spot(&s, None, screen_area, 3, title + 1), None, "the blank row is not an entry");
+            assert_eq!(spot(&s, None, screen_area, 3, header), None, "nor the header");
+            let icons = icons(set);
+            for (i, section) in Section::ALL.iter().enumerate() {
+                // The sidebar row that reads exactly `<icon> <label>`.
+                let entry = format!("{} {}", icons.section(*section), section.label(Lang::Es));
+                let y = screen
+                    .lines()
+                    .position(|l| {
+                        l.split('│').nth(1).is_some_and(|cell| {
+                            cell.trim_start_matches(['▌', ' ']).split_whitespace().collect::<Vec<_>>().join(" ")
+                                == entry
+                        })
+                    })
+                    .unwrap_or_else(|| panic!("{entry:?} not in the menu:\n{screen}"));
+                assert_eq!(spot(&s, None, screen_area, 3, y as u16), Some(Spot::Section(i)), "{section:?}");
+            }
+            assert!(screen.contains(Section::Salir.label(Lang::Es)), "the whole menu fits:\n{screen}");
+        }
+    }
+
+    #[test]
+    fn the_donation_addresses_say_whose_they_are() {
+        for lang in [Lang::Es, Lang::En] {
+            let mut s = state();
+            s.config.ui.lang = Some(lang);
+            let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();
+            s.update(Action::OpenSection(about));
+            let mut terminal = Terminal::new(TestBackend::new(200, 60)).unwrap();
+            terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+            let screen: String = terminal
+                .backend()
+                .buffer()
+                .content()
+                .chunks(200)
+                .map(|row| row.iter().map(|c| c.symbol()).collect::<String>() + "\n")
+                .collect();
+            let note = lang.pick(DONATIONS_NOTE.0, DONATIONS_NOTE.1);
+            assert!(screen.contains(note), "{screen}");
+            assert!(note.contains("polblancoo") && note.contains("mortbrew"));
+            let (note_y, _) = screen.lines().enumerate().find(|(_, l)| l.contains(note)).unwrap();
+            let (wallet_y, _) = screen.lines().enumerate().find(|(_, l)| l.contains(&donations()[0].address)).unwrap();
+            assert!(note_y < wallet_y, "said before the addresses");
+        }
+    }
+
+    #[test]
+    fn the_logo_is_a_plain_red_triangle() {
+        assert_eq!(EMOJI.logo, "▶");
+        assert!(!EMOJI.logo.contains('\u{FE0F}'));
+        let mut s = state();
+        s.config.ui.icons = IconSet::Emoji;
+        let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        // Sidebar title: `┌ ▶ tubevibe ┐`.
+        let row: String = (0..14).map(|x| buffer[(x, 0)].symbol().to_owned()).collect();
+        assert!(row.starts_with("┌ ▶ tubevibe "), "{row:?}");
+        assert_eq!(buffer[(2, 0)].fg, RED, "▶ in the red of \"tube\"");
+        assert_eq!(buffer[(4, 0)].fg, RED);
+        // Welcome screen and About: `▶ tubevibe`, one space.
+        let screen = render(&s);
+        assert!(screen.contains("▶ tubevibe"), "{screen}");
+        let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();
+        s.update(Action::OpenSection(about));
+        assert!(render(&s).contains(&format!("▶ tubevibe  v{}", env!("CARGO_PKG_VERSION"))));
     }
 
     #[test]

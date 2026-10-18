@@ -260,7 +260,7 @@ impl Setting {
             Self::HideShorts => ("Ocultar los Shorts", "Hide Shorts"),
             Self::NotifyNew => ("Avisar de videos nuevos de mis canales", "Tell me about new videos from my channels"),
             Self::FavoritesFirst => ("Primero mis canales más vistos", "My most watched channels first"),
-            Self::CheckUpdates => ("Buscar versiones nuevas (una vez por día)", "Look for new versions (once a day)"),
+            Self::CheckUpdates => ("Buscar versiones nuevas al abrir", "Look for new versions on startup"),
             Self::EditFile => ("Editar config.toml", "Edit config.toml"),
         };
         lang.pick(es, en)
@@ -1354,7 +1354,12 @@ impl State {
                 return self.set_session(String::new(), path);
             }
             Action::CookiesImported(Err(error)) | Action::ConfigReloaded(Err(error)) => self.status = error,
-            Action::ConfigReloaded(Ok(config)) => {
+            Action::ConfigReloaded(Ok(mut config)) => {
+                // A file with no `lang` follows the system, which was already
+                // worked out at start: keep it instead of falling back to Spanish.
+                if config.ui.lang.is_none() {
+                    config.ui.lang = self.config.ui.lang;
+                }
                 let session_changed = config.session != self.config.session;
                 self.config = config;
                 self.status = self.tr("Configuración recargada", "Settings reloaded").into();
@@ -5377,6 +5382,21 @@ mod tests {
         assert!(s.status.contains("1 canales"));
         assert!(s.update(Action::SessionReady { cookies: None, subs: Err("keyring".into()) }).is_empty());
         assert_eq!(s.status, "keyring");
+    }
+
+    #[test]
+    fn reloaded_config_without_lang_keeps_the_current_language() {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        let mut edited = s.config.clone();
+        edited.ui.lang = None;
+        s.update(Action::ConfigReloaded(Ok(edited)));
+        assert_eq!(s.lang(), Lang::En);
+        assert_eq!(s.status, "Settings reloaded");
+        let mut chosen = s.config.clone();
+        chosen.ui.lang = Some(Lang::Es);
+        s.update(Action::ConfigReloaded(Ok(chosen)));
+        assert_eq!(s.lang(), Lang::Es, "a lang written in the file wins");
     }
 
     #[test]

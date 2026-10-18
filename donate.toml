@@ -1,4 +1,10 @@
 # Donation addresses shown in tubevibe's "Acerca de / About" page.
+#
+# These addresses belong to polblancoo, the original tubetui developer:
+# donations go to him, not to the tubevibe fork maintainer (mortbrew).
+# Estas direcciones son de polblancoo, el desarrollador original de tubetui:
+# las donaciones van para él, no para el mantenedor del fork tubevibe (mortbrew).
+#
 # One [[wallet]] block per network; blocks with an empty address are hidden.
 # This file is compiled into the app, so every user sees the same addresses.
 

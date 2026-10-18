@@ -1,19 +1,16 @@
-//! Is there a newer release? Asks GitHub at most once a day and, when there
-//! is one, says how to get it on this machine: the package that fits how
-//! tubevibe was installed here, or building it from source when none does.
+//! Is there a newer release? Asks GitHub each time the app opens (in the
+//! background) and, when there is one, says how to get it on this machine:
+//! the package that fits how tubevibe was installed here, or building it from
+//! source when none does.
 
 use std::path::Path;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use serde_json::Value;
 
 pub const REPO: &str = "https://github.com/mortbrew/tubevibe";
 const LATEST: &str = "https://api.github.com/repos/mortbrew/tubevibe/releases/latest";
 const DOWNLOAD: &str = "https://github.com/mortbrew/tubevibe/releases/download";
-/// GitHub is asked again only after this long; meanwhile the answer is cached.
-const RECHECK: Duration = Duration::from_secs(24 * 3600);
-/// The cached "tag" when GitHub said there is no release yet.
-const NO_RELEASE: &str = "none";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Update {
@@ -30,32 +27,16 @@ pub enum Install {
     Link(String),
 }
 
-/// The newer release for this machine, if any. `cache` keeps the last
-/// answer (`<unix time> <tag> <asset> <asset>…`) so GitHub is asked once a day.
-/// No release published yet (GitHub's 404) is no news, not an error.
-pub fn check(cache: &Path) -> Result<Option<Update>, String> {
-    let cached = std::fs::read_to_string(cache).ok().and_then(|text| parse_cache(&text));
-    let fresh = cached.as_ref().is_some_and(|(at, ..)| now().saturating_sub(*at) < RECHECK.as_secs());
-    let (tag, assets) = match cached {
-        Some((_, tag, assets)) if fresh => (tag, assets),
-        _ => {
-            let (tag, assets) = fetch_latest()?.unwrap_or_else(|| (NO_RELEASE.to_owned(), Vec::new()));
-            let line = format!("{} {tag} {}", now(), assets.join(" "));
-            if let Some(dir) = cache.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let _ = std::fs::write(cache, line);
-            (tag, assets)
-        }
-    };
-    if tag == NO_RELEASE {
-        return Ok(None);
-    }
+/// The newer release for this machine, if any. Anything that keeps GitHub
+/// from answering (no release yet, offline, rate limits) is no news.
+pub fn check() -> Option<Update> {
+    let (tag, assets) = fetch_latest().ok()??;
     let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
-    Ok(update_for(env!("CARGO_PKG_VERSION"), &tag, &assets, &exe, std::env::consts::OS, std::env::consts::ARCH))
+    update_for(env!("CARGO_PKG_VERSION"), &tag, &assets, &exe, std::env::consts::OS, std::env::consts::ARCH)
 }
 
-/// The latest release's tag and files; `None` when there is none yet.
+/// The latest release's tag and files; `None` when GitHub has no answer for
+/// us: no release yet (404), or rate limited (403, 429).
 fn fetch_latest() -> Result<Option<(String, Vec<String>)>, String> {
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(10))).build().into();
     let reply = match agent
@@ -65,7 +46,7 @@ fn fetch_latest() -> Result<Option<(String, Vec<String>)>, String> {
         .call()
     {
         Ok(reply) => reply,
-        Err(ureq::Error::StatusCode(404)) => return Ok(None),
+        Err(ureq::Error::StatusCode(status)) if no_news(status) => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
     let text = reply.into_body().read_to_string().map_err(|e| e.to_string())?;
@@ -73,22 +54,17 @@ fn fetch_latest() -> Result<Option<(String, Vec<String>)>, String> {
     parse_latest(&json).map(Some).ok_or_else(|| "respuesta de GitHub sin versión".into())
 }
 
+/// GitHub statuses that just mean "nothing to say": no release published
+/// yet, or too many requests from this address for now.
+fn no_news(status: u16) -> bool {
+    matches!(status, 404 | 403 | 429)
+}
+
 /// Tag and asset names of GitHub's "latest release" answer.
 pub fn parse_latest(json: &Value) -> Option<(String, Vec<String>)> {
     let tag = json["tag_name"].as_str()?.to_owned();
     let assets = json["assets"].as_array()?.iter().filter_map(|a| a["name"].as_str().map(str::to_owned)).collect();
     Some((tag, assets))
-}
-
-fn parse_cache(text: &str) -> Option<(u64, String, Vec<String>)> {
-    let mut words = text.split_whitespace();
-    let at = words.next()?.parse().ok()?;
-    let tag = words.next()?.to_owned();
-    Some((at, tag, words.map(str::to_owned).collect()))
-}
-
-fn now() -> u64 {
-    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 /// `1.2.3` → `(1, 2, 3)`; a leading `v` and anything after `-` are ignored.
@@ -166,7 +142,7 @@ mod tests {
     }
 
     fn how(exe: &str, os: &str, arch: &str) -> Install {
-        update_for("0.8.0", "v0.9.0", &assets(), exe, os, arch).unwrap().how
+        update_for("0.8.1", "v0.9.0", &assets(), exe, os, arch).unwrap().how
     }
 
     fn cmd(text: &str) -> Install {
@@ -177,11 +153,10 @@ mod tests {
 
     #[test]
     fn only_newer_versions_count() {
-        assert_eq!(update_for("0.8.0", "v0.8.0", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        assert_eq!(update_for("0.8.0", "v0.7.7", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        assert_eq!(update_for("0.8.0", "garbage", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        assert_eq!(update_for("0.8.0", NO_RELEASE, &[], "/usr/bin/tubevibe", "linux", "x86_64"), None);
-        let update = update_for("0.8.0", "v0.10.0", &assets(), "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
+        assert_eq!(update_for("0.8.1", "v0.8.1", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        assert_eq!(update_for("0.8.1", "v0.7.7", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        assert_eq!(update_for("0.8.1", "garbage", &assets(), "/usr/bin/tubevibe", "linux", "x86_64"), None);
+        let update = update_for("0.8.1", "v0.10.0", &assets(), "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
         assert_eq!(update.version, "0.10.0", "numbers, not text: 10 > 8");
         assert!(version("1.2.3-beta") == Some((1, 2, 3)) && version("v2") == Some((2, 0, 0)));
     }
@@ -223,9 +198,9 @@ mod tests {
         assert_eq!(how("/usr/bin/tubevibe", "freebsd", "x86_64"), cmd(CARGO));
         // A release without the .deb: the tarball; without any file: build it.
         let only_tar = vec!["tubevibe-x86_64-linux.tar.gz".to_string()];
-        let update = update_for("0.8.0", "v0.9.0", &only_tar, "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
+        let update = update_for("0.8.1", "v0.9.0", &only_tar, "/usr/bin/tubevibe", "linux", "x86_64").unwrap();
         assert!(matches!(update.how, Install::Command(c) if c.contains("tar xz -C /usr/bin")));
-        let update = update_for("0.8.0", "v0.9.0", &[], "/home/u/.local/bin/tubevibe", "linux", "x86_64").unwrap();
+        let update = update_for("0.8.1", "v0.9.0", &[], "/home/u/.local/bin/tubevibe", "linux", "x86_64").unwrap();
         assert_eq!(update.how, cmd(CARGO));
     }
 
@@ -253,15 +228,11 @@ mod tests {
     }
 
     #[test]
-    fn reads_github_and_the_cache() {
+    fn reads_githubs_answer() {
         let json = serde_json::json!({ "tag_name": "v0.6.0", "assets": [{ "name": "a.deb" }, { "name": "b.zip" }] });
         assert_eq!(parse_latest(&json), Some(("v0.6.0".into(), vec!["a.deb".into(), "b.zip".into()])));
         assert_eq!(parse_latest(&serde_json::json!({ "message": "Not Found" })), None);
-        assert_eq!(
-            parse_cache("1700000000 v0.6.0 a.deb b.zip"),
-            Some((1_700_000_000, "v0.6.0".into(), vec!["a.deb".into(), "b.zip".into()]))
-        );
-        assert_eq!(parse_cache("1700000000 none "), Some((1_700_000_000, "none".into(), vec![])));
-        assert_eq!(parse_cache(""), None);
+        assert!(no_news(404) && no_news(403) && no_news(429), "no release, rate limits");
+        assert!(!no_news(500) && !no_news(200));
     }
 }

@@ -343,3 +343,26 @@ polblancoo; this fork now carries its own name.
   (`TUBEVIBE_BIN_DIR` to change it), or builds it with
   `cargo install --git https://github.com/mortbrew/tubevibe` where there is no
   release file for the machine (or with `TUBEVIBE_FROM_SOURCE=1`).
+
+## 0.8.1: red ▶ logo, a blank row above YOUTUBE, whose donations (`v0.8.1`)
+
+- **Fix: Spanish after Edit config.toml**: when the file has no `lang` line
+  (the app follows the system language), reloading it after editing
+  switched the whole app to Spanish. It now keeps the current language.
+- **Logo**: the menu title, the welcome screen and About show a plain ▶
+  (U+25B6, no emoji variation selector) in the same red as "tube", instead of
+  the orange ▶️ emoji. It is one cell wide everywhere, with one space after
+  it (`▶ tubevibe`). The Nerd Font logo is red too; the plain-Unicode set
+  already used ▶.
+- **Menu**: one blank row between the title and the YOUTUBE header, like the
+  ones between the other groups. Clicks still land on the right entry (the
+  click map is built from the same rows); the whole menu needs 27 rows.
+- **Donations**: About, README, `donate.toml` and the old website page (`docs/index.html`) say the addresses belong to
+  polblancoo, the original tubetui developer, and that donations go to him,
+  not to the tubevibe fork maintainer (mortbrew). The addresses are unchanged.
+- **Update check on every start**: GitHub is asked each time the app opens
+  (in the background, as before) instead of once a day, so a new release shows
+  up right away. Nothing is cached any more: the old `latest-release.txt` in
+  the cache folder is deleted. No release yet (404), rate limits (403, 429)
+  and network errors stay silent. The setting reads *Look for new versions on
+  startup* (*Buscar versiones nuevas al abrir*).

@@ -278,11 +278,13 @@ impl Runtime {
             let (manager, checks) = tubevibe::doctor::run();
             Action::SystemChecked(manager, checks)
         });
+        // Left by versions that asked GitHub once a day; it is asked on every start now.
+        let _ = std::fs::remove_file(runtime.paths.cache.join("latest-release.txt"));
         if runtime.state.config.ui.check_updates {
             // Quietly: no network or no news means nothing to say.
-            let (tx, cache) = (runtime.tx.clone(), runtime.paths.cache.join("latest-release.txt"));
+            let tx = runtime.tx.clone();
             std::thread::spawn(move || {
-                if let Ok(Some(update)) = tubevibe::update::check(&cache) {
+                if let Some(update) = tubevibe::update::check() {
                     let _ = tx.send(Action::UpdateFound(update));
                 }
             });

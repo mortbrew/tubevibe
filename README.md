@@ -193,8 +193,10 @@ cargo build --release
 ./target/release/tubevibe
 ```
 
-When a newer release is out, the **About** page shows the command that
-updates it for how it was installed (Settings → *Look for new versions*).
+Each time tubevibe opens it asks GitHub, in the background, whether a newer
+release is out; when there is one, the **About** page shows the command that
+updates it for how it was installed (Settings → *Look for new versions on
+startup* turns this off).
 
 (The original tubetui has its own packages on its
 [website](https://polblancoo.github.io/tubetui/#descargas); those install
@@ -303,7 +305,7 @@ lang = "en"              # en | es (unset: the system language)
 thumbnails = true        # thumbnail in the preview panel (kitty)
 mouse = true             # clicks and wheel; hold Shift to select text
 splash = true            # the tubevibe logo for a moment when it opens (any key skips it)
-check_updates = true     # once a day, tell me about new versions and how to install them here
+check_updates = true     # on startup, tell me about new versions and how to install them here
 hide_shorts = true       # leave Shorts out of every list
 hide_later = true        # leave my YouTube Watch Later videos out of My Recommendations
 notify_new = true        # check my subscriptions every 15 minutes and tell me about new videos
@@ -334,8 +336,14 @@ redraw and action is logged with its timing.
 
 ## Support
 
-If tubevibe is useful to you, the **About** page (Acerca de) lists donation
-addresses. They live in [`donate.toml`](donate.toml).
+The **About** page (Acerca de) lists donation addresses; they live in
+[`donate.toml`](donate.toml).
+
+> **These addresses belong to polblancoo, the original tubetui developer:
+> donations go to him, not to the tubevibe fork maintainer (mortbrew).**
+>
+> *Estas direcciones son de polblancoo, el desarrollador original de tubetui:
+> las donaciones van para él, no para el mantenedor del fork tubevibe (mortbrew).*
 
 ## Disclaimer
 
