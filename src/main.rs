@@ -544,6 +544,14 @@ impl Runtime {
         watcher.poll().map(Action::Palette)
     }
 
+    /// When Downloads opens (or right after a trash there): finished files
+    /// gone from disk drop off the list. Only the listed paths are looked at.
+    fn check_downloads(&self) -> Option<Action> {
+        let files = self.state.shown_download_files()?;
+        let missing: Vec<PathBuf> = files.into_iter().filter(|p| std::fs::symlink_metadata(p).is_err()).collect();
+        (!missing.is_empty()).then_some(Action::DownloadsChecked(missing))
+    }
+
     /// Checks my channels for new videos now and then, in the background.
     fn poll_subs(&mut self) {
         if Instant::now() < self.next_poll {
@@ -724,6 +732,23 @@ impl Runtime {
             Effect::Trash(paths) => {
                 self.background(move || {
                     Action::Trashed(trash::delete_all(&paths).map(|()| paths).map_err(|e| e.to_string()))
+                });
+            }
+            Effect::CheckDownloads => {
+                if let Some(action) = self.check_downloads() {
+                    self.send(action);
+                }
+            }
+            Effect::TrashDownloads { files, tally } => {
+                self.background(move || {
+                    let results = files
+                        .into_iter()
+                        .map(|(id, path)| {
+                            let result = tubevibe::media::trash_file(&path);
+                            (id, path, result)
+                        })
+                        .collect();
+                    Action::DownloadsTrashed { results, tally }
                 });
             }
             Effect::TrashDownload { id, path } => {
