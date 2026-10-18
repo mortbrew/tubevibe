@@ -136,6 +136,18 @@ Every video opens in its own tab.
 - Short animations when pages and dialogs open, each one can be turned off
 - An **About** page with links and how to support the project
 
+## Omarchy colour sync
+
+On [Omarchy](https://omarchy.org), tubevibe uses the colours of the current
+theme (Gruvbox, Catppuccin, Rose Pine, a light theme…) instead of its
+built-in Tokyo Night, and recolours itself within about 2 seconds when you run
+`omarchy theme set` or pick another theme. It reads the theme's `colors.toml`
+from `~/.local/state/omarchy/current/theme/` (Omarchy 4) or
+`~/.config/omarchy/current/theme/` (earlier versions), or the theme's
+`alacritty.toml` when an older theme has no `colors.toml`. Elsewhere, or when
+the file can't be read, it stays Tokyo Night. Settings → *Omarchy Theme
+Colors* (`[ui] omarchy_theme`) turns it off.
+
 ## Requirements
 
 - [`mpv`](https://mpv.io) and [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) in `PATH` (on Windows they are
@@ -314,6 +326,7 @@ music_dirs = ["~/Música", "/mnt/discos"]
 
 [ui]
 icons = "emoji"          # emoji | nerd | unicode
+omarchy_theme = true     # use the current Omarchy theme's colours (Tokyo Night when off or not on Omarchy)
 lang = "en"              # en | es (unset: the system language)
 thumbnails = true        # thumbnail in the preview panel (kitty)
 mouse = true             # clicks and wheel; hold Shift to select text

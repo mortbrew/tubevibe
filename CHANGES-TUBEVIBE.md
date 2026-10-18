@@ -419,3 +419,41 @@ polblancoo; this fork now carries its own name.
   shows when the button can't update this copy (built from source, package,
   cargo, read-only folder, no file for this system), or right after the
   button failed. When the button can do it, About doesn't show the command.
+
+## 0.8.3: Omarchy colour sync (`omarchy-colour-sync`)
+
+- **The Omarchy theme's colours**: on Omarchy, the interface takes the
+  colours of the current theme and follows `omarchy theme set` live (the
+  theme file is looked at every 2 seconds: a `stat`, read again only when its
+  path, inode, size or time changed). Not on Omarchy, or with a file that
+  can't be read: the built-in Tokyo Night, as before.
+- **Where Omarchy keeps the theme**: `~/.local/state/omarchy/current/theme/`
+  (Omarchy 4, a folder swapped on each switch; `$XDG_STATE_HOME` is honoured),
+  else `~/.config/omarchy/current/theme/` (Omarchy 3: a copy; Omarchy 2: a
+  symlink to the theme). In it, `colors.toml` is read: Omarchy 4's named
+  palette (`foreground`, `dark_foreground`, `selection`, `muted`, `accent`,
+  `red`…`magenta`, `bright_*`, `orange`) or Omarchy 3's `color0`–`color15`
+  with `foreground`/`background`/`selection_background`. Themes without it
+  (Omarchy 2) are read from `alacritty.toml` (`[colors.primary]`,
+  `[colors.normal]`, `[colors.bright]`).
+- **Roles**: text ← `bright_foreground`/`foreground`; secondary text ←
+  `dark_foreground` (alacritty `dim_foreground`); selected row ← `selection`;
+  dialog lines ← `muted`; blue, cyan, green, yellow, red, orange ← the same
+  names; magenta ← `bright_magenta`, purple ← `magenta`, teal ←
+  `bright_cyan`; animations fade from `background` and flash `accent`.
+  Missing or unreadable roles are mixed from foreground and background
+  (secondary text 45% of the way, the selected row 14%), and so are colours
+  that would be too faint (secondary text under 2:1 contrast, or a selection
+  that is louder than a row background, like Omarchy 3 Gruvbox's orange).
+  YouTube red stays red.
+- **How**: the screen is still drawn with the Tokyo Night colours (now
+  `theme::TOKYO_NIGHT`), and `theme::recolor` swaps each of them for the
+  theme's in the finished frame, before the animations. `State::palette`
+  holds the colours; `Action::Palette` sets them.
+- **Setting**: *Omarchy Theme Colors* (*Colores del tema de Omarchy*) in
+  Settings, `[ui] omarchy_theme = true` in config.toml (saved there when
+  changed in the app). Off: Tokyo Night right away.
+- Tests read real theme files from Omarchy (Gruvbox in its Omarchy 2, 3 and
+  4 forms, Tokyo Night, Catppuccin Latte in 2 and 4, Rose Pine), in
+  `tests/fixtures/omarchy/`.
+

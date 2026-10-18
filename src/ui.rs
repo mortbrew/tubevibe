@@ -20,6 +20,7 @@ use crate::i18n::Lang;
 use crate::media::{LocalFile, MediaKind};
 use crate::player::Info;
 use crate::sponsorblock::Segment;
+use crate::theme::{self, TOKYO_NIGHT};
 use crate::update::{Install, Progress, Replace};
 #[cfg(test)]
 use crate::youtube::Watch;
@@ -38,21 +39,24 @@ const FOLLOWERS_WIDTH: usize = 24;
 /// Width of the date column: `"10/10/26 hoy   "`.
 const DATE_WIDTH: usize = 14;
 
-// Tokyo Night.
-const FG: Color = Color::Rgb(192, 202, 245);
-const MUTED: Color = Color::Rgb(86, 95, 137);
-const HIGHLIGHT: Color = Color::Rgb(41, 46, 66);
+// Drawn in Tokyo Night; `theme::recolor` shows the frame in the Omarchy
+// theme's colours when colour sync is on.
+/// Text on a coloured background (the focused button).
+const BG: Color = TOKYO_NIGHT.background;
+const FG: Color = TOKYO_NIGHT.fg;
+const MUTED: Color = TOKYO_NIGHT.muted;
+const HIGHLIGHT: Color = TOKYO_NIGHT.highlight;
 /// Separator lines inside dialogs: visible but quieter than text.
-const LINE: Color = Color::Rgb(59, 66, 97);
-const BLUE: Color = Color::Rgb(122, 162, 247);
-const CYAN: Color = Color::Rgb(125, 207, 255);
-const MAGENTA: Color = Color::Rgb(187, 154, 247);
-const GREEN: Color = Color::Rgb(158, 206, 106);
-const ORANGE: Color = Color::Rgb(255, 158, 100);
-const YELLOW: Color = Color::Rgb(224, 175, 104);
-const RED: Color = Color::Rgb(247, 118, 142);
-const TEAL: Color = Color::Rgb(115, 218, 202);
-const PURPLE: Color = Color::Rgb(157, 124, 216);
+const LINE: Color = TOKYO_NIGHT.line;
+const BLUE: Color = TOKYO_NIGHT.blue;
+const CYAN: Color = TOKYO_NIGHT.cyan;
+const MAGENTA: Color = TOKYO_NIGHT.magenta;
+const GREEN: Color = TOKYO_NIGHT.green;
+const ORANGE: Color = TOKYO_NIGHT.orange;
+const YELLOW: Color = TOKYO_NIGHT.yellow;
+const RED: Color = TOKYO_NIGHT.red;
+const TEAL: Color = TOKYO_NIGHT.teal;
+const PURPLE: Color = TOKYO_NIGHT.purple;
 
 /// One colour per menu entry, in `Section::ALL` order.
 const SECTION_COLORS: [Color; 18] = [
@@ -64,7 +68,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 31],
+    pub settings: [&'static str; 32],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -106,8 +110,8 @@ const EMOJI: Icons = Icons {
         "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "📷", "🐭", "🎦", "✨", "🌊",
-        "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🎨", "📷", "🐭", "🎦", "✨",
+        "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -153,9 +157,9 @@ const NERD: Icons = Icons {
     ],
     settings: [
         "\u{f007}", "\u{f15b}", "\u{f021}", "\u{f08b}", "\u{f1ab}", "\u{f075}", "\u{f1de}", "\u{f008}", "\u{f025}",
-        "\u{f051}", "\u{f144}", "\u{f0ac}", "\u{f118}", "\u{f03e}", "\u{f245}", "\u{f04b}", "\u{f0d0}", "\u{f0e7}",
-        "\u{f0a1}", "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f017}", "\u{f10b}",
-        "\u{f0f3}", "\u{f005}", "\u{f01b}", "\u{f044}",
+        "\u{f051}", "\u{f144}", "\u{f0ac}", "\u{f118}", "\u{f1fc}", "\u{f03e}", "\u{f245}", "\u{f04b}", "\u{f0d0}",
+        "\u{f0e7}", "\u{f0a1}", "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f017}",
+        "\u{f10b}", "\u{f0f3}", "\u{f005}", "\u{f01b}", "\u{f044}",
     ],
     logo: "\u{f16a}",
     tab: "\u{f144}",
@@ -181,8 +185,8 @@ const NERD: Icons = Icons {
 const UNICODE: Icons = Icons {
     sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫", "▭",
-        "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "◐", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫",
+        "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -387,6 +391,11 @@ pub fn context_area(menu: &ContextMenu, screen: Rect) -> Rect {
 }
 
 pub fn draw(frame: &mut Frame, state: &State, view: &View) {
+    draw_screen(frame, state, view);
+    theme::recolor(frame.buffer_mut(), &state.palette);
+}
+
+fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
     let icons = icons(state.config.ui.icons);
     let lang = state.lang();
     if state.splash {
@@ -2082,7 +2091,7 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         let focused = state.active == 0 && state.focus == Focus::List;
         let button = format!("  {} {}  ", icons.update, lang.pick("Actualizar Ahora", "Update Now"));
         let style = match (ready, focused) {
-            (true, true) => Style::new().fg(Color::Black).bg(GREEN).bold(),
+            (true, true) => Style::new().fg(BG).bg(GREEN).bold(),
             (true, false) => Style::new().fg(GREEN).bg(HIGHLIGHT).bold(),
             (false, _) => Style::new().fg(MUTED).bg(HIGHLIGHT),
         };
@@ -3137,6 +3146,25 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("✔ tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
         assert!(!screen.contains("Update with:"), "no command once done: {screen}");
+    }
+
+    #[test]
+    fn the_screen_takes_the_omarchy_theme_colours() {
+        let colours = |state: &State| {
+            let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+            terminal.draw(|f| draw(f, state, &VIEW)).unwrap();
+            let buffer = terminal.backend().buffer();
+            buffer.content.iter().flat_map(|c| [c.fg, c.bg]).collect::<std::collections::HashSet<_>>()
+        };
+        let mut s = state();
+        let tokyo = colours(&s);
+        assert!(tokyo.contains(&FG) && tokyo.contains(&HIGHLIGHT));
+        let gruvbox = theme::parse_colors_toml(include_str!("../tests/fixtures/omarchy/gruvbox/colors.toml")).unwrap();
+        s.update(Action::Palette(gruvbox));
+        let shown = colours(&s);
+        assert!(shown.contains(&Color::Rgb(0xd4, 0xbe, 0x98)), "gruvbox text");
+        assert!(shown.contains(&Color::Rgb(0x50, 0x49, 0x45)), "gruvbox selection");
+        assert!(!shown.contains(&FG) && !shown.contains(&HIGHLIGHT), "no Tokyo Night left");
     }
 
     #[test]
