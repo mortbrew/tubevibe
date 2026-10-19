@@ -267,6 +267,15 @@ impl IconSet {
         }
     }
 
+    /// As the settings screen shows it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Emoji => "Emoji",
+            Self::Nerd => "Nerd Font",
+            Self::Unicode => "Unicode",
+        }
+    }
+
     /// Value as written in `config.toml`.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -279,15 +288,15 @@ impl IconSet {
 
 /// Subtitle / dubbing languages offered by the settings screen (any code works in the file).
 pub const LANGUAGES: [(&str, Text); 9] = [
-    ("es", Text::new("español", "Spanish")),
-    ("en", Text::new("inglés", "English")),
-    ("pt", Text::new("portugués", "Portuguese")),
-    ("fr", Text::new("francés", "French")),
-    ("it", Text::new("italiano", "Italian")),
-    ("de", Text::new("alemán", "German")),
-    ("ja", Text::new("japonés", "Japanese")),
-    ("ko", Text::new("coreano", "Korean")),
-    ("ru", Text::new("ruso", "Russian")),
+    ("es", Text::new("Español", "Spanish")),
+    ("en", Text::new("Inglés", "English")),
+    ("pt", Text::new("Portugués", "Portuguese")),
+    ("fr", Text::new("Francés", "French")),
+    ("it", Text::new("Italiano", "Italian")),
+    ("de", Text::new("Alemán", "German")),
+    ("ja", Text::new("Japonés", "Japanese")),
+    ("ko", Text::new("Coreano", "Korean")),
+    ("ru", Text::new("Ruso", "Russian")),
 ];
 
 pub fn next_language(code: &str) -> &'static str {
@@ -418,6 +427,24 @@ pub enum ConfigError {
     Parse { path: PathBuf, source: toml::de::Error },
     #[error("cannot update {path}: {reason}")]
     Write { path: PathBuf, reason: String },
+}
+
+impl ConfigError {
+    /// What the status bar says, in `lang` (the details come from the system
+    /// or the TOML reader, in English).
+    pub fn message(&self, lang: Lang) -> String {
+        match self {
+            Self::Read { path, source } => {
+                format!("{} {}: {source}", lang.pick("No se pudo leer", "Couldn't read"), path.display())
+            }
+            Self::Parse { path, source } => {
+                format!("{} {}: {source}", lang.pick("Configuración inválida en", "Invalid config in"), path.display())
+            }
+            Self::Write { path, reason } => {
+                format!("{} {}: {reason}", lang.pick("No se pudo guardar", "Couldn't save"), path.display())
+            }
+        }
+    }
 }
 
 /// Something in `config.toml` that was skipped instead of stopping the app.
@@ -580,6 +607,17 @@ pub(crate) fn temp_dir(name: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn errors_and_icon_names_follow_the_language() {
+        let error = ConfigError::Write { path: "/c/config.toml".into(), reason: "denied".into() };
+        assert_eq!(error.message(Lang::En), "Couldn't save /c/config.toml: denied");
+        assert_eq!(error.message(Lang::Es), "No se pudo guardar /c/config.toml: denied");
+        assert_eq!(
+            [IconSet::Emoji.label(), IconSet::Nerd.label(), IconSet::Unicode.label()],
+            ["Emoji", "Nerd Font", "Unicode"]
+        );
+    }
+
     use super::*;
 
     #[test]
@@ -660,7 +698,7 @@ mod tests {
         assert_eq!(next_language("es"), "en");
         assert_eq!(next_language("ru"), "es");
         assert_eq!(next_language("xx"), "es");
-        assert_eq!(language_name("pt", Lang::Es), "portugués (pt)");
+        assert_eq!(language_name("pt", Lang::Es), "Portugués (pt)");
         assert_eq!(language_name("pt", Lang::En), "Portuguese (pt)");
         assert_eq!(language_name("eu", Lang::En), "eu");
     }

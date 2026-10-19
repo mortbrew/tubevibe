@@ -314,11 +314,16 @@ pub fn clear_images() {
     let _ = out.flush();
 }
 
-/// Puts the terminal window itself in fullscreen, where the platform allows
-/// it (X11 with `wmctrl`; kitty and most terminals export `WINDOWID`).
+/// Puts the terminal window itself in fullscreen, for video drawn in the
+/// app: on Hyprland (Omarchy) through `hyprctl`, on X11 with `wmctrl`
+/// (kitty and most terminals export `WINDOWID`).
 pub fn set_window_fullscreen(on: bool) {
     // Inside a multiplexer the window holds more than this app.
     if in_multiplexer(|var| std::env::var(var).ok()) {
+        return;
+    }
+    if hyprland::running() {
+        std::thread::spawn(move || hyprland::terminal_fullscreen(on));
         return;
     }
     let Ok(window) = std::env::var("WINDOWID") else { return };
@@ -328,6 +333,101 @@ pub fn set_window_fullscreen(on: bool) {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+}
+
+/// Hyprland's own way to fullscreen a window: `hyprctl dispatch`, in the Lua
+/// form of current Hyprland, or the classic dispatchers of older ones.
+mod hyprland {
+    use std::process::{Command, Stdio};
+
+    use serde_json::Value;
+
+    pub fn running() -> bool {
+        std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty())
+    }
+
+    fn hyprctl(args: &[&str]) -> Option<String> {
+        let out = Command::new("hyprctl").args(args).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+    }
+
+    /// `(address, fullscreen)` of each window, by process id.
+    fn clients() -> Vec<(i64, String, bool)> {
+        let Some(json) = hyprctl(&["clients", "-j"]) else { return Vec::new() };
+        parse_clients(&json)
+    }
+
+    pub(super) fn parse_clients(json: &str) -> Vec<(i64, String, bool)> {
+        let Ok(Value::Array(clients)) = serde_json::from_str::<Value>(json) else { return Vec::new() };
+        clients
+            .iter()
+            .filter_map(|c| {
+                // An int (0 = no, 1 = maximized, 2 = fullscreen) or, before 0.42, a bool.
+                let fullscreen =
+                    c["fullscreen"].as_i64().map_or_else(|| c["fullscreen"].as_bool().unwrap_or(false), |f| f >= 2);
+                Some((c["pid"].as_i64()?, c["address"].as_str()?.to_owned(), fullscreen))
+            })
+            .collect()
+    }
+
+    pub(super) fn lua_dispatch(address: &str, on: bool) -> String {
+        let action = if on { "set" } else { "unset" };
+        format!(
+            "hl.dsp.window.fullscreen({{ mode = \"fullscreen\", action = \"{action}\", window = \"address:{address}\" }})"
+        )
+    }
+
+    fn dispatch_fullscreen(address: &str, on: bool) {
+        if hyprctl(&["dispatch", &lua_dispatch(address, on)]).is_some_and(|out| out.starts_with("ok")) {
+            return;
+        }
+        // Older Hyprland: the classic dispatchers act on the focused window.
+        let action = if on { "set" } else { "unset" };
+        let batch = format!("dispatch focuswindow address:{address} ; dispatch fullscreen 0 {action}");
+        let _ = hyprctl(&["--batch", &batch]);
+    }
+
+    /// mpv asked for fullscreen (or to leave it): if its window did not
+    /// follow, Hyprland is told directly.
+    pub fn ensure_fullscreen(pid: u32, on: bool) {
+        if !running() {
+            return;
+        }
+        let Some((_, address, now)) = clients().into_iter().find(|(p, ..)| *p == i64::from(pid)) else { return };
+        if now != on {
+            dispatch_fullscreen(&address, on);
+        }
+    }
+
+    /// Our process and its parents, up to the terminal that runs us.
+    fn ancestors() -> Vec<i64> {
+        let mut pids = vec![i64::from(std::process::id())];
+        while pids.len() < 32 {
+            let last = *pids.last().expect("not empty");
+            let Ok(stat) = std::fs::read_to_string(format!("/proc/{last}/stat")) else { break };
+            // `pid (name) state ppid …`: the name may hold spaces and parentheses.
+            let Some(ppid) = stat.rsplit_once(')').and_then(|(_, rest)| rest.split_whitespace().nth(1)?.parse().ok())
+            else {
+                break;
+            };
+            if ppid <= 1 {
+                break;
+            }
+            pids.push(ppid);
+        }
+        pids
+    }
+
+    /// The terminal window this app runs in, in or out of fullscreen.
+    pub fn terminal_fullscreen(on: bool) {
+        let clients = clients();
+        let window = ancestors().into_iter().find_map(|pid| clients.iter().find(|(p, ..)| *p == pid));
+        if let Some((_, address, now)) = window
+            && *now != on
+        {
+            dispatch_fullscreen(address, on);
+        }
+    }
 }
 
 /// Reopens `path` at `seconds`, so new format/subtitle options take effect.
@@ -388,6 +488,8 @@ fn set_property(name: &str, value: Value) -> Value {
 /// What the video tab shows about the playback, as mpv reports it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Info {
+    /// mpv's own window is in fullscreen (window mode).
+    pub fullscreen: bool,
     pub volume: Option<f64>,
     pub muted: bool,
     /// Height of the video being played.
@@ -414,7 +516,8 @@ impl Info {
 }
 
 /// Properties mpv reports to [`Info`] whenever they change.
-const OBSERVED: [&str; 10] = [
+const OBSERVED: [&str; 11] = [
+    "fullscreen",
     "volume",
     "mute",
     "height",
@@ -433,6 +536,7 @@ impl Info {
     fn apply(&mut self, name: &str, data: &Value) -> bool {
         let before = self.clone();
         match name {
+            "fullscreen" => self.fullscreen = data.as_bool().unwrap_or(false),
             "volume" => self.volume = data.as_f64(),
             "mute" => self.muted = data.as_bool().unwrap_or(false),
             "height" => self.height = data.as_i64(),
@@ -556,6 +660,17 @@ impl Player {
         }
         for line in command_lines(&self.config, self.mode, self.audio_only, self.cookies.as_deref(), command) {
             self.write(&line);
+        }
+        // mpv's own request works on X11 and Wayland alike; on Hyprland, make
+        // sure it took (the compositor has the last word).
+        if let PlayerCommand::Fullscreen(on) = command
+            && self.mode == Mode::Window
+        {
+            let pid = self.child.id();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(400));
+                hyprland::ensure_fullscreen(pid, on);
+            });
         }
         if matches!(
             command,
@@ -770,6 +885,22 @@ fn connect_stream(path: &str) -> std::io::Result<std::fs::File> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hyprland_clients_and_fullscreen_dispatch() {
+        let json = r#"[{"pid":10,"address":"0xa","fullscreen":2},{"pid":11,"address":"0xb","fullscreen":1},
+            {"pid":12,"address":"0xc","fullscreen":true},{"address":"0xd"}]"#;
+        assert_eq!(
+            hyprland::parse_clients(json),
+            [(10, "0xa".into(), true), (11, "0xb".into(), false), (12, "0xc".into(), true)]
+        );
+        assert!(hyprland::parse_clients("not json").is_empty());
+        assert_eq!(
+            hyprland::lua_dispatch("0xa", true),
+            r#"hl.dsp.window.fullscreen({ mode = "fullscreen", action = "set", window = "address:0xa" })"#
+        );
+        assert!(hyprland::lua_dispatch("0xa", false).contains(r#"action = "unset""#));
+    }
+
     use super::*;
 
     fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
@@ -823,9 +954,11 @@ mod tests {
         assert_eq!(info.chapter_title(), None, "before the first chapter");
         assert!(info.apply("demuxer-cache-time", &json!(60.2)));
         assert!(!info.apply("demuxer-cache-time", &json!(60.7)));
+        assert!(info.apply("fullscreen", &json!(true)), "mpv's own f in its window");
         assert_eq!(
             info,
             Info {
+                fullscreen: true,
                 volume: Some(85.0),
                 muted: true,
                 height: Some(480),

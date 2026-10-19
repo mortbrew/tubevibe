@@ -117,6 +117,12 @@ pub struct Icons {
     pub donate: &'static str,
     /// YouTube's AI summary: its heading in the preview and the video tab.
     pub summary: &'static str,
+    /// A row marked with Space (My Videos, My Music, Downloads). One cell.
+    pub marked: &'static str,
+    /// The login in use, in the list of browsers.
+    pub current: &'static str,
+    /// System Check: an optional tool that is not installed.
+    pub optional: &'static str,
 }
 
 impl Icons {
@@ -168,6 +174,9 @@ const EMOJI: Icons = Icons {
     waiting: "⏳",
     donate: "☕",
     summary: "✦",
+    marked: "✖",
+    current: "●",
+    optional: "➖",
 };
 
 const NERD: Icons = Icons {
@@ -261,6 +270,10 @@ const NERD: Icons = Icons {
     donate: "\u{f0f4}",
     // nf-md-creation: sparkles.
     summary: "\u{f0674}",
+    // nf-fa-times, circle, minus_circle.
+    marked: "\u{f00d}",
+    current: "\u{f111}",
+    optional: "\u{f056}",
 };
 
 const UNICODE: Icons = Icons {
@@ -300,6 +313,9 @@ const UNICODE: Icons = Icons {
     waiting: "◌",
     donate: "♥",
     summary: "✦",
+    marked: "✗",
+    current: "●",
+    optional: "·",
 };
 
 pub fn icons(set: IconSet) -> &'static Icons {
@@ -676,7 +692,7 @@ fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang, icon: 
         None => lang.pick(" · no disponible para este video", " · not available for this video"),
     };
     let heading = Line::from(vec![
-        Span::styled(format!("{icon} {}", lang.pick("Resumen IA", "AI summary")), Style::new().fg(BLUE).bold()),
+        Span::styled(format!("{icon} {}", lang.pick("Resumen IA", "AI Summary")), Style::new().fg(BLUE).bold()),
         Span::styled(note, MUTED),
     ]);
     let Some(text) = text else { return vec![Line::from(""), heading] };
@@ -741,7 +757,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         let note = format!(
             "{} {}",
             icons.audio,
-            lang.pick("Solo audio · a vuelve al video", "Sound only · a brings the video back")
+            lang.pick("Solo audio · a vuelve al video", "Audio Only · a brings the video back")
         );
         lines.push(Line::from(note).fg(TEAL));
     }
@@ -780,10 +796,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let related = tab.related_videos();
     let focused = tab.on_related && !related.is_empty();
     let title = match watch {
-        None => format!(" {} ", lang.pick("Buscando videos relacionados…", "Looking for related videos…")),
-        Some(_) if related.is_empty() => format!(" {} ", lang.pick("Sin videos relacionados", "No related videos")),
-        Some(_) if focused => format!(" {} · {} ", lang.pick("A continuación", "Up next"), related.len()),
-        Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up next"), related.len()),
+        None => format!(" {} ", lang.pick("Buscando videos relacionados…", "Looking for Related Videos…")),
+        Some(_) if related.is_empty() => format!(" {} ", lang.pick("Sin videos relacionados", "No Related Videos")),
+        Some(_) if focused => format!(" {} · {} ", lang.pick("A continuación", "Up Next"), related.len()),
+        Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up Next"), related.len()),
     };
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
     let list = List::new(related.iter().map(|v| video_row(state, icons, view, v)))
@@ -801,10 +817,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
 fn draw_comments(frame: &mut Frame, tab: &Tab, icons: &Icons, lang: Lang, area: Rect) {
     let title = match &tab.comments {
         None if tab.watch.is_none() || tab.watch.as_ref().is_some_and(|w| w.comments_token.is_some()) => {
-            format!(" {} ", lang.pick("Buscando comentarios…", "Looking for comments…"))
+            format!(" {} ", lang.pick("Buscando comentarios…", "Looking for Comments…"))
         }
-        None => format!(" {} ", lang.pick("Comentarios desactivados", "Comments are off")),
-        Some(c) if c.is_empty() => format!(" {} ", lang.pick("Sin comentarios", "No comments")),
+        None => format!(" {} ", lang.pick("Comentarios desactivados", "Comments Are Off")),
+        Some(c) if c.is_empty() => format!(" {} ", lang.pick("Sin comentarios", "No Comments")),
         Some(c) => format!(
             " {} {}/{} · PgUp PgDn ",
             lang.pick("Comentarios", "Comments"),
@@ -1129,20 +1145,20 @@ fn draw_inicio(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
                 Prompt::CookiesFile => Line::from(format!(
                     " {} {} ",
                     icons.setting(Setting::ImportCookies),
-                    lang.pick("Ruta del cookies.txt", "cookies.txt path")
+                    lang.pick("Ruta del cookies.txt", "cookies.txt Path")
                 )),
                 Prompt::DownloadDir => Line::from(format!(
                     " {} {} ",
                     icons.setting(Setting::DownloadDir),
-                    lang.pick("Carpeta de descargas", "Downloads folder")
+                    lang.pick("Carpeta de descargas", "Downloads Folder")
                 )),
                 Prompt::MediaDirs(kind) => {
                     let (icon, what) = match kind {
                         MediaKind::Video => {
-                            (icons.setting(Setting::VideoDirs), lang.pick("Carpetas de videos", "Video folders"))
+                            (icons.setting(Setting::VideoDirs), lang.pick("Carpetas de videos", "Video Folders"))
                         }
                         MediaKind::Music => {
-                            (icons.setting(Setting::MusicDirs), lang.pick("Carpetas de música", "Music folders"))
+                            (icons.setting(Setting::MusicDirs), lang.pick("Carpetas de música", "Music Folders"))
                         }
                     };
                     let how = lang.pick(
@@ -1154,7 +1170,7 @@ fn draw_inicio(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
                 Prompt::Topics => Line::from(format!(
                     " {} {} ",
                     icons.setting(Setting::DiscoverTopics),
-                    lang.pick("Temas de Descubrir, separados por coma", "Discover topics, comma separated")
+                    lang.pick("Temas de Descubrir, separados por coma", "Discover Topics, Comma Separated")
                 )),
             };
             frame.render_widget(Paragraph::new(state.query.as_str()).block(panel(title, CYAN)), input);
@@ -1217,7 +1233,7 @@ fn draw_cookies_help(frame: &mut Frame, area: Rect, lang: Lang) {
             YELLOW,
         ),
     ];
-    let title = lang.pick(" Importar sesión ", " Import login ");
+    let title = lang.pick(" Importar sesión ", " Import Login ");
     frame.render_widget(Paragraph::new(lines).block(panel(title, MUTED)), area);
 }
 
@@ -1242,8 +1258,8 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
         ))
         .fg(MUTED),
         Line::from(lang.pick(
-            "Ctrl+y ?  muestra todos los atajos explicados · Ctrl+y l  English",
-            "Ctrl+y ?  shows every shortcut, explained · Ctrl+y l  español",
+            "Ctrl+Y ?  muestra todos los atajos explicados · Ctrl+Y l  English",
+            "Ctrl+Y ?  shows every shortcut, explained · Ctrl+Y l  español",
         ))
         .fg(MUTED),
     ];
@@ -1288,12 +1304,14 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
             Items::Downloads(_) if !state.marked_download_ids().is_empty() => {
                 let marked = state.marked_download_ids().len();
                 let label = state.lang().pick("marcadas", "marked");
-                format!(" {} · {} · ✗ {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
+                let mark = icons.marked;
+                format!(" {} · {} · {mark} {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
             }
             Items::Files(files, _) if files.iter().any(|f| state.marked.contains(&f.path)) => {
                 let marked = files.iter().filter(|f| state.marked.contains(&f.path)).count();
                 let label = state.lang().pick("marcados", "marked");
-                format!(" {} · {} · ✗ {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
+                let mark = icons.marked;
+                format!(" {} · {} · {mark} {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
             }
             _ => format!(" {} · {} ", breadcrumb.join(" › "), listing.items.len()),
         },
@@ -1566,26 +1584,41 @@ fn size_line(state: &State, video: &Video) -> Option<Line<'static>> {
 
 fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) -> ListItem<'static> {
     const BAR: usize = 12;
+    let icons = icons(state.config.ui.icons);
     // The same mark as My Videos / My Music.
-    let mut spans = vec![Span::styled(if marked { "✗" } else { " " }, Style::new().fg(RED).bold())];
+    let mut spans = vec![Span::styled(if marked { icons.marked } else { " " }, Style::new().fg(RED).bold())];
+    // Every state's symbol takes two cells, whatever the icon set.
+    let symbol = |icon: &str| pad_cells(icon, 2);
     spans.extend(match &download.state {
         DownloadState::Running { permille, speed, eta } => {
             let done = usize::from(*permille) * BAR / 1000;
             vec![
-                Span::styled(format!(" ⇩ {:>5.1}% ", f64::from(*permille) / 10.0), Style::new().fg(YELLOW).bold()),
+                Span::styled(
+                    format!(" {}{:>5.1}% ", symbol(icons.downloading), f64::from(*permille) / 10.0),
+                    Style::new().fg(YELLOW).bold(),
+                ),
                 Span::styled("━".repeat(done), RED),
                 Span::styled("─".repeat(BAR - done), MUTED),
                 Span::styled(format!(" {speed:>10} {eta:>8}  "), MUTED),
             ]
         }
         DownloadState::Done(_) => {
-            vec![Span::styled(pad_cells(&format!(" ✓ {}", lang.pick("lista", "done")), 41), GREEN)]
+            vec![Span::styled(
+                pad_cells(&format!(" {}{}", symbol(icons.up_to_date), lang.pick("lista", "done")), 41),
+                GREEN,
+            )]
         }
         DownloadState::Failed(_) => {
-            vec![Span::styled(pad_cells(&format!(" ✗ {}", lang.pick("falló", "failed")), 41), RED)]
+            vec![Span::styled(
+                pad_cells(&format!(" {}{}", symbol(icons.failed), lang.pick("falló", "failed")), 41),
+                RED,
+            )]
         }
         DownloadState::Cancelled => {
-            vec![Span::styled(pad_cells(&format!(" ✕ {}", lang.pick("cancelada", "cancelled")), 41), MUTED)]
+            vec![Span::styled(
+                pad_cells(&format!(" {}{}", symbol(icons.stop), lang.pick("cancelada", "cancelled")), 41),
+                MUTED,
+            )]
         }
     });
     spans.push(Span::styled(download.video.title.clone(), FG));
@@ -1607,12 +1640,12 @@ fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) ->
 
 fn profile_row<'a>(state: &State, icons: &Icons, spec: &'a str) -> ListItem<'a> {
     let current = if spec == state.config.session.browser && state.config.session.cookies_file.is_empty() {
-        "● "
+        format!("{} ", icons.current)
     } else {
-        "  "
+        "  ".into()
     };
     let label = if spec.is_empty() {
-        state.lang().pick("Sin sesión", "Not logged in").to_owned()
+        state.lang().pick("Sin sesión", "Not Logged In").to_owned()
     } else {
         session::label(spec)
     };
@@ -1629,7 +1662,7 @@ fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: boo
         MediaKind::Music => icons.section(Section::MiMusica),
     };
     ListItem::new(Line::from(vec![
-        Span::styled(if marked { "✗" } else { " " }, Style::new().fg(RED).bold()),
+        Span::styled(if marked { icons.marked } else { " " }, Style::new().fg(RED).bold()),
         Span::raw(format!("{icon} ")),
         Span::styled(format!("{} ", pad(&file.folder, 28)), MAGENTA),
         Span::styled(file.name.as_str(), FG),
@@ -1684,8 +1717,8 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     let lang = state.lang();
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
-    // Global commands are two keys: Ctrl+y, let go, then the letter.
-    let all_keys = key("Ctrl+y + ?", "todos los atajos", "every shortcut");
+    // Global commands are two keys: Ctrl+Y, let go, then the letter.
+    let all_keys = key("Ctrl+Y ?", "todos los atajos", "every shortcut");
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
         key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
@@ -1709,17 +1742,17 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
             }
         };
-        vec![yes, key(lang.pick("otra tecla", "other key"), "no", "no")]
+        vec![yes, key(lang.pick("Otra tecla", "Other Key"), "no", "no")]
     } else if state.help {
-        vec![key(lang.pick("cualquier tecla", "any key"), "cerrar la ayuda", "close the help")]
+        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar la ayuda", "close the help")]
     } else if state.context.is_some() {
         vec![
             key("↑ ↓", "elegir", "choose"),
-            key(lang.pick("Enter / clic", "Enter / click"), "hacerlo", "do it"),
+            key(lang.pick("Enter / Clic", "Enter / Click"), "hacerlo", "do it"),
             key("Esc", "cerrar", "close"),
         ]
     } else if state.prefix {
-        let mut keys = vec![key("Ctrl+y +", "ahora la tecla:", "now the key:")];
+        let mut keys = vec![key("Ctrl+Y", "ahora la tecla:", "now the key:")];
         keys.extend(keymap::prefix_rows(lang));
         return keys;
     } else if let Some(prompt) = &state.prompt {
@@ -1736,18 +1769,18 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             key("l", "ver después tubevibe", "tubevibe Watch Later"),
             key("c", "canal", "channel"),
             if state.active_tab().is_some_and(|t| t.ended && !t.started) {
-                key("espacio", "reproducir", "play")
+                key(keymap::space(lang), "reproducir", "play")
             } else if state.active_tab().is_some_and(|t| t.ended) {
-                key("espacio", "volver a verlo", "play it again")
+                key(keymap::space(lang), "volver a verlo", "play it again")
             } else {
-                key("espacio", "pausa", "pause")
+                key(keymap::space(lang), "pausa", "pause")
             },
         ]
     } else if state.active_tab().is_some() {
         let mut keys = rows(keymap::IN_TAB);
-        keys.insert(1, key("Ctrl+y + x", "cerrar la pestaña", "close the tab"));
+        keys.insert(1, key("Ctrl+Y x", "cerrar la pestaña", "close the tab"));
         if state.related_shown().is_some() {
-            keys.insert(0, key("Tab", "A continuación", "Up next"));
+            keys.insert(0, key("Tab", "A continuación", "Up Next"));
         }
         if state.active_tab().is_some_and(|t| t.ended && !t.started) {
             keys.insert(0, key("Enter", "reproducir", "play"));
@@ -1774,7 +1807,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 },
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("l", "ver después tubevibe", "tubevibe Watch Later"),
-                key("a", "solo audio", "sound only"),
+                key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
                 key("d", "descargar", "download"),
@@ -1784,9 +1817,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
                 key("Enter", "ver", "play"),
-                key("Ctrl+y x", "quitar de la lista", "remove from the list"),
+                key("Ctrl+Y x", "quitar de la lista", "remove from the list"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("a", "solo audio", "sound only"),
+                key("a", "solo audio", "audio only"),
                 key("c", "canal", "channel"),
                 back,
             ],
@@ -1802,7 +1835,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 key("Enter", "ver", "play"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("l", "ver después tubevibe", "tubevibe Watch Later"),
-                key("a", "solo audio", "sound only"),
+                key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
                 key("d", "descargar", "download"),
@@ -1824,9 +1857,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 },
                 // Several files: mark them first, then `x` sends them all.
                 if state.marked_files().is_empty() {
-                    key(lang.pick("espacio", "space"), "marcar varios", "mark several")
+                    key(keymap::space(lang), "marcar varios", "mark several")
                 } else {
-                    key(lang.pick("espacio", "space"), "marcar / desmarcar", "mark / unmark")
+                    key(keymap::space(lang), "marcar / desmarcar", "mark / unmark")
                 },
                 if state.marked_files().is_empty() {
                     key("x", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
@@ -1836,7 +1869,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 back,
             ],
             Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
-                key(lang.pick("espacio", "space"), "marcar / desmarcar", "mark / unmark"),
+                key(keymap::space(lang), "marcar / desmarcar", "mark / unmark"),
                 key("x", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
                 back,
             ],
@@ -1855,7 +1888,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                     None => {}
                 }
                 if selected.is_some() {
-                    keys.push(key(lang.pick("espacio", "space"), "marcar varios", "mark several"));
+                    keys.push(key(keymap::space(lang), "marcar varios", "mark several"));
                 }
                 keys.push(back);
                 keys
@@ -1872,7 +1905,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     hints
 }
 
-/// As many hints as fit in the line, whole; the last one (`Ctrl+y + ?`, every
+/// As many hints as fit in the line, whole; the last one (`Ctrl+Y ?`, every
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, &str)], area: Rect) {
     let hint = |(key, description): &(String, &str)| {
@@ -1936,7 +1969,7 @@ fn draw_help(frame: &mut Frame, lang: Lang) {
     let area = help_area(frame.area(), lang);
     frame.render_widget(Clear, area);
     let title =
-        lang.pick(" ⌨  Atajos de teclado · cualquier tecla cierra ", " ⌨  Keyboard shortcuts · any key closes ");
+        lang.pick(" ⌨  Atajos de teclado · cualquier tecla cierra ", " ⌨  Keyboard Shortcuts · Any Key Closes ");
     let block = panel(title, MAGENTA);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -2151,7 +2184,8 @@ fn draw_context_menu(frame: &mut Frame, menu: &ContextMenu, lang: Lang) {
 /// What the system has and lacks, with the command that installs it.
 fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
     let lang = state.lang();
-    let title = format!(" {} ", lang.pick("Revisión del sistema", "System check"));
+    let icons = icons(state.config.ui.icons);
+    let title = format!(" {} ", lang.pick("Revisión del sistema", "System Check"));
     let block = panel(title, BLUE);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -2164,11 +2198,11 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
     let width = checks.iter().map(|c| c.tool.program().len()).max().unwrap_or(0) + 2;
     for check in checks {
         let (mark, color, note) = match (&check.found, check.outdated) {
-            (Some(_), false) => ("✓", GREEN, String::new()),
+            (Some(_), false) => (icons.up_to_date, GREEN, String::new()),
             (Some((keyring, _)), true) if check.tool == Tool::Keyring => {
                 let missing = if keyring.starts_with("KWALLET") { "kwallet-query" } else { "secretstorage" };
                 (
-                    "!",
+                    icons.warning,
                     YELLOW,
                     format!(
                         "{}: {missing}",
@@ -2176,15 +2210,20 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
                     ),
                 )
             }
-            (Some(_), true) => {
-                ("!", YELLOW, lang.pick("viejo: YouTube cambia seguido", "too old: YouTube changes often").into())
+            (Some(_), true) => (
+                icons.warning,
+                YELLOW,
+                lang.pick("viejo: YouTube cambia seguido", "too old: YouTube changes often").into(),
+            ),
+            (None, _) if check.tool.required() => {
+                (icons.failed, RED, lang.pick("falta · necesario", "missing · needed").into())
             }
-            (None, _) if check.tool.required() => ("✗", RED, lang.pick("falta · necesario", "missing · needed").into()),
-            (None, _) => ("·", MUTED, lang.pick("no está · opcional", "not installed · optional").into()),
+            (None, _) => (icons.optional, MUTED, lang.pick("no está · opcional", "not installed · optional").into()),
         };
         let version = check.found.as_ref().and_then(|(_, v)| v.clone()).unwrap_or_default();
         let mut row = vec![
-            Span::styled(format!("  {mark} "), Style::new().fg(color).bold()),
+            // Two cells for every mark, so the names line up in any icon set.
+            Span::styled(format!("  {} ", pad_cells(mark, 2)), Style::new().fg(color).bold()),
             Span::styled(pad(check.tool.program(), width), Style::new().fg(FG).bold()),
             Span::styled(pad(&version, 16), MUTED),
             Span::styled(check.tool.purpose().get(lang), FG),
@@ -2315,7 +2354,7 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
                 "Compilado desde el código: git pull && cargo build --release",
                 "Built From Source: Run git pull && cargo build --release",
             )),
-            Replace::Cargo => Some(lang.pick("Instalado con cargo install", "Installed With cargo install")),
+            Replace::Cargo => Some(lang.pick("Instalado con cargo install", "Installed with cargo install")),
             Replace::Package => Some(lang.pick(
                 "Instalado con un paquete: actualizalo con el paquete",
                 "Installed From a Package: Update It With the Package",
@@ -2672,7 +2711,7 @@ mod tests {
         }
         assert!(screen.contains("720p"));
         assert!(screen.contains("~/Videos"));
-        assert!(screen.contains("original + subtítulos"));
+        assert!(screen.contains("Original + subtítulos"));
     }
 
     #[test]
@@ -2759,15 +2798,15 @@ mod tests {
     #[test]
     fn hints_follow_the_context() {
         let mut s = state();
-        assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+y + ?"]);
+        assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+Y ?"]);
         s.update(Action::Prefix);
         assert!(hint_keys(&s).contains(&"b".to_string()) && hint_keys(&s).contains(&"0-9".to_string()));
         let tab = with_tab();
-        assert!(hint_keys(&tab).contains(&"espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
+        assert!(hint_keys(&tab).contains(&"Espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
         let list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(
             hint_keys(&list),
-            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+y + ?"],
+            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+Y ?"],
             "Inicio: a feed"
         );
         let mut search = state();
@@ -2780,14 +2819,14 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let mut s = state();
         s.update(Action::Prefix);
-        assert_eq!(hints(&s)[0].0, "Ctrl+y +", "says the key comes next");
+        assert_eq!(hints(&s)[0].0, "Ctrl+Y", "says the key comes next");
         let mut list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(hint(&list, "s"), Some("suscribirse"));
         list.subs.insert("UCa".into());
         assert_eq!(hint(&list, "s"), Some("desuscribirse (pide confirmar)"));
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
-        assert_eq!(hint(&files, "espacio"), Some("marcar varios"));
+        assert_eq!(hint(&files, "Espacio"), Some("marcar varios"));
         assert_eq!(hint(&files, "x"), Some("este a la papelera (pide confirmar)"));
         files.update(Action::ToggleMark);
         assert_eq!(hint(&files, "x"), Some("los marcados a la papelera (pide confirmar)"));
@@ -2801,8 +2840,8 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
         for kind in [MediaKind::Video, MediaKind::Music] {
             let s = with_items(Items::Files(vec![file("a")], kind));
-            assert_eq!(hint(&s, "espacio"), Some("marcar varios"), "{kind:?}");
-            assert!(render_sized(&s, &VIEW, 100).contains("espacio marcar varios"), "{kind:?} fits at 100 columns");
+            assert_eq!(hint(&s, "Espacio"), Some("marcar varios"), "{kind:?}");
+            assert!(render_sized(&s, &VIEW, 100).contains("Espacio marcar varios"), "{kind:?} fits at 100 columns");
         }
         let states = [
             DownloadState::Done("/v/a.mp4".into()),
@@ -2811,10 +2850,10 @@ mod tests {
         ];
         for state in states {
             let mut s = with_items(Items::Downloads(vec![Download { id: 0, video: video("a"), state }]));
-            assert_eq!(hint(&s, "espacio"), Some("marcar varios"));
+            assert_eq!(hint(&s, "Espacio"), Some("marcar varios"));
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
-            assert!(screen.contains("space mark several"), "{screen}");
+            assert!(screen.contains("Space mark several"), "{screen}");
             assert!(screen.contains("every shortcut"), "whole hints only, the last one kept");
         }
     }
@@ -2832,9 +2871,9 @@ mod tests {
         s.marked_downloads.extend([0, 2]);
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
-        assert_eq!(screen.matches("✗ ✓ done").count(), 2, "{screen}");
+        assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
         assert_eq!(hint(&s, "x"), Some("the marked ones: trash (asks first)"));
-        assert_eq!(hint(&s, "space"), Some("mark / unmark"));
+        assert_eq!(hint(&s, "Space"), Some("mark / unmark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
         assert!(render(&s).contains("Move 3 files to the trash?"));
@@ -2864,7 +2903,7 @@ mod tests {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
         assert!(screen.contains("w ver después YouTube"), "{screen}");
         assert!(screen.contains("l ver después tubevibe"), "{screen}");
-        assert!(screen.contains("Ctrl+y + ? todos los atajos"));
+        assert!(screen.contains("Ctrl+Y ? todos los atajos"));
     }
 
     #[test]
@@ -2883,7 +2922,7 @@ mod tests {
         s.config.session.browser = "brave:Default".into();
         let screen = render(&s);
         assert!(screen.contains("brave · Default"), "{screen}");
-        assert!(screen.contains("original + subtítulos"));
+        assert!(screen.contains("Original + subtítulos"));
     }
 
     #[test]
@@ -2955,7 +2994,7 @@ mod tests {
         }
         assert!(!screen.contains("Ver después"), "{screen}");
         s.update(Action::ToggleHelp);
-        assert!(render(&s).contains("Keyboard shortcuts"));
+        assert!(render(&s).contains("Keyboard Shortcuts"));
     }
 
     #[test]
@@ -2975,8 +3014,8 @@ mod tests {
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("Ctrl+y + ? todos los atajos"), "{line}");
-        assert!(line.contains("espacio pausa"), "{line}");
+        assert!(line.contains("Ctrl+Y ? todos los atajos"), "{line}");
+        assert!(line.contains("Espacio pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
 
@@ -3345,9 +3384,9 @@ mod tests {
         assert_eq!(text(&lines(9))[2..], ["uno dos", "tres", "cuatro", "cinco", "seis"]);
         assert_eq!(text(&lines(4))[2..], ["uno dos", "tres…"]);
         assert_eq!(text(&lines(4))[0], "", "a blank line above the heading");
-        assert!(text(&lines(4))[1].starts_with("✦ AI summary"));
+        assert!(text(&lines(4))[1].starts_with("✦ AI Summary"));
         let none = summary_lines(None, 40, 9, Lang::En, "✦");
-        assert_eq!(text(&none), ["", "✦ AI summary · not available for this video"]);
+        assert_eq!(text(&none), ["", "✦ AI Summary · not available for this video"]);
         assert!(summary_lines(None, 40, 1, Lang::En, "✦").is_empty());
     }
 
@@ -3754,14 +3793,14 @@ mod tests {
         s.update(Action::SystemChecked(Manager::Apt, vec![missing, old, fine, keyring]));
         let screen = render(&s);
         for text in [
-            "✗ mpv",
+            "✘  mpv",
             "falta · necesario",
             "sudo apt install mpv",
-            "! yt-dlp",
+            "△  yt-dlp",
             "2024.04.09",
             "pipx install yt-dlp",
-            "✓ kitty",
-            "! keyring",
+            "✔  kitty",
+            "△  keyring",
             "falta: secretstorage",
             "pipx inject yt-dlp secretstorage",
             "Comandos para: apt",

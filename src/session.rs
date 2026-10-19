@@ -318,9 +318,9 @@ fn cookie_error(spec: &str, stderr: &str, lang: Lang) -> Option<String> {
     let error = if stderr.contains("secretstorage not available") {
         lang.pick(
             "a yt-dlp le falta el módulo secretstorage para abrir el llavero: \
-             Configuración → Revisar el sistema te da el comando para instalarlo",
+             Configuración → Revisión del sistema te da el comando para instalarlo",
             "yt-dlp lacks the secretstorage module to open the keyring: \
-             Settings → Check the system gives the command to install it",
+             Settings → System Check gives the command to install it",
         )
         .to_string()
     } else if stderr.contains("kwallet-query command not found") {

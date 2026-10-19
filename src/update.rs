@@ -280,15 +280,19 @@ pub fn install(url: &str, version: &str, mut progress: impl FnMut(u8)) -> Result
     let exe = running_exe();
     let shown = exe.display().to_string();
     if is_dev_build(&shown) {
-        return Err("built from source: git pull && cargo build --release".into());
+        return Err(t(
+            "compilado desde el código: git pull && cargo build --release",
+            "built from source: git pull && cargo build --release",
+        )
+        .into());
     }
-    let dir = exe.parent().ok_or("no folder for the program")?;
+    let dir = exe.parent().ok_or(t("no hay carpeta para el programa", "no folder for the program"))?;
     let archive = download(url, &mut progress)?;
     let program = if url.ends_with(".zip") { from_zip(&archive)? } else { from_tarball(&archive)? };
     let staged = dir.join(format!(".tubevibe-update-{}{}", std::process::id(), std::env::consts::EXE_SUFFIX));
-    let result = stage(&staged, &program)
-        .and_then(|()| check_runs(&staged, version))
-        .and_then(|()| self_replace::self_replace(&staged).map_err(|e| format!("replacing {shown}: {e}")));
+    let result = stage(&staged, &program).and_then(|()| check_runs(&staged, version)).and_then(|()| {
+        self_replace::self_replace(&staged).map_err(|e| format!("{} {shown}: {e}", t("reemplazando", "replacing")))
+    });
     let _ = std::fs::remove_file(&staged);
     result.map(|()| exe)
 }
@@ -300,14 +304,14 @@ fn download(url: &str, progress: &mut impl FnMut(u8)) -> Result<Vec<u8>, String>
         .get(url)
         .header("User-Agent", concat!("tubevibe/", env!("CARGO_PKG_VERSION")))
         .call()
-        .map_err(|e| format!("download: {e}"))?;
+        .map_err(|e| format!("{}: {e}", t("descarga", "download")))?;
     let total = reply.body().content_length().filter(|n| *n > 0);
     let mut reader = reply.into_body().into_with_config().limit(MAX_DOWNLOAD).reader();
     let mut data = Vec::with_capacity(total.unwrap_or(0) as usize);
     let mut chunk = [0u8; 64 * 1024];
     let mut shown = None;
     loop {
-        let n = reader.read(&mut chunk).map_err(|e| format!("download: {e}"))?;
+        let n = reader.read(&mut chunk).map_err(|e| format!("{}: {e}", t("descarga", "download")))?;
         if n == 0 {
             break;
         }
@@ -321,50 +325,56 @@ fn download(url: &str, progress: &mut impl FnMut(u8)) -> Result<Vec<u8>, String>
         }
     }
     if data.is_empty() {
-        return Err("download: empty file".into());
+        return Err(t("descarga: archivo vacío", "download: empty file").into());
     }
     Ok(data)
+}
+
+/// A message in the app's language (errors end up in the status bar).
+fn t(es: &'static str, en: &'static str) -> &'static str {
+    crate::youtube::language().pick(es, en)
 }
 
 /// The program out of a release tarball (`tubevibe/tubevibe`).
 pub fn from_tarball(gz: &[u8]) -> Result<Vec<u8>, String> {
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(gz));
-    for entry in archive.entries().map_err(|e| format!("archive: {e}"))? {
-        let mut entry = entry.map_err(|e| format!("archive: {e}"))?;
-        let path = entry.path().map_err(|e| format!("archive: {e}"))?.into_owned();
+    for entry in archive.entries().map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))? {
+        let mut entry = entry.map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))?;
+        let path = entry.path().map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))?.into_owned();
         if entry.header().entry_type().is_file()
             && path.strip_prefix("./").unwrap_or(&path) == Path::new("tubevibe/tubevibe")
         {
             let mut program = Vec::new();
-            entry.read_to_end(&mut program).map_err(|e| format!("archive: {e}"))?;
+            entry.read_to_end(&mut program).map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))?;
             return Ok(program);
         }
     }
-    Err("archive: no tubevibe/tubevibe inside".into())
+    Err(t("archivo comprimido: no trae tubevibe/tubevibe", "archive: no tubevibe/tubevibe inside").into())
 }
 
 /// The program out of the Windows zip (`tubevibe.exe`).
 pub fn from_zip(data: &[u8]) -> Result<Vec<u8>, String> {
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| format!("archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
+        .map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))?;
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| format!("archive: {e}"))?;
+        let mut file = archive.by_index(i).map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))?;
         let name = file.name().map(|n| n.into_owned()).unwrap_or_default();
         if file.is_file() && name.rsplit(['/', '\\']).next() == Some("tubevibe.exe") {
             let mut program = Vec::new();
-            file.read_to_end(&mut program).map_err(|e| format!("archive: {e}"))?;
+            file.read_to_end(&mut program).map_err(|e| format!("{}: {e}", t("archivo comprimido", "archive")))?;
             return Ok(program);
         }
     }
-    Err("archive: no tubevibe.exe inside".into())
+    Err(t("archivo comprimido: no trae tubevibe.exe", "archive: no tubevibe.exe inside").into())
 }
 
 fn stage(path: &Path, program: &[u8]) -> Result<(), String> {
-    std::fs::write(path, program).map_err(|e| format!("writing {}: {e}", path.display()))?;
+    std::fs::write(path, program).map_err(|e| format!("{} {}: {e}", t("escribiendo", "writing"), path.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("making {} runnable: {e}", path.display()))?;
+            .map_err(|e| format!("{} {}: {e}", t("haciendo ejecutable", "making runnable"), path.display()))?;
     }
     Ok(())
 }
@@ -372,16 +382,20 @@ fn stage(path: &Path, program: &[u8]) -> Result<(), String> {
 /// The new program starts here and says it is `version` (not a file for
 /// another machine, or a broken download).
 fn check_runs(program: &Path, version: &str) -> Result<(), String> {
-    let out = std::process::Command::new(program)
-        .arg("--version")
-        .stdin(std::process::Stdio::null())
-        .output()
-        .map_err(|e| format!("the new version does not start here: {e}"))?;
+    let out =
+        std::process::Command::new(program).arg("--version").stdin(std::process::Stdio::null()).output().map_err(
+            |e| format!("{}: {e}", t("la versión nueva no arranca acá", "the new version does not start here")),
+        )?;
     let said = String::from_utf8_lossy(&out.stdout);
     if out.status.success() && said.split_whitespace().any(|w| w == version) {
         Ok(())
     } else {
-        Err(format!("the new version says {:?}, not {version}", said.trim()))
+        Err(format!(
+            "{} {:?}, {} {version}",
+            t("la versión nueva dice", "the new version says"),
+            said.trim(),
+            t("no", "not")
+        ))
     }
 }
 
