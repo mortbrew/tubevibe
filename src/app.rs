@@ -638,6 +638,8 @@ pub enum Action {
     ToggleFocus,
     /// First start without a login: offer the browsers found.
     AskBrowser,
+    /// → in the menu: Enter on the row, but Quit (Enter only).
+    MenuOpen,
     /// What the system has (mpv, yt-dlp…), with its package manager.
     SystemChecked(Manager, Vec<Check>),
     /// Ids of watched videos: my YouTube history, or the local one at start.
@@ -1419,11 +1421,19 @@ impl State {
                 self.sidebar = true;
                 self.focus = Focus::Menu;
             }
+            Action::MenuOpen => {
+                if self.menu_row() == MenuRow::Section(Self::section_index(Section::Salir)) {
+                    return Vec::new();
+                }
+                return self.enter();
+            }
             Action::AskBrowser => {
                 let session = &self.config.session;
                 if session.asked || !session.browser.is_empty() || !session.cookies_file.is_empty() {
                     return Vec::new();
                 }
+                // The login is a setting: ← from the picker lands on Settings.
+                self.menu_from(Section::Configuracion);
                 let title =
                     self.tr("¿De qué navegador tomo tu sesión de YouTube?", "Which browser has your YouTube login?");
                 let id = self.request(title.into(), Filter::None, false, ListKind::Plain);
@@ -2109,7 +2119,19 @@ impl State {
         }
     }
 
+    fn section_index(section: Section) -> usize {
+        Section::ALL.iter().position(|s| *s == section).expect("in ALL")
+    }
+
+    /// The menu's cursor on `section`, the one the list shown came from, so
+    /// ← (or Esc) from the list goes back to it.
+    fn menu_from(&mut self, section: Section) {
+        self.menu = Self::section_index(section);
+        self.menu_tab = None;
+    }
+
     fn open_section(&mut self, section: Section) -> Vec<Effect> {
+        self.menu_from(section);
         let title = section.label(self.lang()).to_owned();
         match section {
             // YouTube's home feed, only my channels; "Descubrir canales" has the rest.
@@ -2467,6 +2489,12 @@ impl State {
             return Vec::new();
         }
         self.prompt = None;
+        // A search's results replace the list: the menu points at the search.
+        match prompt {
+            Prompt::Videos { scope: Scope::All | Scope::Mine, .. } => self.menu_from(Section::BuscarVideos),
+            Prompt::Channels => self.menu_from(Section::BuscarCanales),
+            _ => {}
+        }
         match prompt {
             Prompt::Videos { scope: Scope::All, .. } => {
                 let id = self.request(query.clone(), Filter::None, false, ListKind::Plain);
@@ -2719,6 +2747,10 @@ impl State {
     fn show_system(&mut self) {
         let title = self.tr("Revisión del sistema", "System Check").to_owned();
         if self.stack.last().is_none_or(|l| l.items != Items::System) {
+            if self.stack.is_empty() {
+                // Opened by itself at startup: it belongs to Settings.
+                self.menu_from(Section::Configuracion);
+            }
             self.active = 0;
             self.stack.push(Listing::new(title, Items::System, ListKind::Plain));
             self.focus = Focus::List;
@@ -6586,12 +6618,66 @@ mod tests {
         assert!(!s.key_context().menu);
         play(&mut s, 0);
         assert!(!s.key_context().menu, "a video tab has the keys");
-        // → / l are Enter there: on Quit that is Enter's own quit.
+        // Enter on Quit quits.
         s.update(Action::FocusMenu);
         s.menu_tab = None;
         s.menu = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
         s.update(Action::Enter);
         assert!(s.quit);
+    }
+
+    #[test]
+    fn left_from_any_section_lands_on_that_section() {
+        for (i, section) in Section::ALL.iter().enumerate() {
+            if *section == Section::Salir {
+                continue;
+            }
+            let mut s = with_videos(&["a"]);
+            s.focus = Focus::Menu;
+            s.menu = i;
+            s.update(Action::MenuOpen);
+            s.prompt = None;
+            s.focus = Focus::List;
+            s.update(Action::Back);
+            assert_eq!((s.focus, s.menu_row()), (Focus::Menu, MenuRow::Section(i)), "{section:?}");
+        }
+    }
+
+    #[test]
+    fn right_on_quit_does_nothing_enter_quits() {
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::Salir);
+        assert!(s.update(Action::MenuOpen).is_empty());
+        assert!(!s.quit, "→ on Quit does nothing");
+        s.update(Action::Enter);
+        assert!(s.quit);
+        // → elsewhere is Enter.
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::AcercaDe);
+        s.update(Action::MenuOpen);
+        assert_eq!(s.listing().unwrap().items, Items::About);
+    }
+
+    #[test]
+    fn left_from_search_results_or_the_startup_check_lands_where_they_belong() {
+        let mut s = with_videos(&["a"]);
+        s.menu = State::section_index(Section::Suscripciones);
+        s.update(Action::FocusSearch);
+        type_text(&mut s, "rust");
+        s.update(Action::Enter);
+        s.focus = Focus::List;
+        s.update(Action::Back);
+        assert_eq!(s.menu_row(), MenuRow::Section(State::section_index(Section::BuscarVideos)));
+        use crate::doctor::Tool;
+        let mut s = state();
+        s.update(Action::SystemChecked(Manager::Apt, vec![check(Tool::Mpv, false), check(Tool::YtDlp, true)]));
+        s.update(Action::Back);
+        assert_eq!(
+            (s.focus, s.menu_row()),
+            (Focus::Menu, MenuRow::Section(State::section_index(Section::Configuracion)))
+        );
     }
 
     #[test]

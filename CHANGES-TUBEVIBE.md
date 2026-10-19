@@ -702,14 +702,29 @@ could not update itself either. From now on:
 - Coming back to the menu from a video tab (`←` or `Ctrl+Y m`) leaves the
   cursor on that tab. `Alt+,` / `Alt+.` and `Ctrl+Y 1`–`9` are unchanged.
 
-### → and l open the menu's row (`browser-tab-keys`)
+### → opens the menu's row; ← comes back to where you were (`browser-tab-keys`)
 
-- In the left menu `→` (and `l`) now do what `Enter` does on the selected
-  row: open the section, open the tab, or open Settings / About / Quit
-  (Quit acts as `Enter` does there). Before, `→` and `l` did nothing in
-  the menu (`l` is *save to tubevibe Watch Later* in lists and tabs, and
-  stays that outside the menu). `Tab` still switches panes and `←` / `h`
-  / `Esc` are unchanged. Listed in the help's Menu box, not in the bar.
+- In the left menu `→` now does what `Enter` does on the selected row:
+  open the section, open the tab, or open Settings / About. **Quit is the
+  exception**: only `Enter` quits, `→` on Quit does nothing. Before, `→`
+  did nothing in the menu. `l` still does nothing there (outside the menu
+  it is *save to tubevibe Watch Later*, as always). `Tab` still switches
+  panes. The help's Menu box reads *Enter → · open (Quit: Enter only)*;
+  the bar keeps just `Enter`.
+- `←` (or `Esc`) from the first list, and `←` from a video tab, put the
+  menu's cursor back on what that content came from: the section or the
+  tab. Fixed where it did not:
+  - **Search results** (`/` or `Ctrl+Y /` from any list, searching all of
+    YouTube or my channels; a channel search) replace the list, but the
+    cursor stayed on the section you searched from: it now goes to
+    *Search Videos* / *Search Channels*. A search inside a channel opens
+    on top of that channel, so `←` goes back to it first, as before.
+  - The **System Check** that opens by itself at startup, and the first-run
+    **browser picker**, left the cursor on My Recommendations: it is now on
+    Settings, where both live.
+  - Every section, Settings and About open through the same place, which
+    now sets the cursor itself, so a section opened any other way (a
+    click, a key) comes back right too.
 
 ### Video tab: ← goes to the menu, Shift+← → seek (`browser-tab-keys`)
 

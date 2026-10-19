@@ -238,9 +238,9 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     if ctx.typing {
         return typing(key.code);
     }
-    // In the menu → and l open the row, like Enter (h and ← stay "back").
-    if ctx.menu && matches!(key.code, KeyCode::Right | KeyCode::Char('l')) {
-        return Some(Action::Enter);
+    // In the menu → opens the row like Enter, but Quit (Enter only).
+    if ctx.menu && key.code == KeyCode::Right {
+        return Some(Action::MenuOpen);
     }
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
@@ -350,8 +350,8 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
         (lang.pick("Comandos: Ctrl+Y y después una tecla", "Commands: Ctrl+Y, Then a Key"), prefix_rows(lang)),
         (lang.pick("Menú", "Menu"), {
             let mut menu = rows(IN_MENU, lang);
-            // → and l open too; the bar keeps just Enter.
-            menu[1].0 = "Enter  →  l".into();
+            // → opens too (not Quit); the bar keeps just Enter.
+            menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
             menu
         }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),
@@ -401,10 +401,9 @@ mod tests {
     const MENU: KeyContext = KeyContext { menu: true, ..LISTS };
 
     #[test]
-    fn right_and_l_open_the_menu_row_like_enter() {
-        for code in [KeyCode::Right, KeyCode::Char('l')] {
-            assert_eq!(map(key(code), MENU), Some(Action::Enter), "{code:?}");
-        }
+    fn right_opens_the_menu_row_l_does_not() {
+        assert_eq!(map(key(KeyCode::Right), MENU), Some(Action::MenuOpen));
+        assert_eq!(map(char('l'), MENU), Some(Action::SaveForLater), "l: as before (nothing to save in the menu)");
         assert_eq!(map(key(KeyCode::Tab), MENU), Some(Action::ToggleFocus), "Tab still switches panes");
         assert_eq!(map(key(KeyCode::Left), MENU), Some(Action::Back));
         // Outside the menu they keep their meaning.
