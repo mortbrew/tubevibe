@@ -1216,6 +1216,7 @@ impl State {
             related: self.on_related(),
             context_menu: self.context.is_some(),
             splash: self.splash,
+            menu: self.active == 0 && self.focus == Focus::Menu && self.prompt.is_none(),
         }
     }
 
@@ -6574,6 +6575,23 @@ mod tests {
         s.menu = downloads;
         s.update(Action::Down);
         assert_eq!(s.menu_row(), MenuRow::Section(settings));
+    }
+
+    #[test]
+    fn menu_context_only_while_the_menu_has_the_keys() {
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        assert!(s.key_context().menu);
+        s.focus = Focus::List;
+        assert!(!s.key_context().menu);
+        play(&mut s, 0);
+        assert!(!s.key_context().menu, "a video tab has the keys");
+        // → / l are Enter there: on Quit that is Enter's own quit.
+        s.update(Action::FocusMenu);
+        s.menu_tab = None;
+        s.menu = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
+        s.update(Action::Enter);
+        assert!(s.quit);
     }
 
     #[test]

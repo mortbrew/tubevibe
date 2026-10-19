@@ -27,6 +27,8 @@ pub struct KeyContext {
     pub context_menu: bool,
     /// The opening logo is shown: any key skips it.
     pub splash: bool,
+    /// The left menu has the keys (browsing view, no search box).
+    pub menu: bool,
 }
 
 pub const SEEK_SECONDS: i32 = 5;
@@ -236,6 +238,10 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     if ctx.typing {
         return typing(key.code);
     }
+    // In the menu → and l open the row, like Enter (h and ← stay "back").
+    if ctx.menu && matches!(key.code, KeyCode::Right | KeyCode::Char('l')) {
+        return Some(Action::Enter);
+    }
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
         KeyCode::Char('l') => return Some(Action::SaveForLater),
@@ -342,7 +348,12 @@ fn lists(code: KeyCode) -> Option<Action> {
 pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
     vec![
         (lang.pick("Comandos: Ctrl+Y y después una tecla", "Commands: Ctrl+Y, Then a Key"), prefix_rows(lang)),
-        (lang.pick("Menú", "Menu"), rows(IN_MENU, lang)),
+        (lang.pick("Menú", "Menu"), {
+            let mut menu = rows(IN_MENU, lang);
+            // → and l open too; the bar keeps just Enter.
+            menu[1].0 = "Enter  →  l".into();
+            menu
+        }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),
         (lang.pick("Sobre un video (lista o pestaña)", "On a Video (List or Tab)"), rows(ON_VIDEO, lang)),
         (lang.pick("Pestaña de video", "Video Tab"), rows(IN_TAB, lang)),
@@ -385,7 +396,22 @@ mod tests {
         related: false,
         context_menu: false,
         splash: false,
+        menu: false,
     };
+    const MENU: KeyContext = KeyContext { menu: true, ..LISTS };
+
+    #[test]
+    fn right_and_l_open_the_menu_row_like_enter() {
+        for code in [KeyCode::Right, KeyCode::Char('l')] {
+            assert_eq!(map(key(code), MENU), Some(Action::Enter), "{code:?}");
+        }
+        assert_eq!(map(key(KeyCode::Tab), MENU), Some(Action::ToggleFocus), "Tab still switches panes");
+        assert_eq!(map(key(KeyCode::Left), MENU), Some(Action::Back));
+        // Outside the menu they keep their meaning.
+        assert_eq!(map(char('l'), LISTS), Some(Action::SaveForLater));
+        assert_eq!(map(key(KeyCode::Right), LISTS), None);
+        assert_eq!(map(char('l'), KeyContext { typing: true, ..MENU }), Some(Action::Input('l')));
+    }
     const TYPING: KeyContext = KeyContext { typing: true, ..LISTS };
     const TAB: KeyContext = KeyContext { in_tab: true, ..LISTS };
     const PREFIXED: KeyContext = KeyContext { prefix: true, ..LISTS };

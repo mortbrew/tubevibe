@@ -702,6 +702,15 @@ could not update itself either. From now on:
 - Coming back to the menu from a video tab (`←` or `Ctrl+Y m`) leaves the
   cursor on that tab. `Alt+,` / `Alt+.` and `Ctrl+Y 1`–`9` are unchanged.
 
+### → and l open the menu's row (`browser-tab-keys`)
+
+- In the left menu `→` (and `l`) now do what `Enter` does on the selected
+  row: open the section, open the tab, or open Settings / About / Quit
+  (Quit acts as `Enter` does there). Before, `→` and `l` did nothing in
+  the menu (`l` is *save to tubevibe Watch Later* in lists and tabs, and
+  stays that outside the menu). `Tab` still switches panes and `←` / `h`
+  / `Esc` are unchanged. Listed in the help's Menu box, not in the bar.
+
 ### Video tab: ← goes to the menu, Shift+← → seek (`browser-tab-keys`)
 
 - `←` in a video tab (and in its Up Next list) now goes to the left menu,
