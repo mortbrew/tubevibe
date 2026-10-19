@@ -37,8 +37,6 @@ pub const PREFIX: &[(char, Action, Text)] = &[
     ('b', Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('m', Action::FocusMenu, Text::new("ir al menú", "go to the menu")),
     ('f', Action::ToggleFullscreen, Text::new("pantalla completa", "fullscreen")),
-    ('n', Action::NextTab, Text::new("pestaña siguiente", "next tab")),
-    ('p', Action::PrevTab, Text::new("pestaña anterior", "previous tab")),
     (
         'x',
         Action::CloseTab,
@@ -138,7 +136,7 @@ fn space_key(keys: &str, lang: Lang) -> String {
 pub fn prefix_rows(lang: Lang) -> Vec<(String, &'static str)> {
     let mut commands: Vec<_> = PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect();
     commands.insert(
-        6,
+        4,
         (
             "0-9".into(),
             lang.pick(
@@ -151,7 +149,9 @@ pub fn prefix_rows(lang: Lang) -> Vec<(String, &'static str)> {
 }
 
 pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
-    if key.kind == KeyEventKind::Release {
+    // Only presses: releases (Windows, or a terminal that reports them) and
+    // repeats as their own kind never count twice.
+    if key.kind != KeyEventKind::Press {
         return None;
     }
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
@@ -177,7 +177,15 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         });
     }
     if ctrl {
-        return (key.code == KeyCode::Char('y')).then_some(Action::Prefix);
+        return match key.code {
+            KeyCode::Char('y') => Some(Action::Prefix),
+            // Browser style. Ctrl+Shift+Tab arrives as BackTab or as Tab with
+            // Shift, depending on the terminal.
+            KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => Some(Action::PrevTab),
+            KeyCode::Tab => Some(Action::NextTab),
+            KeyCode::BackTab => Some(Action::PrevTab),
+            _ => None,
+        };
     }
     if ctx.prefix {
         return Some(prefixed(key.code));
@@ -287,7 +295,14 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
         (lang.pick("Pestaña de video", "Video tab"), rows(IN_TAB, lang)),
         (lang.pick("Cuadro de búsqueda", "Search box"), rows(IN_SEARCH, lang)),
         ("Mouse", rows(WITH_MOUSE, lang)),
-        (lang.pick("Siempre", "Always"), vec![("Ctrl+c".into(), lang.pick("salir", "quit"))]),
+        (
+            lang.pick("Siempre", "Always"),
+            vec![
+                ("Ctrl+Tab".into(), lang.pick("pestaña siguiente del menú", "next tab in the menu")),
+                ("Ctrl+Shift+Tab".into(), lang.pick("pestaña anterior del menú", "previous tab in the menu")),
+                ("Ctrl+c".into(), lang.pick("salir", "quit")),
+            ],
+        ),
     ]
 }
 
@@ -459,6 +474,40 @@ mod tests {
                 assert!(commands.iter().any(|(k, _)| *k == c.to_string()), "{c} missing from help");
             }
             assert!(commands.iter().any(|(k, _)| k == "0-9"));
+        }
+    }
+
+    #[test]
+    fn ctrl_tab_switches_tabs_like_a_browser() {
+        let ctrl_shift = KeyModifiers::CONTROL | KeyModifiers::SHIFT;
+        for ctx in [LISTS, TYPING, TAB, KeyContext { related: true, ..TAB }, PREFIXED] {
+            assert_eq!(map(KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL), ctx), Some(Action::NextTab), "{ctx:?}");
+            // Kitty protocol: BackTab with Ctrl and Shift; some terminals: Tab with both.
+            assert_eq!(map(KeyEvent::new(KeyCode::BackTab, ctrl_shift), ctx), Some(Action::PrevTab), "{ctx:?}");
+            assert_eq!(map(KeyEvent::new(KeyCode::BackTab, KeyModifiers::CONTROL), ctx), Some(Action::PrevTab));
+            assert_eq!(map(KeyEvent::new(KeyCode::Tab, ctrl_shift), ctx), Some(Action::PrevTab), "{ctx:?}");
+        }
+        // Plain Tab and Shift+Tab do what they always did.
+        assert_eq!(map(key(KeyCode::Tab), LISTS), Some(Action::ToggleFocus));
+        assert_eq!(map(key(KeyCode::Tab), TAB), Some(Action::ToggleFocus));
+        assert_eq!(map(key(KeyCode::Tab), TYPING), Some(Action::CycleScope));
+        assert_eq!(map(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT), LISTS), None);
+        // No more Ctrl+y n / p.
+        assert_eq!(map(char('n'), PREFIXED), Some(Action::CancelPrefix));
+        assert_eq!(map(char('p'), PREFIXED), Some(Action::CancelPrefix));
+        // Repeats and releases reported by the kitty protocol count for nothing.
+        for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+            let ctrl_tab = KeyEvent { kind, ..KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL) };
+            assert_eq!(map(ctrl_tab, LISTS), None);
+            assert_eq!(map(KeyEvent { kind, ..key(KeyCode::Esc) }, LISTS), None);
+        }
+        assert_eq!(map(key(KeyCode::Esc), LISTS), Some(Action::Back));
+        // Both in the full help, in both languages.
+        for lang in [Lang::Es, Lang::En] {
+            let help = help(lang);
+            let keys: Vec<_> = help.iter().flat_map(|(_, rows)| rows.iter().map(|(k, _)| k.as_str())).collect();
+            assert!(keys.contains(&"Ctrl+Tab") && keys.contains(&"Ctrl+Shift+Tab"), "{keys:?}");
+            assert!(!help[0].1.iter().any(|(k, _)| k == "n" || k == "p"));
         }
     }
 

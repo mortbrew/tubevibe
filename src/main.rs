@@ -124,6 +124,7 @@ fn main() -> anyhow::Result<()> {
     // Unknown or broken settings never stop the app: a line in the status bar.
     runtime.state.update(Action::ConfigWarnings(config_warnings));
     let mut terminal = ratatui::init();
+    set_keyboard_enhancement(true);
     let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle("tubevibe"));
     set_focus_reports(true);
     let result = runtime.run(&mut terminal);
@@ -132,6 +133,7 @@ fn main() -> anyhow::Result<()> {
     player::clear_images();
     set_mouse(false);
     set_focus_reports(false);
+    set_keyboard_enhancement(false);
     ratatui::restore();
     if let Err(e) = &result {
         append(&crash_log, &format!("error: {e:#}"));
@@ -432,7 +434,7 @@ impl Runtime {
             if event::poll(wait).context("reading terminal events")? {
                 match event::read()? {
                     Event::Key(key) => {
-                        dbg(format!("key {:?} {:?}", key.code, key.kind));
+                        dbg(format!("key {:?} {:?} {:?}", key.code, key.modifiers, key.kind));
                         pending.extend(keymap::map(key, self.state.key_context()))
                     }
                     // Another program in front: an overlay would float over it.
@@ -1156,10 +1158,12 @@ impl Runtime {
         let program = words.next().unwrap_or("nano");
         set_mouse(false);
         set_focus_reports(false);
+        set_keyboard_enhancement(false);
         self.mouse_on = false;
         ratatui::restore();
         let status = std::process::Command::new(program).args(words).arg(&path).status();
         *terminal = ratatui::init();
+        set_keyboard_enhancement(true);
         set_focus_reports(true);
         let (result, warnings) = match status {
             Ok(_) => match Config::load_with_warnings(&path) {
@@ -1289,6 +1293,44 @@ fn expand_home(path: &str) -> PathBuf {
     match (path.strip_prefix("~/"), directories::BaseDirs::new()) {
         (Some(rest), Some(dirs)) => dirs.home_dir().join(rest),
         _ => PathBuf::from(path),
+    }
+}
+
+/// Whether the keyboard enhancement (kitty keyboard protocol) is pushed.
+static KEYBOARD_PUSHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The kitty keyboard protocol, where the terminal has it (kitty, Ghostty,
+/// Alacritty, foot, WezTerm…): without it Ctrl+Tab reaches us as a plain
+/// Tab. Only "disambiguate escape codes": typed text, Enter, Tab, Shift+Tab
+/// and Backspace arrive as always, and no release or repeat events are
+/// asked for. Popped while still on the alternate screen (each screen keeps
+/// its own stack), on quit, before the editor and on a panic.
+fn set_keyboard_enhancement(on: bool) {
+    use ratatui::crossterm::event::{
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    };
+    use std::sync::OnceLock;
+    use std::sync::atomic::Ordering;
+    // Asked once: the terminal answers a query, which can take a moment.
+    static SUPPORTED: OnceLock<bool> = OnceLock::new();
+    let mut out = std::io::stdout();
+    if on {
+        let supported = *SUPPORTED
+            .get_or_init(|| matches!(ratatui::crossterm::terminal::supports_keyboard_enhancement(), Ok(true)));
+        if supported
+            && !KEYBOARD_PUSHED.load(Ordering::SeqCst)
+            && execute!(out, PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)).is_ok()
+        {
+            KEYBOARD_PUSHED.store(true, Ordering::SeqCst);
+            // A panic pops it before ratatui leaves the alternate screen.
+            let previous = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                set_keyboard_enhancement(false);
+                previous(info);
+            }));
+        }
+    } else if KEYBOARD_PUSHED.swap(false, Ordering::SeqCst) {
+        let _ = execute!(out, PopKeyboardEnhancementFlags);
     }
 }
 

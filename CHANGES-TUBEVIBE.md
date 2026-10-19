@@ -550,7 +550,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, tabs restored, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Ctrl+Tab, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -602,10 +602,33 @@ could not update itself either. From now on:
   is gone: open tabs show only under TABS in the left menu, and the main
   pane gets that row back. *Home* was the browsing view's own tab (upstream
   *Inicio*); the menu already is that view.
-- `Ctrl+y 1`–`9` still go to the tabs as numbered in the menu, `Ctrl+y 0`
-  back to browsing, and `Ctrl+y n`/`p` next/previous. Help and hints say
-  "as listed in the menu" instead of mentioning the tab bar. Clicks land on
-  the menu rows (nothing left to click at the top).
+- `Ctrl+y 1`–`9` still go to the tabs as numbered in the menu and
+  `Ctrl+y 0` back to browsing. Help and hints say "in the menu" instead of
+  mentioning the tab bar. Clicks land on the menu rows (nothing left to
+  click at the top).
+
+### Ctrl+Tab and Ctrl+Shift+Tab switch tabs (`browser-tab-keys`)
+
+- **`Ctrl+Tab`** goes to the next tab in the menu and **`Ctrl+Shift+Tab`**
+  to the previous one, like a browser, from any pane (lists, the search box,
+  a video tab). They wrap around: from the last tab to the first and back.
+  From the browsing view, `Ctrl+Tab` goes to the first tab and
+  `Ctrl+Shift+Tab` to the last. With no tabs open they do nothing.
+- **`Ctrl+y n` and `Ctrl+y p` are gone** (help, README). `Ctrl+y 0`–`9`
+  stay. The new keys are in the full help (`Ctrl+y ?`, under *Always*) and
+  the README, not in the shortcut bar.
+- Terminals send `Ctrl+Tab` as a plain `Tab` unless they speak the kitty
+  keyboard protocol, so tubevibe now turns it on where the terminal has it
+  (kitty, Ghostty, Alacritty 0.13+, foot, WezTerm): only "disambiguate
+  escape codes", so text, `Enter`, `Tab`, `Shift+Tab`, `Backspace` and
+  `Esc` work as before and no release or repeat events are asked for (any
+  that arrive are ignored). It is switched off again on quit, before
+  opening the config in the editor (and back on after), and on a crash,
+  while still on tubevibe's screen. `Ctrl+Shift+Tab` is read in each form
+  terminals send it (`BackTab` with Ctrl, `Tab` with Ctrl+Shift).
+- kitty and Ghostty use `Ctrl+Tab` for their own tabs by default; the
+  README shows the two lines that hand it to tubevibe. Elsewhere, `Ctrl+y
+  1`–`9` always works.
 
 ### Open tabs come back after a restart (`menu-layout-borders`)
 

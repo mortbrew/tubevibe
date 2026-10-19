@@ -1663,8 +1663,15 @@ impl State {
             Action::OpenChannel => return self.open_channel(),
             Action::Listen => return self.listen(),
             Action::Status(text) => self.status = text,
-            Action::NextTab => self.active = (self.active + 1) % (self.tabs.len() + 1),
-            Action::PrevTab => self.active = self.active.checked_sub(1).unwrap_or(self.tabs.len()),
+            // Ctrl+Tab / Ctrl+Shift+Tab: through the tabs only, wrapping around;
+            // from the browsing view to the first / last. No tabs: nothing.
+            Action::NextTab if !self.tabs.is_empty() => {
+                self.active = if self.active >= self.tabs.len() { 1 } else { self.active + 1 };
+            }
+            Action::PrevTab if !self.tabs.is_empty() => {
+                self.active = if self.active <= 1 { self.tabs.len() } else { self.active - 1 };
+            }
+            Action::NextTab | Action::PrevTab => {}
             Action::GoTab(n) if n <= self.tabs.len() => self.active = n,
             Action::GoTab(_) => {}
             Action::CloseTab => {
@@ -5298,8 +5305,21 @@ mod tests {
         play(&mut s, 0);
         let b = play(&mut s, 1);
         play(&mut s, 2);
+        // The last tab is in front: next wraps to the first, previous back.
+        assert_eq!(s.active, 3);
         s.update(Action::NextTab);
-        assert_eq!(s.active, 0);
+        assert_eq!(s.active, 1);
+        s.update(Action::PrevTab);
+        assert_eq!(s.active, 3);
+        s.update(Action::PrevTab);
+        assert_eq!(s.active, 2);
+        s.update(Action::NextTab);
+        assert_eq!(s.active, 3);
+        // From the browsing view: next goes to the first tab, previous to the last.
+        s.update(Action::GoTab(0));
+        s.update(Action::NextTab);
+        assert_eq!(s.active, 1);
+        s.update(Action::GoTab(0));
         s.update(Action::PrevTab);
         assert_eq!(s.active, 3);
         s.update(Action::GoTab(9));
@@ -5311,6 +5331,11 @@ mod tests {
         s.update(Action::CloseTab);
         assert_eq!(s.active, 0);
         assert!(s.update(Action::CloseTab).is_empty());
+        // No tabs: Ctrl+Tab and Ctrl+Shift+Tab do nothing, quietly.
+        let status = s.status.clone();
+        assert!(s.update(Action::NextTab).is_empty());
+        assert!(s.update(Action::PrevTab).is_empty());
+        assert_eq!((s.active, &s.status), (0, &status));
     }
 
     #[test]

@@ -248,12 +248,27 @@ Global commands use a **`Ctrl+y` prefix** (tmux style): press `Ctrl+y`, then:
 | `b` | show / hide the menu |
 | `m` | go to the menu |
 | `f` | fullscreen |
-| `n` `p` `0-9` | next / previous / numbered tab, as listed in the menu (`0` = back to browsing) |
+| `0-9` | the tab with that number in the menu (`0` = back to browsing) |
 | `x` | close the tab · in either Watch Later or a playlist: remove the selected video (asks first) |
 | `/` | search videos |
 | `l` | English / español |
 | `?` | every shortcut, explained |
 | `q` | quit |
+
+Without the prefix, browser style:
+
+| Key | Action |
+|---|---|
+| `Ctrl+Tab` | next tab in the menu (from the last, back to the first; from browsing, the first) |
+| `Ctrl+Shift+Tab` | previous tab in the menu (from the first, round to the last; from browsing, the last) |
+
+`Ctrl+Tab` needs a terminal with the kitty keyboard protocol (kitty, Ghostty,
+Alacritty 0.13+, foot, WezTerm): elsewhere it arrives as a plain `Tab`, so
+use `Ctrl+y` `1`–`9`, which works everywhere. kitty and Ghostty use
+`Ctrl+Tab` for their own tabs by default: to hand it to tubevibe, add
+`map ctrl+tab no_op` and `map ctrl+shift+tab no_op` to `kitty.conf`, or
+`keybind = ctrl+tab=unbind` and `keybind = ctrl+shift+tab=unbind` to the
+Ghostty config.
 
 With the mouse: click selects (menu sections and tabs open), double click
 plays / opens, the wheel scrolls lists and sets the volume over the video,
