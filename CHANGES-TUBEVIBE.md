@@ -549,3 +549,76 @@ could not update itself either. From now on:
 - My Videos / My Music already rescan their folders each time they are
   opened (now covered by a test).
 
+
+## Unreleased: Watch Later fails with a clear message, errors in English (`watch-later-null-fix`)
+
+- **Watch Later that YouTube won't hand over.** When yt-dlp can't read a
+  whole list with `--dump-single-json --ignore-errors`, it prints `null` on
+  stdout (exit 1) and the reason on stderr. tubevibe took the `null` as a
+  list and showed *"respuesta inesperada: invalid type: null, expected
+  struct FlatList"*. For Watch Later (`WL`) and Liked videos (`LL`) the
+  reason is *"YouTube said: The playlist does not exist."*: they only exist
+  for a login YouTube takes. Now:
+  - a `null` list with a failed run reports yt-dlp's own `ERROR:` line;
+  - for `WL`/`LL` it says *"YouTube returned no data for your Watch Later:
+    check that you're signed in (⚙ Settings → Log in with a browser)"*, and
+    counts as a stale login, so the browser's cookies are read again once
+    and the list retried before giving up;
+  - a `null` from a run that succeeded is an empty list, not an error.
+- **The failed section's own title.** A section opened from the menu that
+  fails to load now shows an empty list under its own title, not the
+  previous section's (Watch Later used to sit under *"My Recommendations ·
+  0"*). Reloading the list on screen still keeps it.
+- **Errors follow the language.** yt-dlp/YouTube errors were Spanish
+  whatever the language (*"no se pudo ejecutar yt-dlp"*, *"yt-dlp falló"*,
+  *"respuesta inesperada"*, *"sin sesión…"*, *"sin detalle"*, *"yt-dlp sin
+  salida"*). Also channel-search follower counts (*"1,2 M suscriptores"* →
+  *"1.2 M subscribers"*, views/likes numbers too), the startup *"no se
+  encontró la carpeta personal"* and the updater's *"respuesta de GitHub sin
+  versión"*.
+
+### My Playlists icons follow the icon set (`watch-later-null-fix`)
+
+- **Liked Videos and Watch Later (YouTube)** had a hard-coded 👍 / 🕒 inside
+  their names, after the playlists icon, whatever the icon set (Nerd and
+  Unicode showed emoji too), and their names sat one icon to the right of
+  the other playlists'. Now each row starts with one icon from the chosen
+  set: liked for Liked Videos, Watch Later for Watch Later, the playlists
+  icon for the rest, so every name starts in the same column. The names
+  carry no emoji (the pane title too), in Title Case: *"Liked Videos"*,
+  *"Watch Later (YouTube)"* (Spanish: *"Videos que me gustan"*, *"Ver más
+  tarde (YouTube)"*).
+- Same fix where other hard-coded emoji ignored the icon set: the 👍 like
+  counts in the video tab and on comments, the 💾 download-size line in
+  the preview (now the Downloads icon), and status messages that have an
+  icon of their own (Watch Later saving/checking 🕒, Liked/Disliked
+  👍/👎, the favourite ⭐ in new-video notices, and the update
+  ⬆/⬇/✅/❌ lines).
+
+### Every status icon follows the icon set (`watch-later-null-fix`)
+
+- New icons in all three sets (Emoji keeps the old emoji; Nerd uses Nerd
+  Fonts v3 Font Awesome / Material Design glyphs; Unicode uses text symbols
+  that never turn into colour emoji):
+
+  | Purpose | Emoji | Nerd | Unicode |
+  |---|---|---|---|
+  | Subscribed, new videos | 🔔 | nf-fa-bell `f0f3` | ⚑ |
+  | Unsubscribed | 🔕 | nf-fa-bell_slash `f1f6` | ⚐ |
+  | Resumes at | ⏯ | nf-md-play_pause `f040e` | ▸ |
+  | SponsorBlock skip | ⏩ | nf-fa-forward `f04e` | » |
+  | Video closed, download cancelled | ⏹ | nf-fa-stop `f04d` | ■ |
+  | Sound only | 🎧 | nf-fa-headphones `f025` | ♪ |
+  | Saved to tubevibe Watch Later | 🔖 | nf-fa-bookmark `f02e` | ♦ |
+  | Warnings (config.toml, missing tools) | ⚠ | nf-fa-warning `f071` | △ |
+  | Thumbnail loading | ⏳ | nf-fa-hourglass_half `f252` | ◌ |
+  | Donation line on About | ☕ | nf-fa-coffee `f0f4` | ♥ |
+
+- Every status message now takes its icon from the set: the ones above,
+  plus 🗑 (removed / deleted / trash), ❌ (failures), ✅ (download done) and
+  ⬇ (downloading, and the Downloads count in the menu), which already had
+  icons in each set. The ⚙ in "not logged in" messages is gone (they say
+  *Settings*).
+- Tests: every set has every icon; Nerd and Unicode have no emoji and Nerd
+  stays in the v3 Font Awesome / Material Design ranges; a status line
+  follows the chosen set.

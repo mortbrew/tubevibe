@@ -264,11 +264,12 @@ pub struct Playlist {
 }
 
 impl Playlist {
-    /// Its title; YouTube's own lists in the interface language.
+    /// Its title; YouTube's own lists in the interface language (their icon
+    /// comes from the icon set, where the row is drawn).
     pub fn name(&self, lang: Lang) -> &str {
         match self.id.as_str() {
-            "LL" => lang.pick("👍 Videos que me gustan", "👍 Liked videos"),
-            "WL" => lang.pick("🕒 Ver más tarde (YouTube)", "🕒 Watch Later (YouTube)"),
+            "LL" => lang.pick("Videos que me gustan", "Liked Videos"),
+            "WL" => lang.pick("Ver más tarde (YouTube)", "Watch Later (YouTube)"),
             _ => &self.title,
         }
     }

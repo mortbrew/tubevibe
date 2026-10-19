@@ -93,8 +93,28 @@ pub struct Icons {
     pub downloading: &'static str,
     /// The update failed.
     pub failed: &'static str,
-    /// A file moved to the trash.
+    /// A file moved to the trash; also anything removed or deleted.
     pub trash: &'static str,
+    /// Subscribed to a channel; new videos from my channels.
+    pub notify: &'static str,
+    /// Unsubscribed from a channel.
+    pub unsubscribed: &'static str,
+    /// Playback resumes where it was left.
+    pub resume: &'static str,
+    /// A SponsorBlock segment skipped.
+    pub skip: &'static str,
+    /// A video closed, a download cancelled.
+    pub stop: &'static str,
+    /// Sound only.
+    pub audio: &'static str,
+    /// Saved to tubevibe's Watch Later.
+    pub saved: &'static str,
+    /// Something needs a look (config.toml, missing tools).
+    pub warning: &'static str,
+    /// A thumbnail on its way.
+    pub waiting: &'static str,
+    /// The donation line on About.
+    pub donate: &'static str,
 }
 
 impl Icons {
@@ -135,6 +155,16 @@ const EMOJI: Icons = Icons {
     downloading: "⬇",
     failed: "❌",
     trash: "🗑",
+    notify: "🔔",
+    unsubscribed: "🔕",
+    resume: "⏯",
+    skip: "⏩",
+    stop: "⏹",
+    audio: "🎧",
+    saved: "🔖",
+    warning: "⚠",
+    waiting: "⏳",
+    donate: "☕",
 };
 
 const NERD: Icons = Icons {
@@ -184,6 +214,18 @@ const NERD: Icons = Icons {
     downloading: "\u{f0ab}",
     failed: "\u{f057}",
     trash: "\u{f1f8}",
+    // nf-fa-bell, bell_slash, nf-md-play_pause, nf-fa-forward, stop,
+    // headphones, bookmark, warning, hourglass_half, coffee.
+    notify: "\u{f0f3}",
+    unsubscribed: "\u{f1f6}",
+    resume: "\u{f040e}",
+    skip: "\u{f04e}",
+    stop: "\u{f04d}",
+    audio: "\u{f025}",
+    saved: "\u{f02e}",
+    warning: "\u{f071}",
+    waiting: "\u{f252}",
+    donate: "\u{f0f4}",
 };
 
 const UNICODE: Icons = Icons {
@@ -211,6 +253,17 @@ const UNICODE: Icons = Icons {
     downloading: "↓",
     failed: "✘",
     trash: "✕",
+    // Text symbols only: none of these turns into a colour emoji.
+    notify: "⚑",
+    unsubscribed: "⚐",
+    resume: "▸",
+    skip: "»",
+    stop: "■",
+    audio: "♪",
+    saved: "♦",
+    warning: "△",
+    waiting: "◌",
+    donate: "♥",
 };
 
 pub fn icons(set: IconSet) -> &'static Icons {
@@ -626,7 +679,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let mut layout = watch_layout(inner);
     let details = if view.thumbnails {
         let middle = Rect { y: layout.thumbnail.y + layout.thumbnail.height / 2, height: 1, ..layout.thumbnail };
-        frame.render_widget(Paragraph::new("⏳").fg(MUTED).alignment(Alignment::Center), middle);
+        frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
         layout.details
     } else {
         Rect { x: inner.x, width: inner.width, ..layout.details }
@@ -641,10 +694,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     }
     let mut numbers = Vec::new();
     if let Some(views) = watch.and_then(|w| w.views) {
-        numbers.push(format!("{} {}", compact(views), lang.pick("vistas", "views")));
+        numbers.push(format!("{} {}", compact(views, lang), lang.pick("vistas", "views")));
     }
     if let Some(likes) = watch.and_then(|w| w.likes) {
-        numbers.push(format!("👍 {}", compact(likes)));
+        numbers.push(format!("{} {}", icons.liked, compact(likes, lang)));
     }
     let mut when = vec![length_label(state, video)];
     if let Some(ts) = watch.and_then(|w| w.published).or(video.published) {
@@ -662,14 +715,22 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     lines.extend(rating_line(state, icons, &video.id));
     lines.extend(size_line(state, video));
     if tab.playback.audio_only {
-        let note = lang.pick("🎧 Solo audio · a vuelve al video", "🎧 Sound only · a brings the video back");
+        let note = format!(
+            "{} {}",
+            icons.audio,
+            lang.pick("Solo audio · a vuelve al video", "Sound only · a brings the video back")
+        );
         lines.push(Line::from(note).fg(TEAL));
     }
     if tab.ended {
         let note = if tab.started {
-            lang.pick("⏹ Video cerrado · Enter lo vuelve a ver", "⏹ Video closed · Enter plays it again")
+            format!(
+                "{} {}",
+                icons.stop,
+                lang.pick("Video cerrado · Enter lo vuelve a ver", "Video closed · Enter plays it again")
+            )
         } else {
-            lang.pick("▶ Enter lo reproduce", "▶ Enter plays it")
+            lang.pick("▶ Enter lo reproduce", "▶ Enter plays it").to_owned()
         };
         lines.push(Line::from(note).fg(YELLOW));
     }
@@ -709,12 +770,12 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let selected = (!related.is_empty()).then_some(tab.related);
     frame.render_stateful_widget(list, layout.related, &mut ListState::default().with_selected(selected));
     if let Some(area) = layout.comments {
-        draw_comments(frame, tab, lang, area);
+        draw_comments(frame, tab, icons, lang, area);
     }
 }
 
 /// The video's top comments, from the one scrolled to (PgUp / PgDn).
-fn draw_comments(frame: &mut Frame, tab: &Tab, lang: Lang, area: Rect) {
+fn draw_comments(frame: &mut Frame, tab: &Tab, icons: &Icons, lang: Lang, area: Rect) {
     let title = match &tab.comments {
         None if tab.watch.is_none() || tab.watch.as_ref().is_some_and(|w| w.comments_token.is_some()) => {
             format!(" {} ", lang.pick("Buscando comentarios…", "Looking for comments…"))
@@ -732,7 +793,7 @@ fn draw_comments(frame: &mut Frame, tab: &Tab, lang: Lang, area: Rect) {
     for comment in tab.comments.iter().flatten().skip(tab.comments_from) {
         let mut head = vec![Span::styled(comment.author.clone(), Style::new().fg(MAGENTA).bold())];
         if let Some(likes) = &comment.likes {
-            head.push(Span::styled(format!("  👍 {likes}"), MUTED));
+            head.push(Span::styled(format!("  {} {likes}", icons.liked), MUTED));
         }
         if let Some(published) = &comment.published {
             head.push(Span::styled(format!("  {published}"), MUTED));
@@ -856,7 +917,7 @@ fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option
             label.push_str(&format!(" ({} {})", state.fresh.len(), lang.pick("nuevos", "new")));
         }
         if *section == Section::Descargas && state.downloading() > 0 {
-            label.push_str(&format!(" ({} ⬇)", state.downloading()));
+            label.push_str(&format!(" ({} {})", state.downloading(), icons.downloading));
         }
         if *section == Section::AcercaDe && state.update.is_some() {
             label.push_str(&format!(" {}", icons.update));
@@ -1227,7 +1288,7 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
     let text_area = if view.thumbnails {
         let image = thumbnail_cells(area);
         frame.render_widget(
-            Paragraph::new("⏳").fg(MUTED).alignment(Alignment::Center),
+            Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center),
             Rect { y: image.y + image.height / 2, height: 1, ..image },
         );
         Rect { y: image.bottom() + 1, height: inner.bottom().saturating_sub(image.bottom() + 1), ..inner }
@@ -1254,7 +1315,9 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
         Live::No => {}
     }
     if let Some(at) = state.resume_at(&v.id) {
-        lines.push(Line::from(format!("⏯ {} {}", lang.pick("Sigue desde", "Resumes at"), clock(at))).fg(YELLOW));
+        lines.push(
+            Line::from(format!("{} {} {}", icons.resume, lang.pick("Sigue desde", "Resumes at"), clock(at))).fg(YELLOW),
+        );
     }
     lines.extend(later_lines(state, icons, &v.id, lang));
     if v.channel_id.as_ref().is_some_and(|c| state.subs.contains(c)) {
@@ -1396,11 +1459,17 @@ fn channel_row<'a>(state: &State, icons: &Icons, c: &'a Channel, panel: bool) ->
     ListItem::new(Line::from(spans))
 }
 
+/// Every row starts with one icon from the icon set: YouTube's own lists
+/// their own (liked, Watch Later), the rest the playlists one, so the names
+/// line up.
 fn playlist_row<'a>(icons: &Icons, playlist: &'a Playlist, lang: Lang) -> ListItem<'a> {
-    let mut spans = vec![
-        Span::raw(format!(" {} ", icons.section(Section::MisListas))),
-        Span::styled(pad_cells(&truncate(playlist.name(lang), 48), 50), FG),
-    ];
+    let icon = match playlist.id.as_str() {
+        crate::app::LIKED => icons.liked,
+        crate::youtube::WATCH_LATER => icons.later,
+        _ => icons.section(Section::MisListas),
+    };
+    let mut spans =
+        vec![Span::raw(format!(" {icon} ")), Span::styled(pad_cells(&truncate(playlist.name(lang), 48), 50), FG)];
     if let Some(count) = &playlist.count {
         spans.push(Span::styled(count.as_str(), MUTED));
     }
@@ -1413,13 +1482,17 @@ fn length_label(state: &State, video: &Video) -> String {
     video.duration.or_else(|| state.sizes.get(&video.id).and_then(|s| s.duration)).map(clock).unwrap_or_default()
 }
 
-/// `"💾 Descarga ≈ 30 MB (720p)"`, or that it is being worked out.
+/// `"📥 Download ≈ 30 MB (720p)"` (the Downloads icon of the icon set), or
+/// that it is being worked out.
 fn size_line(state: &State, video: &Video) -> Option<Line<'static>> {
     let lang = state.lang();
+    let icon = icons(state.config.ui.icons).section(Section::Descargas);
     let text = match state.sizes.get(&video.id) {
-        Some(size) if size.bytes.is_some() => format!("💾 {} {}", lang.pick("Descarga", "Download"), size.label()),
+        Some(size) if size.bytes.is_some() => format!("{icon} {} {}", lang.pick("Descarga", "Download"), size.label()),
         Some(_) => return None,
-        None if video.live == Live::No => format!("💾 {}", lang.pick("Calculando el peso…", "Working out the size…")),
+        None if video.live == Live::No => {
+            format!("{icon} {}", lang.pick("Calculando el peso…", "Working out the size…"))
+        }
         None => return None,
     };
     Some(Line::from(text).fg(MUTED))
@@ -2218,9 +2291,13 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
     if !wallets.is_empty() {
         lines.push(Line::from(""));
         lines.push(
-            Line::from(lang.pick(
-                "☕ ¿Te sirve? Podés apoyar a polblancoo, el autor original de tubetui, con una donación:",
-                "☕ Find it useful? You can support polblancoo, tubetui's original author, with a donation:",
+            Line::from(format!(
+                "{} {}",
+                icons.donate,
+                lang.pick(
+                    "¿Te sirve? Podés apoyar a polblancoo, el autor original de tubetui, con una donación:",
+                    "Find it useful? You can support polblancoo, tubetui's original author, with a donation:",
+                )
             ))
             .fg(YELLOW)
             .bold(),
@@ -2441,6 +2518,40 @@ mod tests {
         let mut s = state();
         s.config.ui.icons = IconSet::Nerd;
         assert!(render(&s).contains(&format!("{} Inicio", NERD.sections[0])));
+    }
+
+    #[test]
+    fn playlist_rows_take_their_icon_from_the_set_and_line_up() {
+        let playlists =
+            ["LL", "WL", "PLf"].map(|id| Playlist { id: id.into(), title: "Favorites".into(), count: None }).to_vec();
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let mut s = with_items(Items::Playlists(playlists.clone()));
+            s.config.ui.icons = set;
+            s.config.ui.lang = Some(Lang::En);
+            let screen = render(&s);
+            let i = icons(set);
+            let rows = [
+                (i.liked, "Liked Videos"),
+                (i.later, "Watch Later (YouTube)"),
+                (i.section(Section::MisListas), "Favorites"),
+            ];
+            let mut columns = Vec::new();
+            for (icon, name) in rows {
+                // The list pane: right of the menu's border.
+                let line = screen
+                    .lines()
+                    .map(|l| l.splitn(3, '│').nth(2).unwrap_or(""))
+                    .find(|l| l.contains(name) && l.contains(icon))
+                    .unwrap_or_else(|| panic!("{icon} {name}\n{screen}"));
+                let at = line.find(name).unwrap();
+                assert!(line[..at].contains(icon), "{set:?}: {line}");
+                columns.push(Span::raw(&line[..at]).width());
+            }
+            assert!(columns.windows(2).all(|w| w[0] == w[1]), "{set:?}: {columns:?}");
+            if set != IconSet::Emoji {
+                assert!(!screen.contains('👍') && !screen.contains('🕒'), "{set:?}\n{screen}");
+            }
+        }
     }
 
     #[test]
@@ -3176,7 +3287,7 @@ mod tests {
         for text in
             ["title a", "chan a · 559K suscriptores", "5 k vistas", "Te gusta", "A continuación · 2 · Tab", "title r2"]
                 .into_iter()
-                .chain(["Comentarios 1/1", "@ana  👍", "12  hace 1 año", "Qué temazo"])
+                .chain(["Comentarios 1/1", "@ana  ▲", "12  hace 1 año", "Qué temazo"])
         {
             assert!(screen.contains(text), "{text}\n{screen}");
         }
@@ -3205,7 +3316,7 @@ mod tests {
             replace: Replace::Package,
         };
         s.update(Action::UpdateFound(update));
-        assert!(s.status.contains("⬆ tubevibe 9.9.9 disponible"), "{}", s.status);
+        assert!(s.status.contains("↑ tubevibe 9.9.9 disponible"), "{}", s.status);
         let screen = render(&s);
         assert!(screen.contains("Acerca de ↑"), "{screen}");
         let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();
@@ -3299,6 +3410,93 @@ mod tests {
         }
         assert_eq!(icons(IconSet::Emoji).up_to_date, "✅");
         assert_eq!(icons(IconSet::Nerd).up_to_date, "\u{f058}");
+    }
+
+    /// Every glyph of a set, menu and settings included.
+    fn all_glyphs(i: &Icons) -> Vec<&'static str> {
+        let mut glyphs = vec![
+            i.logo,
+            i.tab,
+            i.live,
+            i.upcoming,
+            i.later,
+            i.favorite,
+            i.subscribed,
+            i.liked,
+            i.disliked,
+            i.user,
+            i.language,
+            i.volume,
+            i.muted,
+            i.watched,
+            i.up_to_date,
+            i.update,
+            i.downloading,
+            i.failed,
+            i.trash,
+            i.notify,
+            i.unsubscribed,
+            i.resume,
+            i.skip,
+            i.stop,
+            i.audio,
+            i.saved,
+            i.warning,
+            i.waiting,
+            i.donate,
+        ];
+        glyphs.extend(i.sections);
+        glyphs.extend(i.settings);
+        glyphs
+    }
+
+    /// Shown as a colour emoji by default, or by many terminals anyway
+    /// (⏩–⏺ media keys, ⬅–⬇ arrows, ⚠ ✉ with an emoji form). The menu's ⚙
+    /// is text by default and stays.
+    fn looks_like_emoji(c: char) -> bool {
+        matches!(c as u32, 0x1F000..=0x1FAFF | 0x23E9..=0x23FA | 0x2B05..=0x2B55 | 0xFE0F)
+            || "⌚⌛☔☕♿⚓⚡⚪⚫⚽⚾⛄⛅⛎⛔⛪⛲⛳⛵⛺⛽✅✊✋✨❌❎❓❔❕❗➕➖➗➰➿⚠✉".contains(c)
+    }
+
+    #[test]
+    fn every_set_has_every_icon_and_only_emoji_has_emoji() {
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            assert!(all_glyphs(icons(set)).iter().all(|g| !g.is_empty()), "{set:?}");
+        }
+        for set in [IconSet::Nerd, IconSet::Unicode] {
+            for glyph in all_glyphs(icons(set)) {
+                assert!(!glyph.chars().any(looks_like_emoji), "{set:?}: {glyph}");
+            }
+        }
+        // Nerd Fonts v3: Font Awesome (U+F000–U+F2FF) or Material Design (U+F0001 and up).
+        for glyph in all_glyphs(&NERD).into_iter().skip(1) {
+            let c = glyph.chars().next().unwrap() as u32;
+            assert!((0xF000..=0xF2FF).contains(&c) || (0xF0001..=0xF1AF0).contains(&c), "{c:x}");
+        }
+        let (emoji, nerd, plain) = (icons(IconSet::Emoji), icons(IconSet::Nerd), icons(IconSet::Unicode));
+        assert_eq!(
+            [emoji.notify, emoji.unsubscribed, emoji.resume, emoji.skip, emoji.stop],
+            ["🔔", "🔕", "⏯", "⏩", "⏹"]
+        );
+        assert_eq!([nerd.notify, nerd.resume, nerd.audio], ["\u{f0f3}", "\u{f040e}", "\u{f025}"]);
+        assert_eq!([plain.notify, plain.unsubscribed, plain.stop, plain.audio], ["⚑", "⚐", "■", "♪"]);
+    }
+
+    #[test]
+    fn status_messages_follow_the_icon_set() {
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let mut s = state();
+            s.config.ui.icons = set;
+            s.config.ui.lang = Some(Lang::En);
+            let (config, warnings) =
+                Config::parse("[ui]\nlang = \"en\"\nicons = \"emoji\"\nfuture_glow = true\n").unwrap();
+            drop(config);
+            s.update(Action::ConfigWarnings(warnings));
+            assert!(s.status.starts_with(&format!("{} Ignored", icons(set).warning)), "{set:?}: {}", s.status);
+            if set != IconSet::Emoji {
+                assert!(!s.status.chars().any(looks_like_emoji), "{set:?}: {}", s.status);
+            }
+        }
     }
 
     #[test]

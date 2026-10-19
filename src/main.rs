@@ -114,7 +114,9 @@ fn main() -> anyhow::Result<()> {
             let _ = config::set_value(path, "session", "cookies_file", config.session.cookies_file.as_str());
         }
     }
-    let paths = Paths::system().context("no se encontró la carpeta personal")?;
+    let lang = config.ui.lang.unwrap_or_default();
+    let paths =
+        Paths::system().context(lang.pick("no se encontró la carpeta personal", "couldn't find the home folder"))?;
     let crash_log = paths.cache.join("crash.log");
     log_panics(crash_log.clone());
 
@@ -832,10 +834,18 @@ impl Runtime {
             Effect::SaveSaved(videos) => {
                 if self.saved_unreadable {
                     let note = self.tr("no se guarda: no se pudo leer", "not saved: could not read");
-                    self.send(Action::Status(format!("⚠ {note} {}", self.paths.later.display())));
+                    self.send(Action::Status(format!(
+                        "{} {note} {}",
+                        tubevibe::ui::icons(self.state.config.ui.icons).warning,
+                        self.paths.later.display()
+                    )));
                 } else if let Err(e) = store::save_later(&self.paths.later, &videos) {
                     let failed = self.tr("No se pudo guardar", "Could not save");
-                    self.send(Action::Status(format!("❌ {failed} {}: {e}", self.paths.later.display())));
+                    self.send(Action::Status(format!(
+                        "{} {failed} {}: {e}",
+                        tubevibe::ui::icons(self.state.config.ui.icons).failed,
+                        self.paths.later.display()
+                    )));
                 }
             }
             Effect::SaveHistory(history) => {

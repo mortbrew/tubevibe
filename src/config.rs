@@ -377,18 +377,18 @@ pub enum ConfigWarning {
 
 impl ConfigWarning {
     /// One line for the status bar: the first warning, and how many more.
-    pub fn summary(warnings: &[Self], lang: Lang) -> Option<String> {
+    pub fn summary(warnings: &[Self], lang: Lang, icon: &str) -> Option<String> {
         let first = warnings.first()?;
         let text = match first {
             Self::Unknown(key) => format!(
-                "⚠ {}",
+                "{icon} {}",
                 lang.pick(
                     &format!("Se ignoró el ajuste desconocido {key} de config.toml (¿de un tubevibe más nuevo?)"),
                     &format!("Ignored unknown setting {key} in config.toml (made by a newer tubevibe?)"),
                 )
             ),
             Self::BadValue { key, .. } => format!(
-                "⚠ {}",
+                "{icon} {}",
                 lang.pick(
                     &format!("Valor inválido en {key} de config.toml: se usa el predeterminado"),
                     &format!("Bad value for {key} in config.toml: using the default"),
@@ -691,17 +691,17 @@ mod tests {
     fn warnings_read_as_one_status_line() {
         let unknown = ConfigWarning::Unknown("ui.foo".into());
         let bad = ConfigWarning::BadValue { key: "player.max_height".into(), error: "invalid type".into() };
-        assert_eq!(ConfigWarning::summary(&[], Lang::En), None);
+        assert_eq!(ConfigWarning::summary(&[], Lang::En, "⚠"), None);
         assert_eq!(
-            ConfigWarning::summary(std::slice::from_ref(&unknown), Lang::En).unwrap(),
+            ConfigWarning::summary(std::slice::from_ref(&unknown), Lang::En, "⚠").unwrap(),
             "⚠ Ignored unknown setting ui.foo in config.toml (made by a newer tubevibe?)"
         );
         assert_eq!(
-            ConfigWarning::summary(std::slice::from_ref(&unknown), Lang::Es).unwrap(),
+            ConfigWarning::summary(std::slice::from_ref(&unknown), Lang::Es, "⚠").unwrap(),
             "⚠ Se ignoró el ajuste desconocido ui.foo de config.toml (¿de un tubevibe más nuevo?)"
         );
         assert_eq!(
-            ConfigWarning::summary(&[bad, unknown], Lang::En).unwrap(),
+            ConfigWarning::summary(&[bad, unknown], Lang::En, "⚠").unwrap(),
             "⚠ Bad value for player.max_height in config.toml: using the default (+1 more)"
         );
     }

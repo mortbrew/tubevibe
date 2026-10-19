@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::domain::{Channel, Live, Playlist, Video};
+use crate::i18n::Lang;
 use crate::session;
 
 const ORIGIN: &str = "https://www.youtube.com";
@@ -21,18 +22,81 @@ const CLIENT_VERSION: &str = "2.20251001.00.00";
 const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum YoutubeError {
-    #[error("no se pudo ejecutar yt-dlp: {0}")]
-    Spawn(#[from] std::io::Error),
-    #[error("yt-dlp falló: {0}")]
+    Spawn(std::io::Error),
+    /// yt-dlp's own reason (its last `ERROR:` line); empty when it gave none.
     Failed(String),
-    #[error("respuesta inesperada: {0}")]
-    Parse(#[from] serde_json::Error),
-    #[error("sin sesión: configurala en ⚙ Configuración")]
+    Parse(serde_json::Error),
     NoSession,
-    #[error("YouTube: {0}")]
     Http(String),
+    /// A list only my login can see (Watch Later, Liked videos) came back as
+    /// "does not exist": YouTube didn't take the login. By playlist id.
+    PrivateList(String),
+}
+
+impl YoutubeError {
+    /// What the status bar says, in `lang`.
+    pub fn message(&self, lang: Lang) -> String {
+        match self {
+            Self::Spawn(e) => format!("{} yt-dlp: {e}", lang.pick("no se pudo ejecutar", "couldn't run")),
+            Self::Failed(reason) if reason.is_empty() => {
+                lang.pick("yt-dlp falló (sin detalle)", "yt-dlp failed (no details)").into()
+            }
+            Self::Failed(reason) => format!("{} {reason}", lang.pick("yt-dlp falló:", "yt-dlp failed:")),
+            Self::Parse(e) => {
+                format!("{} {e}", lang.pick("respuesta inesperada de YouTube:", "unexpected reply from YouTube:"))
+            }
+            Self::NoSession => {
+                lang.pick("sin sesión: configurala en Configuración", "not logged in: set it up in Settings").into()
+            }
+            Self::Http(reason) => format!("YouTube: {reason}"),
+            Self::PrivateList(id) => {
+                let name = match id.as_str() {
+                    "LL" => lang.pick("tus Videos que me gustan", "your Liked Videos"),
+                    "WL" => lang.pick("tu Ver después", "your Watch Later"),
+                    _ => lang.pick("esa lista", "that list"),
+                };
+                match lang {
+                    Lang::Es => format!(
+                        "YouTube no devolvió {name}: revisá que tengas la sesión iniciada (Configuración → Sesión desde un navegador)"
+                    ),
+                    Lang::En => format!(
+                        "YouTube returned no data for {name}: check that you're signed in (Settings → Log in with a browser)"
+                    ),
+                }
+            }
+        }
+    }
+}
+
+/// In the app's language (see [`set_language`]).
+impl std::fmt::Display for YoutubeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message(language()))
+    }
+}
+
+impl std::error::Error for YoutubeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Spawn(e) => Some(e),
+            Self::Parse(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for YoutubeError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Spawn(e)
+    }
+}
+
+impl From<serde_json::Error> for YoutubeError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Parse(e)
+    }
 }
 
 /// Where a list comes from.
@@ -161,8 +225,9 @@ pub fn looks_logged_out(result: &Result<Items, YoutubeError>) -> bool {
     match result {
         Ok(items) => items.is_empty(),
         // yt-dlp asks for a login; YouTube's API answers 401.
+        Err(YoutubeError::PrivateList(_)) => true,
         Err(e) => {
-            let e = e.to_string();
+            let e = e.message(Lang::En);
             e.contains("Login details are needed") || e.contains("status: 401")
         }
     }
@@ -186,15 +251,29 @@ pub fn fetch(source: &Source, limit: u32, cookies: Option<&Path>) -> Result<Item
         return Err(YoutubeError::NoSession);
     }
     let copy = cookies.map(JarCopy::new).transpose()?;
-    let json = run_yt_dlp(&fetch_args(source, limit, copy.as_ref().map(JarCopy::path)))?;
+    let json = run_yt_dlp(&fetch_args(source, limit, copy.as_ref().map(JarCopy::path)))
+        .map_err(|e| private_list(source, e))?;
     if source.lists_channels() {
-        Ok(Items::Channels(parse_channels(&json)?))
+        Ok(Items::Channels(parse_channels(&json, language())?))
     } else {
         let mut videos = parse_videos(&json)?;
         if source.newest_first() {
             videos.sort_by_key(|v| std::cmp::Reverse(v.recency()));
         }
         Ok(Items::Videos(videos))
+    }
+}
+
+/// Watch Later and Liked videos only exist for my login: YouTube calling
+/// them missing means it didn't take the login (or none was sent).
+fn private_list(source: &Source, error: YoutubeError) -> YoutubeError {
+    match (source, &error) {
+        (Source::Playlist(id), YoutubeError::Failed(reason))
+            if matches!(id.as_str(), "WL" | "LL") && reason.contains("does not exist") =>
+        {
+            YoutubeError::PrivateList(id.clone())
+        }
+        _ => error,
     }
 }
 
@@ -1092,6 +1171,11 @@ pub fn set_language(lang: crate::i18n::Lang) {
     SIGNED_IN_HL.store(lang == crate::i18n::Lang::Es, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// The app's language, as last set by [`set_language`] (English until then).
+pub fn language() -> Lang {
+    if SIGNED_IN_HL.load(std::sync::atomic::Ordering::Relaxed) { Lang::Es } else { Lang::En }
+}
+
 /// `hl` of signed-in requests: the app's language.
 fn signed_in_hl() -> &'static str {
     if SIGNED_IN_HL.load(std::sync::atomic::Ordering::Relaxed) { "es" } else { "en" }
@@ -1291,13 +1375,18 @@ pub fn size(url: &str, format: &str, cookies: Option<&Path>) -> Result<crate::do
 fn run_yt_dlp(args: &[String]) -> Result<String, YoutubeError> {
     let output = Command::new(crate::doctor::program("yt-dlp")).args(args).output()?;
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    // With --ignore-errors a partial list still comes back on stdout.
-    if !output.status.success() && stdout.trim().is_empty() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let reason = stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("sin detalle");
-        return Err(YoutubeError::Failed(reason.trim().to_owned()));
+    // With --ignore-errors a partial list still comes back on stdout; a list
+    // that failed whole comes back as `null` (with the reason on stderr).
+    if !output.status.success() && no_output(&stdout) {
+        return Err(YoutubeError::Failed(failure_reason(&String::from_utf8_lossy(&output.stderr))));
     }
     Ok(stdout)
+}
+
+/// What `--dump-single-json --ignore-errors` prints when the whole list
+/// failed: nothing, or `null`.
+fn no_output(stdout: &str) -> bool {
+    matches!(stdout.trim(), "" | "null")
 }
 
 #[derive(Deserialize)]
@@ -1334,11 +1423,12 @@ struct ChannelEntry {
 }
 
 /// Parses `yt-dlp --flat-playlist -J` video lists. Entries without a title
-/// (private or deleted videos) are skipped.
+/// (private or deleted videos) are skipped; `null` (no list) is none.
 pub fn parse_videos(json: &str) -> Result<Vec<Video>, serde_json::Error> {
-    let playlist: FlatList<VideoEntry> = serde_json::from_str(json)?;
+    let playlist: Option<FlatList<VideoEntry>> = serde_json::from_str(json)?;
     Ok(playlist
-        .entries
+        .map(|p| p.entries)
+        .unwrap_or_default()
         .into_iter()
         .flatten()
         .filter_map(|e| {
@@ -1367,18 +1457,20 @@ fn description(text: String) -> Option<String> {
     (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
-/// Parses yt-dlp channel lists (channel search).
-pub fn parse_channels(json: &str) -> Result<Vec<Channel>, serde_json::Error> {
-    let playlist: FlatList<ChannelEntry> = serde_json::from_str(json)?;
+/// Parses yt-dlp channel lists (channel search); `null` (no list) is none.
+pub fn parse_channels(json: &str, lang: Lang) -> Result<Vec<Channel>, serde_json::Error> {
+    let playlist: Option<FlatList<ChannelEntry>> = serde_json::from_str(json)?;
+    let subscribers = lang.pick("suscriptores", "subscribers");
     Ok(playlist
-        .entries
+        .map(|p| p.entries)
+        .unwrap_or_default()
         .into_iter()
         .flatten()
         .filter(|e| e.id.starts_with("UC"))
         .map(|e| Channel {
             url: e.url.unwrap_or_else(|| format!("{ORIGIN}/channel/{}", e.id)),
             name: e.title.unwrap_or_else(|| e.id.clone()),
-            followers: e.channel_follower_count.map(|n| format!("{} suscriptores", compact(n))),
+            followers: e.channel_follower_count.map(|n| format!("{} {subscribers}", compact(n, lang))),
             handle: e.uploader_id.filter(|h| h.starts_with('@')),
             description: e.description.and_then(description),
             id: e.id,
@@ -1386,12 +1478,12 @@ pub fn parse_channels(json: &str) -> Result<Vec<Channel>, serde_json::Error> {
         .collect())
 }
 
-/// `950`, `12 k`, `1,2 M`.
-pub fn compact(n: u64) -> String {
+/// `950`, `12 k`, `1,2 M` (`1.2 M` in English).
+pub fn compact(n: u64, lang: Lang) -> String {
     match n {
         0..1_000 => n.to_string(),
         1_000..1_000_000 => format!("{} k", n / 1_000),
-        _ => format!("{},{} M", n / 1_000_000, n % 1_000_000 / 100_000),
+        _ => format!("{}{}{} M", n / 1_000_000, lang.pick(",", "."), n % 1_000_000 / 100_000),
     }
 }
 
@@ -1445,7 +1537,7 @@ pub fn download(
         .stderr(Stdio::piped())
         .spawn()?;
     let (Some(stdout), Some(mut stderr)) = (child.stdout.take(), child.stderr.take()) else {
-        return Err(YoutubeError::Failed("yt-dlp sin salida".into()));
+        return Err(YoutubeError::Failed(String::new()));
     };
     // Read apart, or a chatty yt-dlp would block on a full pipe.
     let errors = std::thread::spawn(move || {
@@ -1476,10 +1568,11 @@ pub fn download(
     }
 }
 
-/// The last `ERROR:` yt-dlp printed (warnings come after it sometimes), or its last line.
+/// The last `ERROR:` yt-dlp printed (warnings come after it sometimes), or its
+/// last line; empty when it printed nothing.
 fn failure_reason(stderr: &str) -> String {
     let lines = || stderr.lines().rev().map(str::trim).filter(|l| !l.is_empty());
-    let line = lines().find(|l| l.starts_with("ERROR:")).or_else(|| lines().next()).unwrap_or("sin detalle");
+    let line = lines().find(|l| l.starts_with("ERROR:")).or_else(|| lines().next()).unwrap_or_default();
     line.trim_start_matches("ERROR:").trim().to_owned()
 }
 
@@ -1517,6 +1610,49 @@ mod tests {
         assert_eq!(videos[2].duration, None);
     }
 
+    /// What yt-dlp 2026.08.19 prints for `--flat-playlist --dump-single-json
+    /// --ignore-errors` on Watch Later without a login YouTube takes: `null` on
+    /// stdout, exit 1, and the reason on stderr.
+    const WL_STDERR: &str = "ERROR: [youtube:tab] WL: YouTube said: The playlist does not exist.\n";
+
+    #[test]
+    fn null_lists_are_empty_not_a_parse_error() {
+        assert!(parse_videos("null").unwrap().is_empty());
+        assert!(parse_videos("null\n").unwrap().is_empty());
+        assert!(parse_channels("null", Lang::En).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_failed_list_printing_null_reports_yt_dlps_reason() {
+        assert!(no_output("null\n") && no_output("  ") && !no_output(r#"{"entries":[]}"#));
+        let reason = failure_reason(WL_STDERR);
+        assert_eq!(reason, "[youtube:tab] WL: YouTube said: The playlist does not exist.");
+        let watch_later = Source::Playlist(WATCH_LATER.into());
+        let error = private_list(&watch_later, YoutubeError::Failed(reason.clone()));
+        assert!(matches!(&error, YoutubeError::PrivateList(id) if id == "WL"), "{error:?}");
+        assert_eq!(
+            error.message(Lang::En),
+            "YouTube returned no data for your Watch Later: check that you're signed in (Settings → Log in with a browser)"
+        );
+        assert!(looks_logged_out(&Err(error)), "a stale login copy is read again once");
+        // Any other playlist keeps yt-dlp's words.
+        let other = private_list(&Source::Playlist("PLx".into()), YoutubeError::Failed(reason));
+        assert!(matches!(other, YoutubeError::Failed(_)));
+    }
+
+    #[test]
+    fn errors_follow_the_language() {
+        let Err(parse) = serde_json::from_str::<FlatList<VideoEntry>>("null") else { panic!() };
+        let parse = YoutubeError::from(parse);
+        assert!(parse.message(Lang::En).starts_with("unexpected reply from YouTube: invalid type: null"));
+        assert!(parse.message(Lang::Es).starts_with("respuesta inesperada de YouTube:"));
+        assert_eq!(YoutubeError::NoSession.message(Lang::En), "not logged in: set it up in Settings");
+        assert_eq!(YoutubeError::Failed("boom".into()).message(Lang::En), "yt-dlp failed: boom");
+        assert_eq!(YoutubeError::Failed("boom".into()).message(Lang::Es), "yt-dlp falló: boom");
+        let spawn = YoutubeError::from(std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert!(spawn.message(Lang::En).starts_with("couldn't run yt-dlp: "), "{}", spawn.message(Lang::En));
+    }
+
     #[test]
     fn video_entries_carry_dates_live_status_and_urls() {
         let json = r#"{"entries":[
@@ -1542,9 +1678,11 @@ mod tests {
             {"id":"UCabc","title":"Canal","url":"https://www.youtube.com/channel/UCabc","channel_follower_count":1234567,"description":"Un canal","uploader_id":"@canal"},
             {"id":"UCdef"},
             {"id":"PLxyz","title":"Una playlist"}]}"#;
-        let channels = parse_channels(json).unwrap();
+        let channels = parse_channels(json, Lang::Es).unwrap();
         assert_eq!(channels.len(), 2);
         assert_eq!(channels[0].followers.as_deref(), Some("1,2 M suscriptores"));
+        let english = parse_channels(json, Lang::En).unwrap();
+        assert_eq!(english[0].followers.as_deref(), Some("1.2 M subscribers"));
         assert_eq!(channels[1].name, "UCdef");
         assert_eq!(channels[1].url, "https://www.youtube.com/channel/UCdef");
     }
@@ -1982,7 +2120,8 @@ mod tests {
     fn download_failures_name_the_error_not_a_warning() {
         assert_eq!(failure_reason("ERROR: HTTP Error 403\nWARNING: no impersonate target\n"), "HTTP Error 403");
         assert_eq!(failure_reason("something odd\n\n"), "something odd");
-        assert_eq!(failure_reason(""), "sin detalle");
+        assert_eq!(failure_reason(""), "");
+        assert_eq!(YoutubeError::Failed(failure_reason("")).message(Lang::En), "yt-dlp failed (no details)");
     }
 
     #[test]
@@ -2011,9 +2150,10 @@ mod tests {
 
     #[test]
     fn compact_numbers() {
-        assert_eq!(compact(950), "950");
-        assert_eq!(compact(12_345), "12 k");
-        assert_eq!(compact(1_234_567), "1,2 M");
+        assert_eq!(compact(950, Lang::Es), "950");
+        assert_eq!(compact(12_345, Lang::Es), "12 k");
+        assert_eq!(compact(1_234_567, Lang::Es), "1,2 M");
+        assert_eq!(compact(1_234_567, Lang::En), "1.2 M");
     }
 
     #[test]
