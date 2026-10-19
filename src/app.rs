@@ -168,6 +168,7 @@ pub enum Setting {
     Autoplay,
     AppLang,
     Icons,
+    BorderStyle,
     OmarchyTheme,
     Thumbnails,
     Mouse,
@@ -190,7 +191,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 32] = [
+    pub const ALL: [Self; 33] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -204,6 +205,7 @@ impl Setting {
         Self::Autoplay,
         Self::AppLang,
         Self::Icons,
+        Self::BorderStyle,
         Self::OmarchyTheme,
         Self::Thumbnails,
         Self::Mouse,
@@ -242,6 +244,7 @@ impl Setting {
             Self::Autoplay => ("Enter en un video", "Enter on a video"),
             Self::AppLang => ("Idioma de la app (Ctrl+y + l)", "App language (Ctrl+y + l)"),
             Self::Icons => ("Íconos", "Icons"),
+            Self::BorderStyle => ("Estilo de los bordes", "Border Style"),
             Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
             Self::Thumbnails => ("Portadas de los videos (kitty)", "Video thumbnails (kitty)"),
             Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to copy text: Shift)"),
@@ -1238,6 +1241,7 @@ impl State {
             .into(),
             Setting::AppLang => lang.name().into(),
             Setting::Icons => self.config.ui.icons.as_str().into(),
+            Setting::BorderStyle => self.config.ui.border_style.label(lang).into(),
             Setting::Thumbnails => {
                 let (es, en) = on_off(self.config.ui.thumbnails);
                 self.tr(es, en).into()
@@ -2104,6 +2108,10 @@ impl State {
             Setting::Icons => {
                 self.config.ui.icons = self.config.ui.icons.next();
                 save("ui", "icons", SettingValue::Text(self.config.ui.icons.as_str().into()))
+            }
+            Setting::BorderStyle => {
+                self.config.ui.border_style = self.config.ui.border_style.next();
+                save("ui", "border_style", SettingValue::Text(self.config.ui.border_style.as_str().into()))
             }
             Setting::Thumbnails => {
                 self.config.ui.thumbnails = !self.config.ui.thumbnails;
@@ -5661,6 +5669,8 @@ mod tests {
         );
         assert_eq!(s.config.player.mode, PlayerMode::Overlay);
         assert_eq!(change(&mut s, Setting::Icons), [saved("ui", "icons", text("nerd"))]);
+        assert_eq!(change(&mut s, Setting::BorderStyle), [saved("ui", "border_style", text("rounded"))]);
+        assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);
     }

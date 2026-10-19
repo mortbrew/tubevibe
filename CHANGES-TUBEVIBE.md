@@ -550,7 +550,46 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## Unreleased: Watch Later fails with a clear message, errors in English (`watch-later-null-fix`)
+## 0.8.6: Settings at the bottom of the menu, border styles, AI summary marks, Watch Later fix
+
+### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
+
+- **Settings, About and Quit** sit pinned to the bottom of the left menu,
+  under a short rule in the dim colour that stops two columns short of
+  each side. YOUTUBE, TUBEVIBE, ON THIS COMPUTER and the open tabs stay at
+  the top; the space between them grows with the terminal.
+- `↑`/`↓` still go through every section in order and wrap around (`↑` on
+  My Recommendations goes to Quit, `↓` on Quit back to the top); clicks
+  land on the right rows.
+- A terminal too short for the gap puts them right below the rest (a blank
+  row, then the rule). Shorter still, the menu scrolls so the chosen
+  section always shows.
+
+### Border Style setting (`menu-layout-borders`)
+
+- **Settings → Border Style** (*Estilo de los bordes*): Plain (the look it
+  always had, the default) → Rounded → Thick → Double → None, applied to
+  every pane, dialog and the help. Saved as `[ui] border_style = "plain" |
+  "rounded" | "thick" | "double" | "none"` in config.toml.
+- **None** draws blanks where the lines were: the panes keep their room and
+  titles, so nothing moves.
+- An unknown value (`border_style = "wavy"`) warns in the status bar and
+  uses Plain; the rest of the config still loads.
+- Its own icon in each set: 🔲 / nf-md-border_outside `f00ce` / ▢.
+
+### AI summary mark on titles (`menu-layout-borders`)
+
+- A video whose YouTube AI summary tubevibe already has shows the summary
+  icon after its title in every list (✦ in Emoji and Unicode,
+  nf-md-creation `f0674` in Nerd). The *AI summary* heading in the preview
+  uses the same icon.
+- What it means: tubevibe fetched that video's watch page this session
+  (its preview rested on it, or its tab opened) and YouTube's page carried
+  a summary. Videos not looked at yet carry no mark even if YouTube has a
+  summary: flat lists don't say, and asking per row would mean a request
+  per video. Nothing new is fetched for the mark.
+
+### Watch Later fails with a clear message, errors in English (`watch-later-null-fix`)
 
 - **Watch Later that YouTube won't hand over.** When yt-dlp can't read a
   whole list with `--dump-single-json --ignore-errors`, it prints `null` on

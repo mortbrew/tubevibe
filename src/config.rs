@@ -174,6 +174,56 @@ pub struct UiConfig {
     pub notify_new: bool,
     /// The channels I watch most go first in Suscripciones and Mis canales.
     pub favorites_first: bool,
+    /// How every pane's border is drawn.
+    pub border_style: BorderStyle,
+}
+
+/// The line every pane is framed with (`[ui] border_style`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BorderStyle {
+    /// `┌─┐`, the look tubevibe always had.
+    #[default]
+    Plain,
+    /// `╭─╮`
+    Rounded,
+    /// `┏━┓`
+    Thick,
+    /// `╔═╗`
+    Double,
+    /// No lines; the panes keep their room and titles.
+    None,
+}
+
+impl BorderStyle {
+    pub const ALL: [Self; 5] = [Self::Plain, Self::Rounded, Self::Thick, Self::Double, Self::None];
+
+    pub fn next(self) -> Self {
+        let at = Self::ALL.iter().position(|b| *b == self).unwrap_or(0);
+        Self::ALL[(at + 1) % Self::ALL.len()]
+    }
+
+    /// Value as written in `config.toml`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Plain => "plain",
+            Self::Rounded => "rounded",
+            Self::Thick => "thick",
+            Self::Double => "double",
+            Self::None => "none",
+        }
+    }
+
+    /// As the settings screen shows it.
+    pub fn label(self, lang: Lang) -> &'static str {
+        match self {
+            Self::Plain => lang.pick("Simple", "Plain"),
+            Self::Rounded => lang.pick("Redondeado", "Rounded"),
+            Self::Thick => lang.pick("Grueso", "Thick"),
+            Self::Double => lang.pick("Doble", "Double"),
+            Self::None => lang.pick("Ninguno", "None"),
+        }
+    }
 }
 
 /// Short animations, each one can be turned off.
@@ -346,6 +396,7 @@ impl Default for UiConfig {
             hide_shorts: true,
             notify_new: true,
             favorites_first: true,
+            border_style: BorderStyle::Plain,
         }
     }
 }
@@ -645,6 +696,21 @@ mod tests {
         let (c, w) = Config::parse("[player]\nmode = \"fullscreen\"\nmax_height = 480\n").unwrap();
         assert!(matches!(&w[..], [ConfigWarning::BadValue { key, .. }] if key == "player.mode"), "{w:?}");
         assert_eq!((c.player.mode, c.player.max_height), (PlayerMode::Window, 480));
+    }
+
+    #[test]
+    fn border_style_reads_writes_and_tolerates_bad_values() {
+        assert_eq!(Config::default().ui.border_style, BorderStyle::Plain, "the look it always had");
+        for style in BorderStyle::ALL {
+            let (c, w) = Config::parse(&format!("[ui]\nborder_style = \"{}\"\n", style.as_str())).unwrap();
+            assert_eq!((c.ui.border_style, w.len()), (style, 0));
+        }
+        let (c, w) = Config::parse("[ui]\nborder_style = \"wavy\"\nicons = \"nerd\"\n").unwrap();
+        assert_eq!(c.ui.border_style, BorderStyle::Plain, "the default");
+        assert_eq!(c.ui.icons, IconSet::Nerd, "the rest of [ui] still loads");
+        assert!(matches!(&w[..], [ConfigWarning::BadValue { key, .. }] if key == "ui.border_style"), "{w:?}");
+        assert_eq!(BorderStyle::None.next(), BorderStyle::Plain);
+        assert_eq!(BorderStyle::Thick.label(Lang::En), "Thick");
     }
 
     #[test]

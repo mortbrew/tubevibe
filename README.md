@@ -331,6 +331,7 @@ music_dirs = ["~/Música", "/mnt/discos"]
 
 [ui]
 icons = "emoji"          # emoji | nerd | unicode
+border_style = "plain"   # plain | rounded | thick | double | none
 omarchy_theme = true     # use the current Omarchy theme's colours (Tokyo Night when off or not on Omarchy)
 lang = "en"              # en | es (unset: the system language)
 thumbnails = true        # thumbnail in the preview panel (kitty)
