@@ -594,6 +594,8 @@ pub enum Action {
     GoTab(usize),
     /// The wheel over the menu's tabs: rows to scroll them by.
     ScrollTabs(isize),
+    /// `x` in the menu: closes the tab under the cursor, like Ctrl+Y x in it.
+    MenuCloseTab,
     CloseTab,
     /// The player went away on its own (window closed, video ended, failed to start).
     PlayerClosed(TabId, Option<String>),
@@ -1829,6 +1831,14 @@ impl State {
                 scroll.offset = scroll.offset.saturating_add_signed(rows);
                 scroll.wheeled = true;
                 self.tab_scroll.set(scroll);
+            }
+            Action::MenuCloseTab => {
+                let MenuRow::Tab(i) = self.menu_row() else { return Vec::new() };
+                let id = self.tabs[i].id;
+                self.remove_tab(id);
+                // The cursor: the next tab, else the previous, else the sections.
+                self.menu_tab = (!self.tabs.is_empty()).then(|| i.min(self.tabs.len() - 1));
+                return vec![Effect::Close(id)];
             }
             Action::CloseTab => {
                 if let Some(id) = self.active_tab().map(|t| t.id) {

@@ -762,6 +762,28 @@ could not update itself either. From now on:
 - `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
 
+### x in the menu closes a tab; chevrons above and below (`browser-tab-keys`)
+
+- **`x` on a tab row in the menu closes that tab**, the same as `Ctrl+Y x`
+  inside it: its player stops and tabs.json is saved, with no confirmation
+  (`Ctrl+Y x` has none either). The cursor goes to the next tab, else the
+  previous one, else back to the sections. If the closed tab was shown, the
+  main area shows what `Ctrl+Y x` would: the tab that took its place, or the
+  browsing view when none is left. `x` on a section row does nothing. It's
+  in the help's Menu box, and the bar shows *x Close Tab* only while the
+  cursor is on a tab.
+- **The short rule above TABS is gone**; the one above Settings stays.
+- **Scroll chevrons:** the one next to the TABS title now only means "more
+  above" (an up chevron). A row under the tab list holds a down chevron,
+  in the same column, while tabs are hidden below. Toby's screenshot showed
+  *TABS ⌄*: before, the title showed the down chevron, the up one, or both.
+  Both chevrons come from the chosen icon set. With nothing hidden there
+  are no chevrons and no reserved row. When the list reaches its last tab,
+  that row holds one more tab instead of a blank.
+- Tests: `x_in_the_menu_closes_the_tab_under_the_cursor`,
+  `few_tabs_have_no_chevrons_and_no_rule_above`, and the 35-tab render test,
+  which now checks both chevrons and their column.
+
 ### Unlimited tabs; the menu's tab list scrolls (`browser-tab-keys`)
 
 - **No tab limit.** The `max_tabs` setting is gone, and so is its "At most N
@@ -780,8 +802,7 @@ could not update itself either. From now on:
   icon set) when tabs are hidden above or below. The mouse wheel over the
   tabs scrolls them; the list follows the cursor or the tab shown again as
   soon as that changes.
-- A short rule now sits above TABS too, like the one above Settings, only
-  while a tab is open.
+- A short rule above TABS was added here, then removed (see the entry above).
 - **Short terminals:** the tab list shrinks down to one row. With no room
   even for that, the whole menu becomes one list scrolled to the cursor (or
   the tab shown), as a short menu did before.

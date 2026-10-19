@@ -228,7 +228,8 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         return typing(key.code);
     }
     // The menu has the keys (over the browsing view or a video tab still
-    // shown): moving, opening (→ too, but Quit), back, Tab, / and f.
+    // shown): moving, opening (→ too, but Quit), back, Tab, / and f; x
+    // closes the tab under the cursor.
     if ctx.menu {
         return match key.code {
             KeyCode::Right => Some(Action::MenuOpen),
@@ -239,6 +240,7 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
             KeyCode::Tab => Some(Action::ToggleFocus),
             KeyCode::Char('/') => Some(Action::FocusSearch),
             KeyCode::Char('f') => Some(Action::ToggleFullscreen),
+            KeyCode::Char('x') => Some(Action::MenuCloseTab),
             _ => None,
         };
     }
@@ -351,6 +353,7 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             let mut menu = rows(IN_MENU, lang);
             // → opens too (not Quit); the bar keeps just Enter.
             menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
+            menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
             menu
         }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),

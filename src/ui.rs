@@ -1060,26 +1060,37 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         (ListItem::new(Line::from(format!("{SEPARATOR_INSET}{}", "─".repeat(width))).fg(MUTED)), None)
     };
     let room = usize::from(inner.height);
-    // Above the tabs: a blank row, the rule, the TABS title. Below: a blank row, the rule, Settings…
-    let (tabs_head, tail) = (if tabs.is_empty() { 0 } else { 3 }, 2 + bottom.len());
+    // Above the tabs: a blank row and the TABS title. Below: a blank row, the rule, Settings…
+    let (tabs_head, tail) = (if tabs.is_empty() { 0 } else { 2 }, 2 + bottom.len());
     let tab_rows = room.saturating_sub(top.len() + tabs_head + tail);
     if room >= top.len() + tabs_head + tail + usize::from(!tabs.is_empty()) {
         // The top and the bottom stay put; the tabs take what is left and scroll.
-        let shown = tabs.len().min(tab_rows);
-        let offset = tab_offset(state, tabs.len(), shown);
         let mut items = top;
         if !tabs.is_empty() {
-            let mut title = lang.pick(" PESTAÑAS", " TABS").to_owned();
-            if offset > 0 {
-                title.push_str(&format!(" {}", icons.more_above));
+            let total = tabs.len();
+            let title = lang.pick(" PESTAÑAS", " TABS");
+            // Too many: the last row is kept for the "more below" chevron…
+            let rows = if total > tab_rows && tab_rows > 1 { tab_rows - 1 } else { tab_rows.min(total) };
+            let mut offset = tab_offset(state, total, rows);
+            let mut shown = rows;
+            // …unless nothing is below: then it holds one more tab, from above.
+            if offset + rows >= total && rows < tab_rows.min(total) {
+                shown = tab_rows.min(total);
+                offset = total - shown;
             }
-            if offset + shown < tabs.len() {
-                title.push_str(&format!(" {}", icons.more_below));
+            let chevron = |icon: &str| format!("{}{icon}", " ".repeat(Span::raw(title).width() + 1));
+            let mut head = Line::from(title.to_owned()).fg(MUTED).bold();
+            if offset > 0 {
+                head = Line::from(vec![Span::raw(title.to_owned()), Span::raw(format!(" {}", icons.more_above))])
+                    .fg(MUTED)
+                    .bold();
             }
             items.push((ListItem::new(""), None));
-            items.push(rule());
-            items.push((ListItem::new(Line::from(title).fg(MUTED).bold()), None));
+            items.push((ListItem::new(head), None));
             items.extend(tabs.into_iter().skip(offset).take(shown));
+            if offset + shown < total {
+                items.push((ListItem::new(Line::from(chevron(icons.more_below)).fg(MUTED).bold()), None));
+            }
         }
         let gap = room.saturating_sub(items.len() + 1 + bottom.len()).max(1);
         items.extend((0..gap).map(|_| (ListItem::new(""), None)));
@@ -1092,7 +1103,6 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     let mut items = top;
     if !tabs.is_empty() {
         items.push((ListItem::new(""), None));
-        items.push(rule());
         items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
         items.extend(tabs);
     }
@@ -1849,7 +1859,11 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             _ => vec![key("Enter", "aceptar", "accept"), key("Esc", "cancelar", "cancel")],
         }
     } else if state.focus == Focus::Menu && state.active_tab().is_some() {
-        rows(keymap::IN_MENU)
+        let mut keys = rows(keymap::IN_MENU);
+        if matches!(state.menu_row(), MenuRow::Tab(_)) {
+            keys.push(key("x", "Cerrar pestaña", "Close Tab"));
+        }
+        keys
     } else if state.key_context().related {
         vec![
             key("Enter", "ver", "play"),
@@ -1893,6 +1907,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
         keys
     } else if state.focus == Focus::Menu || state.listing().is_none() {
         let mut keys = rows(keymap::IN_MENU);
+        if state.focus == Focus::Menu && matches!(state.menu_row(), MenuRow::Tab(_)) {
+            keys.push(key("x", "Cerrar pestaña", "Close Tab"));
+        }
         if state.listing().is_some_and(|l| l.items == Items::About) && about_button_ready(state) {
             keys.insert(0, key("Tab", "elegir Actualizar Ahora", "select Update Now"));
         }
@@ -4092,15 +4109,14 @@ mod tests {
             let label = label.label(Lang::Es);
             assert_eq!(at(&screen, label), at(&empty, label), "{label}\n{}", screen.join("\n"));
         }
-        // A rule above the tabs too, and the title says more are above.
+        // No rule above the tabs, just a blank row; the title's chevron says more
+        // are above, and with the last tab in view no chevron row below it.
+        let (up, down) = (icons(s.config.ui.icons).more_above, icons(s.config.ui.icons).more_below);
         let title = at(&screen, "PESTAÑAS");
-        assert!(screen[title - 1].contains("──") && screen[title - 2].trim_matches(['│', ' ']).is_empty());
-        assert!(
-            screen[title].contains(icons(s.config.ui.icons).more_above)
-                && !screen[title].contains(icons(s.config.ui.icons).more_below),
-            "{}",
-            screen[title]
-        );
+        assert!(screen[title - 1].trim_matches(['│', ' ']).is_empty(), "{}", screen.join("\n"));
+        assert!(screen[title].contains(up) && !screen.iter().any(|l| l.contains(down)), "{}", screen.join("\n"));
+        let last = at(&screen, " title 34 ");
+        assert!(screen[last + 1].trim_matches(['│', ' ']).is_empty(), "the gap above the rule");
         // The tab shown is in view, the last rows of the tab area.
         let rows = tab_rows_shown(&screen);
         assert_eq!(*rows.last().unwrap(), 34, "{}", screen.join("\n"));
@@ -4109,12 +4125,26 @@ mod tests {
         // Alt+. wraps to the first tab: the list follows.
         s.update(Action::NextTab);
         let screen = render_screen(&s, 130, 40);
-        assert_eq!(tab_rows_shown(&screen), (0..count).collect::<Vec<_>>());
+        // One row fewer: the last is the "more below" chevron.
+        assert_eq!(tab_rows_shown(&screen), (0..count - 1).collect::<Vec<_>>());
+        // At the top: no chevron by the title, a down one in its own row below
+        // the last tab shown, in the title chevron's column.
         let title = at(&screen, "PESTAÑAS");
-        assert!(
-            screen[title].contains(icons(s.config.ui.icons).more_below)
-                && !screen[title].contains(icons(s.config.ui.icons).more_above)
-        );
+        assert!(!screen[title].contains(up), "{}", screen[title]);
+        let below = at(&screen, down);
+        assert_eq!(below, at(&screen, &format!(" title {} ", count - 2)) + 1);
+        let column = |line: &str, icon: &str| line[..line.find(icon).unwrap()].chars().count();
+        assert_eq!(column(&screen[below], down), "│ PESTAÑAS ".chars().count(), "{}", screen[below]);
+        // In the middle: both.
+        s.update(Action::FocusMenu);
+        for _ in 0..17 {
+            s.update(Action::Down);
+        }
+        let screen = render_screen(&s, 130, 40);
+        let title = at(&screen, "PESTAÑAS");
+        assert!(screen[title].contains(up) && screen.iter().any(|l| l.contains(down)), "{}", screen.join("\n"));
+        assert_eq!(column(&screen[title], up), column(&screen[at(&screen, down)], down));
+        s.update(Action::GoTab(1));
         // Alt+, back to the last.
         s.update(Action::PrevTab);
         assert_eq!(*tab_rows_shown(&render_screen(&s, 130, 40)).last().unwrap(), 34);
@@ -4178,5 +4208,61 @@ mod tests {
     fn tab_rows_have_no_number() {
         let screen = render(&with_tab());
         assert!(screen.contains("│ ▶ title a ") && !screen.contains("1 ▶ title a"), "{screen}");
+    }
+
+    #[test]
+    fn few_tabs_have_no_chevrons_and_no_rule_above() {
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let mut s = with_tab();
+            s.config.ui.icons = set;
+            let screen = render_screen(&s, 130, 40);
+            let i = icons(set);
+            assert!(!screen.iter().any(|l| l.contains(i.more_above) || l.contains(i.more_below)), "{set:?}");
+            let title = row_of(&screen, "PESTAÑAS");
+            assert!(!screen[title - 1].contains("──"), "{}", screen.join("\n"));
+            assert_eq!(
+                screen.iter().filter(|l| l.contains("──") && l.starts_with("│ ")).count(),
+                1,
+                "only above Settings"
+            );
+        }
+    }
+
+    #[test]
+    fn x_in_the_menu_closes_the_tab_under_the_cursor() {
+        let mut s = with_35_tabs();
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(34));
+        assert!(hint_keys(&s).contains(&"x".to_string()), "x Close Tab on a tab row");
+        let x = |s: &State| {
+            keymap::map(
+                ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Char('x')),
+                s.key_context(),
+            )
+        };
+        let shown = s.tabs[34].id;
+        assert_eq!(s.update(x(&s).unwrap()), vec![Effect::Close(shown)]);
+        // The shown tab is gone: the previous one is shown, like Ctrl+Y x, and has the cursor.
+        assert_eq!((s.tabs.len(), s.active, s.menu_row()), (34, 34, MenuRow::Tab(33)));
+        // Not the shown tab: the next one gets the cursor, the shown one stays.
+        s.update(Action::Up);
+        s.update(Action::Up);
+        let closed = s.tabs[31].id;
+        assert_eq!(s.update(x(&s).unwrap()), vec![Effect::Close(closed)]);
+        assert_eq!((s.tabs.len(), s.active, s.menu_row()), (33, 33, MenuRow::Tab(31)));
+        let screen = render_screen(&s, 130, 40);
+        assert!(screen.iter().any(|l| l.contains("▌▶ title 32 ")), "{}", screen.join("\n"));
+        // Not on a tab: nothing, and no x in the bar.
+        s.menu_tab = None;
+        assert!(s.update(x(&s).unwrap()).is_empty());
+        assert_eq!(s.tabs.len(), 33);
+        assert!(!hint_keys(&s).contains(&"x".to_string()));
+        // The last tab: the cursor goes back to the sections, the browsing view shows.
+        let mut s = with_tab();
+        s.update(Action::FocusMenu);
+        s.update(x(&s).unwrap());
+        assert!(s.tabs.is_empty() && s.active == 0);
+        assert!(matches!(s.menu_row(), MenuRow::Section(_)));
+        render(&s);
     }
 }
