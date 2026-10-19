@@ -124,12 +124,26 @@ pub const IN_TAB: &[(&str, Text)] = &[
 
 /// `(keys, description)` rows of a table, in `lang`.
 pub fn rows(table: &[(&str, Text)], lang: Lang) -> Vec<(String, &'static str)> {
-    table.iter().map(|(k, d)| (space_key(k, lang), d.get(lang))).collect()
+    table.iter().map(|(k, d)| (key_name(k, lang), d.get(lang))).collect()
 }
 
-/// The space bar is named in the interface language.
-fn space_key(keys: &str, lang: Lang) -> String {
-    if keys == "espacio" { lang.pick("espacio", "space").into() } else { keys.into() }
+/// Keys and mouse actions with a name of their own, in Spanish and English.
+const KEY_NAMES: &[(&str, &str)] = &[
+    ("espacio", "space"),
+    ("clic", "Click"),
+    ("doble clic", "Double Click"),
+    ("rueda", "Wheel"),
+    ("clic video", "Click Video"),
+    ("clic der.", "Right Click"),
+    ("clic barra", "Click Progress Bar"),
+];
+
+/// A key's name in the interface language (the tables name them in Spanish).
+fn key_name(keys: &str, lang: Lang) -> String {
+    match KEY_NAMES.iter().find(|(es, _)| *es == keys) {
+        Some((es, en)) => lang.pick(*es, *en).into(),
+        None => keys.into(),
+    }
 }
 
 /// `Ctrl+y` commands plus the digits, in `lang`.
@@ -516,6 +530,12 @@ mod tests {
         assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "q").unwrap().1, "quit");
         assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "q").unwrap().1, "salir");
         assert_eq!(rows(IN_TAB, Lang::En)[0].0, "space");
+        let mouse: Vec<_> = rows(WITH_MOUSE, Lang::En).into_iter().map(|(k, _)| k).collect();
+        assert_eq!(
+            mouse,
+            ["Click", "Double Click", "Wheel", "Click Video", "Right Click", "Click Progress Bar", "Shift"]
+        );
+        assert_eq!(rows(WITH_MOUSE, Lang::Es)[1].0, "doble clic");
         assert_eq!(map(char('l'), PREFIXED), Some(Action::ToggleUiLang));
     }
 }

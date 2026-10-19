@@ -630,6 +630,13 @@ could not update itself either. From now on:
   README shows the two lines that hand it to tubevibe. Elsewhere, `Ctrl+y
   1`–`9` always works.
 
+### Mouse help in English (`browser-tab-keys`)
+
+- The help's Mouse section named its actions in Spanish whatever the
+  language (*clic*, *doble clic*, *rueda*, *clic der.*, *clic barra*). In
+  English they are now *Click*, *Double Click*, *Wheel*, *Click Video*,
+  *Right Click* and *Click Progress Bar*.
+
 ### Open tabs come back after a restart (`menu-layout-borders`)
 
 - The open tabs are kept in **`~/.local/share/tubevibe/tabs.json`** (the
