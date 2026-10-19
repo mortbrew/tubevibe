@@ -1520,6 +1520,11 @@ impl State {
                 let id = self.mpv_fullscreen.take().expect("checked");
                 return vec![Effect::Command(id, PlayerCommand::Fullscreen(false))];
             }
+            // Esc on a video tab (Up Next's own Esc goes back to the video
+            // first): to the menu, its cursor on the tab, like Esc from a list.
+            Action::Back if self.active_tab().is_some() && self.prompt.is_none() && !self.fullscreen => {
+                return self.apply(Action::FocusMenu);
+            }
             Action::Back => self.back(),
             Action::FocusSearch => self.search_videos(),
             Action::CycleScope => self.cycle_scope(),
@@ -6771,6 +6776,19 @@ mod tests {
             (s.focus, s.menu_row()),
             (Focus::Menu, MenuRow::Section(State::section_index(Section::Configuracion)))
         );
+    }
+
+    #[test]
+    fn esc_on_a_video_tab_goes_to_the_menu_on_that_tab() {
+        let mut s = with_videos(&["a", "b"]);
+        s.stack.push(Listing::new("Canal".into(), Items::Videos(vec![video("c")]), ListKind::Plain));
+        play(&mut s, 0);
+        s.update(Action::ToggleFullscreen);
+        s.update(Action::Back);
+        assert!(!s.fullscreen && s.active == 1, "first Esc only leaves fullscreen");
+        s.update(Action::Back);
+        assert_eq!((s.active, s.focus, s.menu_row()), (0, Focus::Menu, MenuRow::Tab(0)));
+        assert_eq!(s.stack.len(), 2, "the list behind the tab is left alone");
     }
 
     #[test]

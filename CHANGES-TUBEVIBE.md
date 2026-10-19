@@ -726,6 +726,21 @@ could not update itself either. From now on:
     now sets the cursor itself, so a section opened any other way (a
     click, a key) comes back right too.
 
+### Esc on a video tab goes to the menu; only the focused pane is lit (`browser-tab-keys`)
+
+- `Esc` in Up Next still goes back to the video's info. `Esc` there now
+  goes to the left menu with the cursor on the tab, like `Esc` from a list
+  and like `←`. (In fullscreen the first `Esc` still just leaves it.)
+  Before, `Esc` on the video's info did nothing you could see, and when the
+  list behind the tab was one level deep (a channel, a playlist) it quietly
+  took that list away, so you were back a level after leaving the tab.
+- While Up Next has the keys, the video pane's border (or, with Border
+  Style → None, its title) is dim, so only Up Next is lit; back on the
+  video's info it lights up again. It uses the same focused / dim colours
+  as the menu and lists, so it follows the Omarchy theme. The comments
+  pane never takes the keys (`PgUp` / `PgDn` scroll it from the tab) and
+  stays dim.
+
 ### My Recommendations is kept for a minute (`browser-tab-keys`)
 
 - Opening **My Recommendations** asked YouTube for the whole home feed

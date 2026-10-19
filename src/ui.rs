@@ -568,7 +568,8 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
             } else {
                 Paragraph::new(lang.pick("Se reproduce en una ventana de mpv", "Playing in an mpv window")).fg(MUTED)
             };
-            let mut block = panel(title, BLUE);
+            // Lit while it has the keys; dim while Up Next has them.
+            let mut block = focus_panel(title, !state.key_context().related);
             if let Some(info) = &view.playing {
                 block = block.title_top(Line::from(playing_label(info, icons)).fg(CYAN).right_aligned());
                 if let Some(progress) = progress_line(info, &tab.segments, areas.content.width) {
@@ -3559,6 +3560,43 @@ mod tests {
         let mut s = with_items(Items::Videos(vec![Video { live: Live::Now, ..video("l") }]));
         s.summaries.insert("l".into(), None);
         assert!(!render(&s).contains("✦"));
+    }
+
+    #[test]
+    fn only_the_pane_with_the_keys_is_lit_in_a_video_tab() {
+        let mut s = with_items(Items::Videos(vec![video("a")]));
+        s.video_window = true;
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        let watch = Watch {
+            views: None,
+            likes: None,
+            published: None,
+            subscribers: None,
+            related: vec![video("r1"), video("r2")],
+            rating: None,
+            comments_token: None,
+            summary: None,
+        };
+        s.update(Action::Watched(tab, Ok(watch)));
+        let content = areas(Rect::new(0, 0, 130, 40), true).content;
+        let corner = |s: &State| {
+            let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+            terminal.draw(|f| draw(f, s, &View { embedded: false, ..VIEW })).unwrap();
+            terminal.backend().buffer()[(content.right() - 1, content.y)].fg
+        };
+        assert_eq!(corner(&s), BLUE, "the video pane has the keys");
+        s.update(Action::ToggleFocus);
+        assert!(s.key_context().related);
+        assert_eq!(corner(&s), MUTED, "Up Next has them: the video pane is dim");
+        let esc = keymap::map(
+            ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Esc),
+            s.key_context(),
+        )
+        .unwrap();
+        s.update(esc);
+        assert_eq!(corner(&s), BLUE, "Esc in Up Next: back to the video, lit again");
+        assert_eq!(s.active, 1, "still on the tab");
     }
 
     #[test]

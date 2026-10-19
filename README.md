@@ -288,7 +288,7 @@ leaves the list); `Space` marks several downloads for one `x`. In **My Videos**
 and **My Music**: `Space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
 In a video tab that is not playing yet (or closed), `Enter` or `Space` plays it.
-While watching: `Space` pause, `Shift+←` / `Shift+→` seek 5 s (`→` alone seeks forward too), `←` goes to the menu, `↑↓` volume, `m` mute, `j`
+While watching: `Space` pause, `Shift+←` / `Shift+→` seek 5 s (`→` alone seeks forward too), `←` or `Esc` goes to the menu (cursor on the tab; `Esc` in Up Next first goes back to the video, and in fullscreen first leaves it), `↑↓` volume, `m` mute, `j`
 subtitles, `i` original / subtitles / dubbed, `o` language, `v` quality
 (360p–1440p), `b` codec (H.264 / VP9 / AV1 / any), `f` fullscreen, `.` `,`
 next / previous song, `[` `]` previous / next chapter, `a` audio only ⇄ video,

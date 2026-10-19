@@ -112,7 +112,7 @@ pub const IN_TAB: &[(&str, Text)] = &[
     ("v", Text::new("calidad: 360p → 480p → 720p → 1080p …", "quality: 360p → 480p → 720p → 1080p …")),
     ("b", Text::new("compresión: H.264 → VP9 → AV1 → cualquiera", "codec: H.264 → VP9 → AV1 → any")),
     ("f  Esc", Text::new("pantalla completa / salir", "fullscreen / leave")),
-    ("←", Text::new("ir al menú", "go to the menu")),
+    ("←  Esc", Text::new("ir al menú", "go to the menu")),
     ("Shift+← →", Text::new("retroceder / avanzar 5 s (o solo →)", "back / forward 5 s (or → alone)")),
     ("[ ]", Text::new("capítulo anterior / siguiente", "previous / next chapter")),
     ("↑ ↓  m", Text::new("subir / bajar volumen · silenciar", "volume up / down · mute")),
