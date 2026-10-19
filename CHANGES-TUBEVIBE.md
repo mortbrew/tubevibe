@@ -550,7 +550,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, border styles, AI summary marks, tabs in the menu only, tabs restored, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, AI summary marks, tabs in the menu only, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -564,6 +564,19 @@ could not update itself either. From now on:
 - A terminal too short for the gap puts them right below the rest (a blank
   row, then the rule). Shorter still, the menu scrolls so the chosen
   section always shows.
+
+### The menu lights up when it has the keys (`menu-focus-border`)
+
+- The left menu's border stayed dim whether or not it had the keys, while
+  the list (and *Up next* in a video tab) turn blue when focused, so it
+  wasn't obvious the menu was the active pane. Its frame was drawn with the
+  dim colour, hard-coded. Now the menu uses the same focused style as the
+  other panes: blue (the theme's blue under Omarchy, e.g. Gruvbox) while it
+  has the keys on the browsing view, dim otherwise.
+- With **Border Style → None** there is no line to light, so the focused
+  pane's title is shown on the highlight instead (the menu's *tubevibe*, the
+  list's title).
+- The short rule above Settings, About and Quit stays dim either way.
 
 ### Border Style setting (`menu-layout-borders`)
 
