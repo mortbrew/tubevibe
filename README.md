@@ -276,6 +276,8 @@ a click on the video pauses (double click: fullscreen), a click on the
 progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
+In the menu, `↑↓` walk the sections and the open tabs (under TABS) alike; `Enter` opens either.
+
 In lists: `↑↓` / `jk`, `Enter`, `Esc` / `Backspace` to go back, `f` fullscreen for the video that is playing, `Tab` menu ↔ list,
 `w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
 audio only. In **History** `x` removes the video; in YouTube's **Watch Later** and
@@ -286,7 +288,7 @@ leaves the list); `Space` marks several downloads for one `x`. In **My Videos**
 and **My Music**: `Space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
 In a video tab that is not playing yet (or closed), `Enter` or `Space` plays it.
-While watching: `Space` pause, `←→` seek, `↑↓` volume, `m` mute, `j`
+While watching: `Space` pause, `Shift+←` / `Shift+→` seek 5 s (`→` alone seeks forward too), `←` goes to the menu, `↑↓` volume, `m` mute, `j`
 subtitles, `i` original / subtitles / dubbed, `o` language, `v` quality
 (360p–1440p), `b` codec (H.264 / VP9 / AV1 / any), `f` fullscreen, `.` `,`
 next / previous song, `[` `]` previous / next chapter, `a` audio only ⇄ video,

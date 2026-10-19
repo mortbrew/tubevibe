@@ -550,7 +550,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Alt+, / Alt+. tabs, fullscreen fix, consistency pass, tabs restored, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Alt+, / Alt+. tabs, menu walks tabs, ← to the menu, fullscreen fix, consistency pass, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -690,6 +690,32 @@ could not update itself either. From now on:
   tubetui and both credit polblancoo.
 - **README config example** uses English and standard paths (`~/Videos`,
   `~/Music`, `~/Downloads`, `sub_lang = "en"`) and section names in English.
+
+### The menu walks the open tabs (`browser-tab-keys`)
+
+- `↑` / `↓` in the left menu used to jump from Downloads straight to
+  Settings, skipping TABS. Now they walk every row in the order it shows:
+  the sections, then each open tab, then Settings, About and Quit (still
+  wrapping around). On a tab the cursor lights it like a focused section,
+  and `Enter` opens it. Closing the tab under the cursor puts the cursor
+  back on the sections.
+- Coming back to the menu from a video tab (`←` or `Ctrl+Y m`) leaves the
+  cursor on that tab. `Alt+,` / `Alt+.` and `Ctrl+Y 1`–`9` are unchanged.
+
+### Video tab: ← goes to the menu, Shift+← → seek (`browser-tab-keys`)
+
+- `←` in a video tab (and in its Up Next list) now goes to the left menu,
+  as `←` does from the first list everywhere else. It used to seek back
+  5 s; seeking is now `Shift+←` / `Shift+→` (5 s), and `→` alone still
+  seeks forward. A click on the progress bar still jumps anywhere.
+
+### Shorter video tab bar (`browser-tab-keys`)
+
+- The bottom bar of a video tab no longer repeats the help's *Enter: play ·
+  in Up Next: the selected video* row, `Space` comes before `Tab`, and
+  `v` / `b` read *Quality Change* / *Codec Change* (*Cambiar calidad* /
+  *Cambiar códec*) instead of listing every step. The bar's last item, on
+  every screen, is now `Ctrl+Y ?` *Help* (*Ayuda*).
 
 ### Open tabs come back after a restart (`menu-layout-borders`)
 

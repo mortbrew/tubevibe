@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::app::{
-    Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, Prompt, Section, Setting, State, Tab,
+    Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, MenuRow, Prompt, Section, Setting, State, Tab,
     YOUTUBE_LATER, language_label,
 };
 use crate::config::{BorderStyle, IconSet, donations};
@@ -1008,7 +1008,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         if *section == Section::AcercaDe && state.update.is_some() {
             label.push_str(&format!(" {}", icons.update));
         }
-        let selected = i == state.menu;
+        let selected = state.menu_row() == MenuRow::Section(i);
         let focused = selected && menu_focused(state);
         let color = SECTION_COLORS[i];
         let mut style = Style::new().fg(if selected { color } else { FG });
@@ -1027,8 +1027,16 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         top.push((ListItem::new(""), None));
         top.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
         for (i, tab) in state.tabs.iter().enumerate() {
-            let active = state.active == i + 1;
-            let style = if active { Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold() } else { Style::new().fg(FG) };
+            // Lit like a focused section while it is shown or the menu's cursor is on it.
+            let cursor = state.menu_row() == MenuRow::Tab(i);
+            let active = state.active == i + 1 || (cursor && menu_focused(state));
+            let style = if active {
+                Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold()
+            } else if cursor {
+                Style::new().fg(MAGENTA)
+            } else {
+                Style::new().fg(FG)
+            };
             let line =
                 format!("{}{} {} {}", if active { "▌" } else { " " }, i + 1, tab_icon(icons, tab), tab.playback.title);
             top.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
@@ -1044,7 +1052,11 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     items.push((ListItem::new(Line::from(rule).fg(MUTED)), None));
     items.extend(bottom);
     // Too short for all of it: scrolled so the chosen section shows.
-    let chosen = items.iter().position(|(_, spot)| *spot == Some(Spot::Section(state.menu))).unwrap_or(0);
+    let spot = match state.menu_row() {
+        MenuRow::Section(i) => Spot::Section(i),
+        MenuRow::Tab(i) => Spot::Tab(i + 1),
+    };
+    let chosen = items.iter().position(|(_, s)| *s == Some(spot)).unwrap_or(0);
     let skip = (chosen + 1).saturating_sub(room);
     items.drain(..skip);
     items
@@ -1718,7 +1730,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
     // Global commands are two keys: Ctrl+Y, let go, then the letter.
-    let all_keys = key("Ctrl+Y ?", "todos los atajos", "every shortcut");
+    let all_keys = key("Ctrl+Y ?", "Ayuda", "Help");
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
         key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
@@ -1777,16 +1789,28 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             },
         ]
     } else if state.active_tab().is_some() {
-        let mut keys = rows(keymap::IN_TAB);
-        keys.insert(1, key("Ctrl+Y x", "cerrar la pestaña", "close the tab"));
-        if state.related_shown().is_some() {
-            keys.insert(0, key("Tab", "A continuación", "Up Next"));
-        }
+        let mut keys = Vec::new();
         if state.active_tab().is_some_and(|t| t.ended && !t.started) {
-            keys.insert(0, key("Enter", "reproducir", "play"));
+            keys.push(key("Enter", "reproducir", "play"));
         } else if state.active_tab().is_some_and(|t| t.ended) {
-            keys.insert(0, key("Enter", "volver a verlo", "play it again"));
+            keys.push(key("Enter", "volver a verlo", "play it again"));
         }
+        keys.push(key(keymap::space(lang), "pausa", "pause"));
+        if state.related_shown().is_some() {
+            keys.push(key("Tab", "A continuación", "Up Next"));
+        }
+        keys.push(key("Ctrl+Y x", "cerrar la pestaña", "close the tab"));
+        keys.push(key("v", "Cambiar calidad", "Quality Change"));
+        keys.push(key("b", "Cambiar códec", "Codec Change"));
+        // The rest of the tab's keys, but the ones above and Up Next's own,
+        // which the help explains.
+        let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc"];
+        keys.extend(
+            keymap::IN_TAB
+                .iter()
+                .filter(|(k, _)| !shown.contains(k))
+                .map(|(k, d)| (keymap::key_name(k, lang), d.get(lang))),
+        );
         keys.extend(rows(keymap::ON_VIDEO));
         keys
     } else if state.focus == Focus::Menu || state.listing().is_none() {
@@ -2749,6 +2773,39 @@ mod tests {
     }
 
     #[test]
+    fn video_tab_bar_is_short_and_ordered() {
+        let mut s = with_tab();
+        s.update(Action::ToggleUiLang);
+        let keys: Vec<(String, &str)> = hints(&s);
+        let at = |k: &str, d: &str| keys.iter().position(|(key, desc)| key == k && *desc == d);
+        assert_eq!(
+            keys.iter().filter(|(k, _)| k == "Enter").count(),
+            keys.iter().filter(|(_, d)| d.starts_with("play")).count()
+        );
+        assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
+        assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
+        assert!(at("Space", "pause") < at("Ctrl+Y x", "close the tab"));
+        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Help"));
+        s.update(Action::ToggleUiLang);
+        let keys = hints(&s);
+        assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
+        assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
+        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Ayuda"));
+    }
+
+    #[test]
+    fn menu_cursor_lights_the_tab_it_is_on() {
+        let mut s = with_tab();
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        let screen = render(&s);
+        assert!(screen.contains("▌1 ▶ title a"), "{screen}");
+        s.update(Action::Down);
+        let screen = render(&s);
+        assert!(!screen.contains("▌1 ▶ title a") && screen.contains("▌⚙"), "on Settings now: {screen}");
+    }
+
+    #[test]
     fn window_mode_tab_explains_where_video_is() {
         assert!(render_with(&with_tab(), &View { embedded: false, ..VIEW }).contains("ventana de mpv"));
         assert!(!render(&with_tab()).contains("ventana de mpv"));
@@ -2854,7 +2911,7 @@ mod tests {
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
             assert!(screen.contains("Space mark several"), "{screen}");
-            assert!(screen.contains("every shortcut"), "whole hints only, the last one kept");
+            assert!(screen.contains("Ctrl+Y ? Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -2903,7 +2960,7 @@ mod tests {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
         assert!(screen.contains("w ver después YouTube"), "{screen}");
         assert!(screen.contains("l ver después tubevibe"), "{screen}");
-        assert!(screen.contains("Ctrl+Y ? todos los atajos"));
+        assert!(screen.contains("Ctrl+Y ? Ayuda"));
     }
 
     #[test]
@@ -2988,7 +3045,7 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "Ctrl+Y ? Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
@@ -3014,7 +3071,7 @@ mod tests {
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("Ctrl+Y ? todos los atajos"), "{line}");
+        assert!(line.contains("Ctrl+Y ? Ayuda"), "{line}");
         assert!(line.contains("Espacio pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
@@ -3547,7 +3604,7 @@ mod tests {
         assert_eq!((cells.width, cells.height), (34, 34 * 9 / 32), "a third of the tab, at most 36 columns");
         let (x, y) = find(&screen, "title r2  1:00");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        assert_eq!(hints(&s)[0].0, "Tab");
+        assert_eq!((hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()), ("Espacio", "Tab"), "Space before Tab");
         s.update(Action::ToggleFocus);
         let screen = render_with(&s, &view);
         assert!(screen.contains("A continuación · 2 "), "{screen}");

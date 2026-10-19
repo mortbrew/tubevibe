@@ -67,7 +67,7 @@ pub const ON_VIDEO: &[(&str, Text)] = &[
 ];
 
 pub const IN_MENU: &[(&str, Text)] = &[
-    ("↑ ↓", Text::new("elegir sección", "choose a section")),
+    ("↑ ↓", Text::new("elegir sección o pestaña", "choose a section or tab")),
     ("Enter", Text::new("abrir", "open")),
     ("Tab", Text::new("ir a la lista", "go to the list")),
     ("/", Text::new("buscar videos", "search videos")),
@@ -110,7 +110,8 @@ pub const IN_TAB: &[(&str, Text)] = &[
     ("v", Text::new("calidad: 360p → 480p → 720p → 1080p …", "quality: 360p → 480p → 720p → 1080p …")),
     ("b", Text::new("compresión: H.264 → VP9 → AV1 → cualquiera", "codec: H.264 → VP9 → AV1 → any")),
     ("f  Esc", Text::new("pantalla completa / salir", "fullscreen / leave")),
-    ("← →", Text::new("retroceder / avanzar 5 s", "back / forward 5 s")),
+    ("←", Text::new("ir al menú", "go to the menu")),
+    ("Shift+← →", Text::new("retroceder / avanzar 5 s (o solo →)", "back / forward 5 s (or → alone)")),
     ("[ ]", Text::new("capítulo anterior / siguiente", "previous / next chapter")),
     ("↑ ↓  m", Text::new("subir / bajar volumen · silenciar", "volume up / down · mute")),
     ("j", Text::new("subtítulos sí / no", "subtitles on / off")),
@@ -146,7 +147,7 @@ pub fn space(lang: Lang) -> &'static str {
 }
 
 /// A key's name in the interface language (the tables name them in Spanish).
-fn key_name(keys: &str, lang: Lang) -> String {
+pub fn key_name(keys: &str, lang: Lang) -> String {
     match KEY_NAMES.iter().find(|(es, _)| *es == keys) {
         Some((es, en)) => lang.pick(*es, *en).into(),
         None => keys.into(),
@@ -246,6 +247,16 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         KeyCode::Char('c') => return Some(Action::OpenChannel),
         _ => {}
     }
+    // In a video tab ← goes to the menu, as from the first list; Shift+← →
+    // seek (→ alone too).
+    if ctx.in_tab {
+        match key.code {
+            KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => return Some(Action::Seek(-SEEK_SECONDS)),
+            KeyCode::Right => return Some(Action::Seek(SEEK_SECONDS)),
+            KeyCode::Left => return Some(Action::FocusMenu),
+            _ => {}
+        }
+    }
     match (ctx.in_tab, ctx.related) {
         (true, true) => related(key.code).or_else(|| player(key.code)),
         (true, false) => player(key.code),
@@ -277,8 +288,6 @@ fn typing(code: KeyCode) -> Option<Action> {
 fn player(code: KeyCode) -> Option<Action> {
     match code {
         KeyCode::Char(' ') => Some(Action::TogglePause),
-        KeyCode::Left => Some(Action::Seek(-SEEK_SECONDS)),
-        KeyCode::Right => Some(Action::Seek(SEEK_SECONDS)),
         KeyCode::Up => Some(Action::Volume(VOLUME_STEP)),
         KeyCode::Down => Some(Action::Volume(-VOLUME_STEP)),
         KeyCode::Char('m') => Some(Action::ToggleMute),
@@ -472,8 +481,13 @@ mod tests {
     #[test]
     fn player_controls_in_tab() {
         assert_eq!(map(char(' '), TAB), Some(Action::TogglePause));
-        assert_eq!(map(key(KeyCode::Left), TAB), Some(Action::Seek(-SEEK_SECONDS)));
+        assert_eq!(map(key(KeyCode::Left), TAB), Some(Action::FocusMenu));
+        assert_eq!(map(key(KeyCode::Left), KeyContext { related: true, ..TAB }), Some(Action::FocusMenu));
+        let shift = |code| KeyEvent::new(code, KeyModifiers::SHIFT);
+        assert_eq!(map(shift(KeyCode::Left), TAB), Some(Action::Seek(-SEEK_SECONDS)));
+        assert_eq!(map(shift(KeyCode::Right), TAB), Some(Action::Seek(SEEK_SECONDS)));
         assert_eq!(map(key(KeyCode::Right), TAB), Some(Action::Seek(SEEK_SECONDS)));
+        assert_eq!(map(key(KeyCode::Left), LISTS), Some(Action::Back), "lists unchanged");
         assert_eq!(map(key(KeyCode::Up), TAB), Some(Action::Volume(VOLUME_STEP)));
         assert_eq!(map(key(KeyCode::Down), TAB), Some(Action::Volume(-VOLUME_STEP)));
         assert_eq!(map(char('m'), TAB), Some(Action::ToggleMute));

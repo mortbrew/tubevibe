@@ -277,6 +277,15 @@ impl Setting {
     }
 }
 
+/// A row of the menu the cursor can be on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuRow {
+    /// An entry of `Section::ALL`.
+    Section(usize),
+    /// An open tab, by its index in `tabs`.
+    Tab(usize),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
     Menu,
@@ -980,6 +989,9 @@ pub struct State {
     pub focus: Focus,
     /// Selected entry of `Section::ALL`.
     pub menu: usize,
+    /// The menu's cursor on an open tab (its index in `tabs`) instead of on
+    /// `menu`: ↑ ↓ walk the sections and the tabs in the order they show.
+    pub menu_tab: Option<usize>,
     pub prompt: Option<Prompt>,
     pub query: String,
     /// Lists on Inicio; the last one is shown.
@@ -1076,6 +1088,7 @@ impl State {
             help: false,
             fullscreen: false,
             menu: 0,
+            menu_tab: None,
             prompt: None,
             query: String::new(),
             stack: Vec::new(),
@@ -1361,7 +1374,30 @@ impl State {
         if let Some(tab) = self.active_tab() {
             self.last_tab = Some(tab.id);
         }
+        // The cursor leaves a closed tab, and the menu once the list has the keys.
+        if self.menu_tab.is_some_and(|i| i >= self.tabs.len()) || (self.active == 0 && self.focus == Focus::List) {
+            self.menu_tab = None;
+        }
         effects
+    }
+
+    /// The menu's rows in the order they show: the sections, the open tabs,
+    /// then Settings, About and Quit.
+    pub fn menu_rows(&self) -> Vec<MenuRow> {
+        let section = |i: &usize| Section::ALL[*i].group() == Group::App;
+        let all: Vec<usize> = (0..Section::ALL.len()).collect();
+        let mut rows: Vec<MenuRow> = all.iter().filter(|i| !section(i)).map(|&i| MenuRow::Section(i)).collect();
+        rows.extend((0..self.tabs.len()).map(MenuRow::Tab));
+        rows.extend(all.iter().filter(|i| section(i)).map(|&i| MenuRow::Section(i)));
+        rows
+    }
+
+    /// Where the menu's cursor is.
+    pub fn menu_row(&self) -> MenuRow {
+        match self.menu_tab {
+            Some(i) if i < self.tabs.len() => MenuRow::Tab(i),
+            _ => MenuRow::Section(self.menu),
+        }
     }
 
     fn apply(&mut self, action: Action) -> Vec<Effect> {
@@ -1373,6 +1409,10 @@ impl State {
             }
             Action::ToggleHelp => self.help = !self.help,
             Action::FocusMenu => {
+                // Back from a video tab: the cursor waits on that tab.
+                if let Some(index) = self.active.checked_sub(1) {
+                    self.menu_tab = Some(index);
+                }
                 self.active = 0;
                 self.prompt = None;
                 self.sidebar = true;
@@ -1393,6 +1433,7 @@ impl State {
                 self.active = 0;
                 self.prompt = None;
                 self.menu = i;
+                self.menu_tab = None;
                 self.focus = Focus::Menu;
                 return self.open_section(*section);
             }
@@ -1935,11 +1976,20 @@ impl State {
         }
         match self.focus {
             // One step past an end goes round to the other end; jumps stop there.
-            Focus::Menu if delta.abs() == 1 => {
-                let len = Section::ALL.len() as isize;
-                self.menu = (self.menu as isize + delta).rem_euclid(len) as usize;
+            Focus::Menu => {
+                let rows = self.menu_rows();
+                let at = rows.iter().position(|r| *r == self.menu_row()).unwrap_or(0);
+                // One step past an end goes round to the other end; jumps stop there.
+                let to = if delta.abs() == 1 {
+                    (at as isize + delta).rem_euclid(rows.len() as isize) as usize
+                } else {
+                    step(at, rows.len())
+                };
+                match rows[to] {
+                    MenuRow::Section(i) => (self.menu, self.menu_tab) = (i, None),
+                    MenuRow::Tab(i) => self.menu_tab = Some(i),
+                }
             }
-            Focus::Menu => self.menu = step(self.menu, Section::ALL.len()),
             Focus::List => {
                 if let Some(l) = self.stack.last_mut() {
                     l.selected = step(l.selected, l.items.len());
@@ -1978,6 +2028,10 @@ impl State {
             return self.replay();
         }
         if self.focus == Focus::Menu {
+            if let MenuRow::Tab(i) = self.menu_row() {
+                self.active = i + 1;
+                return Vec::new();
+            }
             return self.open_section(Section::ALL[self.menu]);
         }
         let Some(listing) = self.stack.last() else { return Vec::new() };
@@ -6485,6 +6539,53 @@ mod tests {
             let folder = system_folder(kind);
             assert!(folder.starts_with("~/") || folder.starts_with('/'), "{folder}");
         }
+    }
+
+    #[test]
+    fn menu_walks_the_open_tabs() {
+        let mut s = with_videos(&["a", "b"]);
+        let a = play(&mut s, 0);
+        let b = play(&mut s, 1);
+        s.update(Action::GoTab(0));
+        s.focus = Focus::Menu;
+        let downloads = Section::ALL.iter().position(|x| *x == Section::Descargas).unwrap();
+        let settings = Section::ALL.iter().position(|x| *x == Section::Configuracion).unwrap();
+        s.menu = downloads;
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0), "after the last section, the first tab");
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Tab(1));
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Section(settings), "then Settings");
+        s.update(Action::Up);
+        assert_eq!(s.menu_row(), MenuRow::Tab(1));
+        s.update(Action::Enter);
+        assert_eq!(s.active_tab().map(|t| t.id), Some(b), "Enter opens the tab");
+        // ← (or Ctrl+Y m) back to the menu: the cursor waits on that tab.
+        s.update(Action::GoTab(1));
+        s.update(Action::FocusMenu);
+        assert_eq!((s.active, s.focus, s.menu_row()), (0, Focus::Menu, MenuRow::Tab(0)));
+        assert_eq!(s.tabs[0].id, a);
+        s.update(Action::Up);
+        assert_eq!(s.menu_row(), MenuRow::Section(downloads));
+        // No tabs: the menu goes from Downloads straight to Settings, as before.
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = downloads;
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Section(settings));
+    }
+
+    #[test]
+    fn menu_cursor_leaves_a_closed_tab() {
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        s.update(Action::GoTab(1));
+        s.update(Action::CloseTab);
+        assert!(s.tabs.is_empty());
+        assert_eq!(s.menu_tab, None);
     }
 
     #[test]
