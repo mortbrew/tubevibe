@@ -644,7 +644,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         numbers.push(format!("{} {}", compact(views, lang), lang.pick("vistas", "views")));
     }
     if let Some(likes) = watch.and_then(|w| w.likes) {
-        numbers.push(format!("👍 {}", compact(likes, lang)));
+        numbers.push(format!("{} {}", icons.liked, compact(likes, lang)));
     }
     let mut when = vec![length_label(state, video)];
     if let Some(ts) = watch.and_then(|w| w.published).or(video.published) {
@@ -709,12 +709,12 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let selected = (!related.is_empty()).then_some(tab.related);
     frame.render_stateful_widget(list, layout.related, &mut ListState::default().with_selected(selected));
     if let Some(area) = layout.comments {
-        draw_comments(frame, tab, lang, area);
+        draw_comments(frame, tab, icons, lang, area);
     }
 }
 
 /// The video's top comments, from the one scrolled to (PgUp / PgDn).
-fn draw_comments(frame: &mut Frame, tab: &Tab, lang: Lang, area: Rect) {
+fn draw_comments(frame: &mut Frame, tab: &Tab, icons: &Icons, lang: Lang, area: Rect) {
     let title = match &tab.comments {
         None if tab.watch.is_none() || tab.watch.as_ref().is_some_and(|w| w.comments_token.is_some()) => {
             format!(" {} ", lang.pick("Buscando comentarios…", "Looking for comments…"))
@@ -732,7 +732,7 @@ fn draw_comments(frame: &mut Frame, tab: &Tab, lang: Lang, area: Rect) {
     for comment in tab.comments.iter().flatten().skip(tab.comments_from) {
         let mut head = vec![Span::styled(comment.author.clone(), Style::new().fg(MAGENTA).bold())];
         if let Some(likes) = &comment.likes {
-            head.push(Span::styled(format!("  👍 {likes}"), MUTED));
+            head.push(Span::styled(format!("  {} {likes}", icons.liked), MUTED));
         }
         if let Some(published) = &comment.published {
             head.push(Span::styled(format!("  {published}"), MUTED));
@@ -1396,11 +1396,17 @@ fn channel_row<'a>(state: &State, icons: &Icons, c: &'a Channel, panel: bool) ->
     ListItem::new(Line::from(spans))
 }
 
+/// Every row starts with one icon from the icon set: YouTube's own lists
+/// their own (liked, Watch Later), the rest the playlists one, so the names
+/// line up.
 fn playlist_row<'a>(icons: &Icons, playlist: &'a Playlist, lang: Lang) -> ListItem<'a> {
-    let mut spans = vec![
-        Span::raw(format!(" {} ", icons.section(Section::MisListas))),
-        Span::styled(pad_cells(&truncate(playlist.name(lang), 48), 50), FG),
-    ];
+    let icon = match playlist.id.as_str() {
+        crate::app::LIKED => icons.liked,
+        crate::youtube::WATCH_LATER => icons.later,
+        _ => icons.section(Section::MisListas),
+    };
+    let mut spans =
+        vec![Span::raw(format!(" {icon} ")), Span::styled(pad_cells(&truncate(playlist.name(lang), 48), 50), FG)];
     if let Some(count) = &playlist.count {
         spans.push(Span::styled(count.as_str(), MUTED));
     }
@@ -1413,13 +1419,17 @@ fn length_label(state: &State, video: &Video) -> String {
     video.duration.or_else(|| state.sizes.get(&video.id).and_then(|s| s.duration)).map(clock).unwrap_or_default()
 }
 
-/// `"💾 Descarga ≈ 30 MB (720p)"`, or that it is being worked out.
+/// `"📥 Download ≈ 30 MB (720p)"` (the Downloads icon of the icon set), or
+/// that it is being worked out.
 fn size_line(state: &State, video: &Video) -> Option<Line<'static>> {
     let lang = state.lang();
+    let icon = icons(state.config.ui.icons).section(Section::Descargas);
     let text = match state.sizes.get(&video.id) {
-        Some(size) if size.bytes.is_some() => format!("💾 {} {}", lang.pick("Descarga", "Download"), size.label()),
+        Some(size) if size.bytes.is_some() => format!("{icon} {} {}", lang.pick("Descarga", "Download"), size.label()),
         Some(_) => return None,
-        None if video.live == Live::No => format!("💾 {}", lang.pick("Calculando el peso…", "Working out the size…")),
+        None if video.live == Live::No => {
+            format!("{icon} {}", lang.pick("Calculando el peso…", "Working out the size…"))
+        }
         None => return None,
     };
     Some(Line::from(text).fg(MUTED))
@@ -2444,6 +2454,40 @@ mod tests {
     }
 
     #[test]
+    fn playlist_rows_take_their_icon_from_the_set_and_line_up() {
+        let playlists =
+            ["LL", "WL", "PLf"].map(|id| Playlist { id: id.into(), title: "Favorites".into(), count: None }).to_vec();
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let mut s = with_items(Items::Playlists(playlists.clone()));
+            s.config.ui.icons = set;
+            s.config.ui.lang = Some(Lang::En);
+            let screen = render(&s);
+            let i = icons(set);
+            let rows = [
+                (i.liked, "Liked Videos"),
+                (i.later, "Watch Later (YouTube)"),
+                (i.section(Section::MisListas), "Favorites"),
+            ];
+            let mut columns = Vec::new();
+            for (icon, name) in rows {
+                // The list pane: right of the menu's border.
+                let line = screen
+                    .lines()
+                    .map(|l| l.splitn(3, '│').nth(2).unwrap_or(""))
+                    .find(|l| l.contains(name) && l.contains(icon))
+                    .unwrap_or_else(|| panic!("{icon} {name}\n{screen}"));
+                let at = line.find(name).unwrap();
+                assert!(line[..at].contains(icon), "{set:?}: {line}");
+                columns.push(Span::raw(&line[..at]).width());
+            }
+            assert!(columns.windows(2).all(|w| w[0] == w[1]), "{set:?}: {columns:?}");
+            if set != IconSet::Emoji {
+                assert!(!screen.contains('👍') && !screen.contains('🕒'), "{set:?}\n{screen}");
+            }
+        }
+    }
+
+    #[test]
     fn video_rows_show_date_channel_title_duration_and_later_mark() {
         let dated = Video { published: Some(VIEW.now - 3 * 86_400), ..video("a") };
         let live = Video { live: Live::Now, ..video("b") };
@@ -3176,7 +3220,7 @@ mod tests {
         for text in
             ["title a", "chan a · 559K suscriptores", "5 k vistas", "Te gusta", "A continuación · 2 · Tab", "title r2"]
                 .into_iter()
-                .chain(["Comentarios 1/1", "@ana  👍", "12  hace 1 año", "Qué temazo"])
+                .chain(["Comentarios 1/1", "@ana  ▲", "12  hace 1 año", "Qué temazo"])
         {
             assert!(screen.contains(text), "{text}\n{screen}");
         }
@@ -3205,7 +3249,7 @@ mod tests {
             replace: Replace::Package,
         };
         s.update(Action::UpdateFound(update));
-        assert!(s.status.contains("⬆ tubevibe 9.9.9 disponible"), "{}", s.status);
+        assert!(s.status.contains("↑ tubevibe 9.9.9 disponible"), "{}", s.status);
         let screen = render(&s);
         assert!(screen.contains("Acerca de ↑"), "{screen}");
         let about = Section::ALL.iter().position(|x| *x == Section::AcercaDe).unwrap();

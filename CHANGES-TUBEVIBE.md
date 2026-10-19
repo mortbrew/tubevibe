@@ -576,3 +576,21 @@ could not update itself either. From now on:
   *"1.2 M subscribers"*, views/likes numbers too), the startup *"no se
   encontró la carpeta personal"* and the updater's *"respuesta de GitHub sin
   versión"*.
+
+### My Playlists icons follow the icon set (`watch-later-null-fix`)
+
+- **Liked Videos and Watch Later (YouTube)** had a hard-coded 👍 / 🕒 inside
+  their names, after the playlists icon, whatever the icon set (Nerd and
+  Unicode showed emoji too), and their names sat one icon to the right of
+  the other playlists'. Now each row starts with one icon from the chosen
+  set: liked for Liked Videos, Watch Later for Watch Later, the playlists
+  icon for the rest, so every name starts in the same column. The names
+  carry no emoji (the pane title too), in Title Case: *"Liked Videos"*,
+  *"Watch Later (YouTube)"* (Spanish: *"Videos que me gustan"*, *"Ver más
+  tarde (YouTube)"*).
+- Same fix where other hard-coded emoji ignored the icon set: the 👍 like
+  counts in the video tab and on comments, the 💾 download-size line in
+  the preview (now the Downloads icon), and status messages that have an
+  icon of their own (Watch Later saving/checking 🕒, Liked/Disliked
+  👍/👎, the favourite ⭐ in new-video notices, and the update
+  ⬆/⬇/✅/❌ lines).

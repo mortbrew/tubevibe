@@ -1157,6 +1157,11 @@ impl State {
         self.related_shown().is_some_and(|t| t.on_related)
     }
 
+    /// The chosen icon set.
+    fn icons(&self) -> &'static crate::ui::Icons {
+        crate::ui::icons(self.config.ui.icons)
+    }
+
     pub fn listing(&self) -> Option<&Listing> {
         self.stack.last()
     }
@@ -1543,7 +1548,7 @@ impl State {
             }
             Action::UpdateFound(update) => {
                 let (available, see) = (self.tr("disponible", "available"), self.tr("mirá Acerca de", "see About"));
-                self.status = format!("⬆ tubevibe {} {available} · {see}", update.version);
+                self.status = format!("{} tubevibe {} {available} · {see}", self.icons().update, update.version);
                 self.update = Some(update);
             }
             Action::UpToDate => self.up_to_date = self.update.is_none(),
@@ -1557,17 +1562,21 @@ impl State {
                 if let (Progress::Downloading(_), Some(update)) = (&self.self_update, &self.update) {
                     self.self_update = Progress::Downloading(percent);
                     let updating = self.tr("Actualizando tubevibe a", "Updating tubevibe to");
-                    self.status = format!("⬇ {updating} {}… {percent}%", update.version);
+                    self.status = format!("{} {updating} {}… {percent}%", self.icons().downloading, update.version);
                 }
             }
             Action::SelfUpdated(Ok(version)) => {
                 let restart = self.tr("reiniciá tubevibe para usarla", "restart tubevibe to use it");
-                self.status = format!("✅ tubevibe {version} {} · {restart}", self.tr("instalada", "installed"));
+                self.status = format!(
+                    "{} tubevibe {version} {} · {restart}",
+                    self.icons().up_to_date,
+                    self.tr("instalada", "installed")
+                );
                 self.self_update = Progress::Done(version);
             }
             Action::SelfUpdated(Err(error)) => {
                 let failed = self.tr("No se pudo actualizar", "Could not update");
-                self.status = format!("❌ {failed}: {error}");
+                self.status = format!("{} {failed}: {error}", self.icons().failed);
                 self.self_update = Progress::Failed(error);
             }
             Action::ToggleMark => return self.toggle_mark(),
@@ -2887,20 +2896,21 @@ impl State {
             self.add_later(video)
         } else {
             let checking = self.tr("Mirando Ver después de YouTube:", "Checking YouTube Watch Later:");
-            self.status = format!("🕒 {checking} {}…", video.title);
+            self.status = format!("{} {checking} {}…", self.icons().later, video.title);
             vec![Effect::CheckLater(video)]
         }
     }
 
     fn add_later(&mut self, video: Video) -> Vec<Effect> {
         let saving = self.tr("Guardando en Ver después de YouTube:", "Saving to YouTube Watch Later:");
-        self.status = format!("🕒 {saving} {}…", video.title);
+        self.status = format!("{} {saving} {}…", self.icons().later, video.title);
         vec![Effect::EditLater { video, add: true }]
     }
 
     fn already_in_later(&mut self, video: &Video) {
         self.status = format!(
-            "🕒 {}: {}",
+            "{} {}: {}",
+            self.icons().later,
             self.tr("Ya está en Ver después de YouTube", "Already in YouTube Watch Later"),
             video.title
         );
@@ -3041,7 +3051,8 @@ impl State {
         self.later.retain(|v| v.id != video.id);
         if add {
             self.status = format!(
-                "🕒 {}: {}",
+                "{} {}: {}",
+                self.icons().later,
                 self.tr("Guardado en Ver después de YouTube", "Saved to YouTube Watch Later"),
                 video.title
             );
@@ -3092,13 +3103,20 @@ impl State {
     fn self_update(&mut self) -> Vec<Effect> {
         match &self.self_update {
             Progress::Downloading(_) => {
-                self.status = self.tr("⬇ Ya se está actualizando…", "⬇ Already updating…").into();
+                self.status = format!(
+                    "{} {}",
+                    self.icons().downloading,
+                    self.tr("Ya se está actualizando…", "Already updating…")
+                );
                 return Vec::new();
             }
             Progress::Done(version) => {
                 let restart = self.tr("reiniciá tubevibe para usarla", "restart tubevibe to use it");
-                self.status =
-                    format!("✅ tubevibe {version} {} · {restart}", self.tr("ya está instalada", "is installed"));
+                self.status = format!(
+                    "{} tubevibe {version} {} · {restart}",
+                    self.icons().up_to_date,
+                    self.tr("ya está instalada", "is installed")
+                );
                 return Vec::new();
             }
             Progress::Idle | Progress::Failed(_) => {}
@@ -3116,7 +3134,7 @@ impl State {
             Replace::Ready(url) => {
                 let effect = Effect::SelfUpdate { url: url.clone(), version: update.version.clone() };
                 let updating = self.tr("Actualizando tubevibe a", "Updating tubevibe to");
-                self.status = format!("⬇ {updating} {}…", update.version);
+                self.status = format!("{} {updating} {}…", self.icons().downloading, update.version);
                 self.self_update = Progress::Downloading(0);
                 return vec![effect];
             }
@@ -3268,9 +3286,9 @@ impl State {
             return;
         }
         let done = match rating {
-            Rating::Like => self.tr("👍 Te gusta", "👍 Liked"),
-            Rating::Dislike => self.tr("👎 No te gusta", "👎 Disliked"),
-            Rating::None => self.tr("Voto quitado", "Vote taken back"),
+            Rating::Like => format!("{} {}", self.icons().liked, self.tr("Te gusta", "Liked")),
+            Rating::Dislike => format!("{} {}", self.icons().disliked, self.tr("No te gusta", "Disliked")),
+            Rating::None => self.tr("Voto quitado", "Vote taken back").into(),
         };
         self.status = format!("{done}: {title}");
         if rating != Rating::Like {
@@ -3540,11 +3558,12 @@ impl State {
         }
         // My favorite channels are named first.
         new.sort_by_key(|v| !self.is_favorite(v));
-        let star = |v: &Video| if self.is_favorite(v) { "⭐ " } else { "" };
+        let favorite = self.icons().favorite;
+        let star = |v: &Video| if self.is_favorite(v) { format!("{favorite} ") } else { String::new() };
         let message = match new.as_slice() {
             [one] => format!("🔔 {}{}: {}", star(one), one.channel, one.title),
             [first, ..] if self.is_favorite(first) => format!(
-                "🔔 ⭐ {}: {} (+{} {})",
+                "🔔 {favorite} {}: {} (+{} {})",
                 first.channel,
                 first.title,
                 new.len() - 1,
@@ -4231,7 +4250,7 @@ mod tests {
             [Effect::Load { source: Source::Playlist(list), .. }] => assert_eq!(list, "LL"),
             other => panic!("{other:?}"),
         }
-        assert_eq!(s.loading.as_deref(), Some("👍 Videos que me gustan"));
+        assert_eq!(s.loading.as_deref(), Some("Videos que me gustan"));
     }
 
     #[test]
