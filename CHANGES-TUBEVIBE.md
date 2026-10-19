@@ -741,6 +741,25 @@ could not update itself either. From now on:
   pane never takes the keys (`PgUp` / `PgDn` scroll it from the tab) and
   stays dim.
 
+### The video stays on screen while the menu has the keys (`browser-tab-keys`)
+
+- `Esc`, `←` or `Ctrl+Y m` on a video tab used to switch the main area
+  back to the list behind it. Now the tab stays shown (and keeps playing,
+  embedded, overlaid or in its window) while the menu takes the keys: the
+  menu's border is lit, its cursor is on the tab, and the video pane and
+  Up Next go dim.
+- `↑` / `↓` only move the cursor; the main area changes when `Enter` (or
+  `→`, not on Quit) opens a row: a section (the browsing view), another
+  tab, or the same tab, which simply gets the keys back. `Tab` also goes
+  back to the tab shown.
+- While the menu has the keys, the player keys (`Space`, `←`, volume…)
+  and the video letters (`l`, `w`, `a`, `d`…) do nothing; `/` searches and
+  `f` goes fullscreen (the video then takes the keys). Fullscreen ends when
+  the menu is called, since it would hide it. A click on Up Next gives it
+  the keys back.
+- `Alt+,` / `Alt+.`, `Ctrl+Y 1`–`9` and restored tabs are unchanged; going
+  to a tab with them gives it the keys.
+
 ### My Recommendations is kept for a minute (`browser-tab-keys`)
 
 - Opening **My Recommendations** asked YouTube for the whole home feed

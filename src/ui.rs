@@ -569,7 +569,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
                 Paragraph::new(lang.pick("Se reproduce en una ventana de mpv", "Playing in an mpv window")).fg(MUTED)
             };
             // Lit while it has the keys; dim while Up Next has them.
-            let mut block = focus_panel(title, !state.key_context().related);
+            let mut block = focus_panel(title, state.key_context().in_tab && !state.key_context().related);
             if let Some(info) = &view.playing {
                 block = block.title_top(Line::from(playing_label(info, icons)).fg(CYAN).right_aligned());
                 if let Some(progress) = progress_line(info, &tab.segments, areas.content.width) {
@@ -795,7 +795,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), details);
 
     let related = tab.related_videos();
-    let focused = tab.on_related && !related.is_empty();
+    let focused = state.key_context().related;
     let title = match watch {
         None => format!(" {} ", lang.pick("Buscando videos relacionados…", "Looking for Related Videos…")),
         Some(_) if related.is_empty() => format!(" {} ", lang.pick("Sin videos relacionados", "No Related Videos")),
@@ -975,8 +975,9 @@ fn focus_panel<'a>(title: impl Into<Line<'a>>, focused: bool) -> Block<'a> {
 }
 
 /// Whether the keys go to the menu: the browsing view, with the menu in focus.
+/// Over the browsing view or a video tab still shown.
 fn menu_focused(state: &State) -> bool {
-    state.active == 0 && state.focus == Focus::Menu
+    state.focus == Focus::Menu && state.sidebar
 }
 
 /// The menu's lines, each with what a click on it does, for a menu whose
@@ -1029,11 +1030,14 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         top.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
         for (i, tab) in state.tabs.iter().enumerate() {
             // Lit like a focused section while it is shown or the menu's cursor is on it.
+            // With the menu's keys only the cursor's row is lit; the tab still
+            // shown keeps its colour.
             let cursor = state.menu_row() == MenuRow::Tab(i);
-            let active = state.active == i + 1 || (cursor && menu_focused(state));
+            let shown = state.active == i + 1;
+            let active = if menu_focused(state) { cursor } else { shown };
             let style = if active {
                 Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold()
-            } else if cursor {
+            } else if cursor || shown {
                 Style::new().fg(MAGENTA)
             } else {
                 Style::new().fg(FG)
@@ -1773,6 +1777,8 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Prompt::Videos { .. } => rows(keymap::IN_SEARCH),
             _ => vec![key("Enter", "aceptar", "accept"), key("Esc", "cancelar", "cancel")],
         }
+    } else if state.focus == Focus::Menu && state.active_tab().is_some() {
+        rows(keymap::IN_MENU)
     } else if state.key_context().related {
         vec![
             key("Enter", "ver", "play"),
@@ -3597,6 +3603,18 @@ mod tests {
         s.update(esc);
         assert_eq!(corner(&s), BLUE, "Esc in Up Next: back to the video, lit again");
         assert_eq!(s.active, 1, "still on the tab");
+        // Esc again: the menu has the keys, the tab stays shown and goes dim.
+        let esc = keymap::map(
+            ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Esc),
+            s.key_context(),
+        )
+        .unwrap();
+        s.update(esc);
+        assert_eq!((s.active, s.focus), (1, Focus::Menu));
+        assert_eq!(corner(&s), MUTED, "the video pane is dim while the menu has the keys");
+        let screen = render_with(&s, &View { embedded: false, ..VIEW });
+        assert!(screen.contains("▌1 "), "the cursor's tab is lit: {screen}");
+        assert!(screen.contains("A continuación · 2 · Tab"), "Up Next not lit either: {screen}");
     }
 
     #[test]

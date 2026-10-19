@@ -1199,7 +1199,15 @@ impl State {
 
     /// The related list of the active tab takes the keys.
     fn on_related(&self) -> bool {
-        self.related_shown().is_some_and(|t| t.on_related)
+        self.focus != Focus::Menu && self.related_shown().is_some_and(|t| t.on_related)
+    }
+
+    /// Shows tab `n` (0: the browsing view); a tab shown takes the keys.
+    fn show_tab(&mut self, n: usize) {
+        self.active = n;
+        if n > 0 {
+            self.focus = Focus::List;
+        }
     }
 
     /// The chosen icon set.
@@ -1222,11 +1230,11 @@ impl State {
             help: self.help,
             confirm: self.confirm.is_some(),
             typing: self.prompt.is_some(),
-            in_tab: self.active_tab().is_some(),
+            in_tab: self.active_tab().is_some() && self.focus != Focus::Menu,
             related: self.on_related(),
             context_menu: self.context.is_some(),
             splash: self.splash,
-            menu: self.active == 0 && self.focus == Focus::Menu && self.prompt.is_none(),
+            menu: self.focus == Focus::Menu && self.prompt.is_none(),
         }
     }
 
@@ -1427,11 +1435,12 @@ impl State {
             }
             Action::ToggleHelp => self.help = !self.help,
             Action::FocusMenu => {
-                // Back from a video tab: the cursor waits on that tab.
+                // Back from a video tab: the tab stays shown, the cursor waits
+                // on it, and fullscreen (which hides the menu) ends.
                 if let Some(index) = self.active.checked_sub(1) {
                     self.menu_tab = Some(index);
+                    self.fullscreen = false;
                 }
-                self.active = 0;
                 self.prompt = None;
                 self.sidebar = true;
                 self.focus = Focus::Menu;
@@ -1464,6 +1473,8 @@ impl State {
                 return self.open_section(*section);
             }
             Action::Select(row) if self.related_shown().is_some() => {
+                // A click on Up Next gives it the keys, even from the menu.
+                self.focus = Focus::List;
                 if let Some(tab) = self.active_tab_mut() {
                     tab.related = row.min(tab.related_videos().len().saturating_sub(1));
                     tab.on_related = true;
@@ -1476,6 +1487,7 @@ impl State {
                 return self.more_if_near_the_end();
             }
             Action::Scroll(rows) if self.related_shown().is_some() => {
+                self.focus = Focus::List;
                 if let Some(tab) = self.active_tab_mut() {
                     tab.on_related = true;
                 }
@@ -1486,6 +1498,10 @@ impl State {
                     self.focus = Focus::List;
                     return self.move_selection(rows);
                 }
+            }
+            // Tab from the menu over a video tab: back to the tab.
+            Action::ToggleFocus if self.active_tab().is_some() && self.focus == Focus::Menu => {
+                self.focus = Focus::List;
             }
             Action::ToggleFocus if self.active_tab().is_some() => {
                 if self.related_shown().is_some()
@@ -1522,7 +1538,12 @@ impl State {
             }
             // Esc on a video tab (Up Next's own Esc goes back to the video
             // first): to the menu, its cursor on the tab, like Esc from a list.
-            Action::Back if self.active_tab().is_some() && self.prompt.is_none() && !self.fullscreen => {
+            Action::Back
+                if self.active_tab().is_some()
+                    && self.focus != Focus::Menu
+                    && self.prompt.is_none()
+                    && !self.fullscreen =>
+            {
                 return self.apply(Action::FocusMenu);
             }
             Action::Back => self.back(),
@@ -1775,13 +1796,13 @@ impl State {
             // Alt+. / Alt+,: through the tabs only, wrapping around;
             // from the browsing view to the first / last. No tabs: nothing.
             Action::NextTab if !self.tabs.is_empty() => {
-                self.active = if self.active >= self.tabs.len() { 1 } else { self.active + 1 };
+                self.show_tab(if self.active >= self.tabs.len() { 1 } else { self.active + 1 });
             }
             Action::PrevTab if !self.tabs.is_empty() => {
-                self.active = if self.active <= 1 { self.tabs.len() } else { self.active - 1 };
+                self.show_tab(if self.active <= 1 { self.tabs.len() } else { self.active - 1 });
             }
             Action::NextTab | Action::PrevTab => {}
-            Action::GoTab(n) if n <= self.tabs.len() => self.active = n,
+            Action::GoTab(n) if n <= self.tabs.len() => self.show_tab(n),
             Action::GoTab(_) => {}
             Action::CloseTab => {
                 if let Some(id) = self.active_tab().map(|t| t.id) {
@@ -2055,15 +2076,18 @@ impl State {
             let video = self.active_tab().and_then(|t| t.related_videos().get(t.related)).cloned();
             return video.map(|v| self.open_video(v)).unwrap_or_default();
         }
-        if self.active_tab().is_some() {
-            return self.replay();
-        }
+        // The menu has the keys, even over a video tab still shown: Enter
+        // opens its row (the same tab: back to it).
         if self.focus == Focus::Menu {
             if let MenuRow::Tab(i) = self.menu_row() {
-                self.active = i + 1;
+                self.show_tab(i + 1);
                 return Vec::new();
             }
+            self.active = 0;
             return self.open_section(Section::ALL[self.menu]);
+        }
+        if self.active_tab().is_some() {
+            return self.replay();
         }
         let Some(listing) = self.stack.last() else { return Vec::new() };
         let selected = listing.selected;
@@ -2928,6 +2952,9 @@ impl State {
 
     /// The video the user is pointing at: the open tab, or the selected list row.
     fn selected_video(&self) -> Option<&Video> {
+        if self.focus == Focus::Menu {
+            return None; // the menu's rows are no videos
+        }
         if let Some(tab) = self.active_tab() {
             if self.on_related() {
                 return tab.related_videos().get(tab.related);
@@ -3693,7 +3720,7 @@ impl State {
 
     fn open_tab(&mut self, mut playback: Playback, now: bool) -> Vec<Effect> {
         if let Some(i) = self.tabs.iter().position(|t| t.playback.queue.first() == playback.queue.first()) {
-            self.active = i + 1;
+            self.show_tab(i + 1);
             return Vec::new();
         }
         if self.tabs.len() >= self.config.ui.max_tabs {
@@ -3732,7 +3759,7 @@ impl State {
         tab.ended = !now;
         tab.started = now;
         self.tabs.push(tab);
-        self.active = self.tabs.len();
+        self.show_tab(self.tabs.len());
         let mut effects = if now { vec![Effect::Open(id, playback.clone())] } else { Vec::new() };
         if let Some(video) = &playback.video {
             effects.push(Effect::Watch { tab: id, video: video.id.clone() });
@@ -4295,8 +4322,10 @@ impl State {
         } else {
             // In the lists: back to the video's tab, which fills the terminal.
             if let Some(index) = self.tabs.iter().position(|t| t.id == id) {
-                self.active = index + 1;
+                self.show_tab(index + 1);
             }
+            // Fullscreen hides the menu: the video takes the keys.
+            self.focus = Focus::List;
             self.fullscreen = true;
         }
         vec![Effect::Command(id, PlayerCommand::Fullscreen(true))]
@@ -6578,7 +6607,7 @@ mod tests {
         play(&mut s, 0);
         s.update(Action::ToggleSidebar);
         s.update(Action::FocusMenu);
-        assert_eq!((s.active, s.focus, s.sidebar), (0, Focus::Menu, true));
+        assert_eq!((s.active, s.focus, s.sidebar), (1, Focus::Menu, true), "the tab stays shown");
     }
 
     #[test]
@@ -6695,7 +6724,7 @@ mod tests {
         // ← (or Ctrl+Y m) back to the menu: the cursor waits on that tab.
         s.update(Action::GoTab(1));
         s.update(Action::FocusMenu);
-        assert_eq!((s.active, s.focus, s.menu_row()), (0, Focus::Menu, MenuRow::Tab(0)));
+        assert_eq!((s.active, s.focus, s.menu_row()), (1, Focus::Menu, MenuRow::Tab(0)));
         assert_eq!(s.tabs[0].id, a);
         s.update(Action::Up);
         assert_eq!(s.menu_row(), MenuRow::Section(downloads));
@@ -6787,8 +6816,63 @@ mod tests {
         s.update(Action::Back);
         assert!(!s.fullscreen && s.active == 1, "first Esc only leaves fullscreen");
         s.update(Action::Back);
-        assert_eq!((s.active, s.focus, s.menu_row()), (0, Focus::Menu, MenuRow::Tab(0)));
+        assert_eq!((s.active, s.focus, s.menu_row()), (1, Focus::Menu, MenuRow::Tab(0)), "tab still shown");
         assert_eq!(s.stack.len(), 2, "the list behind the tab is left alone");
+    }
+
+    #[test]
+    fn the_menu_takes_the_keys_over_a_tab_still_shown() {
+        let mut s = with_videos(&["a", "b"]);
+        let a = play(&mut s, 0);
+        let b = play(&mut s, 1);
+        s.update(Action::GoTab(1));
+        s.update(Action::FocusMenu);
+        assert_eq!((s.active, s.focus), (1, Focus::Menu));
+        let ctx = s.key_context();
+        assert!(ctx.menu && !ctx.in_tab && !ctx.related, "{ctx:?}");
+        // Moving the cursor leaves the tab shown.
+        s.update(Action::Down);
+        s.update(Action::Down);
+        assert_eq!((s.active, s.menu_row()), (1, MenuRow::Section(State::section_index(Section::Configuracion))));
+        s.update(Action::Up);
+        assert_eq!(s.menu_row(), MenuRow::Tab(1));
+        assert!(s.update(Action::Up).is_empty(), "no Volume, no Up Next");
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        // Enter on the same tab: back to it; Tab too.
+        s.update(Action::Enter);
+        assert_eq!((s.active_tab().map(|t| t.id), s.focus), (Some(a), Focus::List));
+        s.update(Action::FocusMenu);
+        s.update(Action::ToggleFocus);
+        assert_eq!((s.active, s.focus), (1, Focus::List), "Tab: back to the tab");
+        // → on another tab opens it; on a section, the browsing view.
+        s.update(Action::FocusMenu);
+        s.update(Action::Down);
+        s.update(Action::MenuOpen);
+        assert_eq!((s.active_tab().map(|t| t.id), s.focus), (Some(b), Focus::List));
+        s.update(Action::FocusMenu);
+        s.menu_tab = None;
+        s.menu = State::section_index(Section::AcercaDe);
+        s.update(Action::Enter);
+        assert_eq!((s.active, s.listing().unwrap().items.clone()), (0, Items::About));
+        // Alt+. from the menu over a tab: the next tab, which takes the keys.
+        s.update(Action::GoTab(1));
+        s.update(Action::FocusMenu);
+        s.update(Action::NextTab);
+        assert_eq!((s.active, s.focus), (2, Focus::List));
+    }
+
+    #[test]
+    fn fullscreen_and_the_menu_over_a_tab() {
+        let mut s = with_videos(&["a"]);
+        let a = play(&mut s, 0);
+        s.update(Action::ToggleFullscreen);
+        // Ctrl+Y m from fullscreen: it ends (it would hide the menu), mpv is told.
+        let effects = s.update(Action::FocusMenu);
+        assert!(!s.fullscreen && s.active == 1 && s.focus == Focus::Menu);
+        assert!(effects.contains(&Effect::Command(a, PlayerCommand::Fullscreen(false))), "{effects:?}");
+        // f from the menu: fullscreen, and the video takes the keys.
+        assert_eq!(s.update(Action::ToggleFullscreen), [Effect::Command(a, PlayerCommand::Fullscreen(true))]);
+        assert!(s.fullscreen && s.focus == Focus::List);
     }
 
     #[test]

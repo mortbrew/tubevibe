@@ -276,7 +276,7 @@ a click on the video pauses (double click: fullscreen), a click on the
 progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
-In the menu, `↑↓` walk the sections and the open tabs (under TABS) alike; `Enter` (or `→`, except on Quit, which only `Enter` triggers) opens either. `←` from a list or a video tab comes back to the menu with the cursor on the section or tab it came from.
+In the menu, `↑↓` walk the sections and the open tabs (under TABS) alike; `Enter` (or `→`, except on Quit, which only `Enter` triggers) opens either. `←` from a list or a video tab comes back to the menu with the cursor on the section or tab it came from. From a video tab the video stays on screen (and keeps playing) while the menu has the keys; moving the cursor changes nothing until `Enter` / `→` opens a row (`Enter` on that same tab, or `Tab`, goes back to it).
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` / `Backspace` to go back, `f` fullscreen for the video that is playing, `Tab` menu ↔ list,
 `w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as

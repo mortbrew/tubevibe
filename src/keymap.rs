@@ -238,9 +238,20 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     if ctx.typing {
         return typing(key.code);
     }
-    // In the menu → opens the row like Enter, but Quit (Enter only).
-    if ctx.menu && key.code == KeyCode::Right {
-        return Some(Action::MenuOpen);
+    // The menu has the keys (over the browsing view or a video tab still
+    // shown): moving, opening (→ too, but Quit), back, Tab, / and f.
+    if ctx.menu {
+        return match key.code {
+            KeyCode::Right => Some(Action::MenuOpen),
+            KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
+            KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
+            KeyCode::Enter => Some(Action::Enter),
+            KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => Some(Action::Back),
+            KeyCode::Tab => Some(Action::ToggleFocus),
+            KeyCode::Char('/') => Some(Action::FocusSearch),
+            KeyCode::Char('f') => Some(Action::ToggleFullscreen),
+            _ => None,
+        };
     }
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
@@ -403,7 +414,8 @@ mod tests {
     #[test]
     fn right_opens_the_menu_row_l_does_not() {
         assert_eq!(map(key(KeyCode::Right), MENU), Some(Action::MenuOpen));
-        assert_eq!(map(char('l'), MENU), Some(Action::SaveForLater), "l: as before (nothing to save in the menu)");
+        assert_eq!(map(char('l'), MENU), None, "l does nothing in the menu");
+        assert_eq!(map(char(' '), MENU), None, "nor the player keys over a tab");
         assert_eq!(map(key(KeyCode::Tab), MENU), Some(Action::ToggleFocus), "Tab still switches panes");
         assert_eq!(map(key(KeyCode::Left), MENU), Some(Action::Back));
         // Outside the menu they keep their meaning.
