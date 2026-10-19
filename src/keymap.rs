@@ -34,7 +34,7 @@ pub struct KeyContext {
 pub const SEEK_SECONDS: i32 = 5;
 pub const VOLUME_STEP: i32 = 5;
 
-/// `Ctrl+Y` commands. Digits (`0`–`9`, go to tab) are handled apart.
+/// `Ctrl+Y` commands.
 pub const PREFIX: &[(char, Action, Text)] = &[
     ('b', Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('m', Action::FocusMenu, Text::new("ir al menú", "go to the menu")),
@@ -156,20 +156,9 @@ pub fn key_name(keys: &str, lang: Lang) -> String {
     }
 }
 
-/// `Ctrl+Y` commands plus the digits, in `lang`.
+/// `Ctrl+Y` commands, in `lang`.
 pub fn prefix_rows(lang: Lang) -> Vec<(String, &'static str)> {
-    let mut commands: Vec<_> = PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect();
-    commands.insert(
-        4,
-        (
-            "0-9".into(),
-            lang.pick(
-                "ir a la pestaña del menú (0 = volver a navegar)",
-                "go to a tab in the menu (0 = back to browsing)",
-            ),
-        ),
-    );
-    commands
+    PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect()
 }
 
 /// What macOS types for Option+, and Option+. (US and most layouts).
@@ -283,7 +272,6 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
 
 fn prefixed(code: KeyCode) -> Action {
     match code {
-        KeyCode::Char(c @ '0'..='9') => Action::GoTab(c as usize - '0' as usize),
         KeyCode::Char(c) => {
             PREFIX.iter().find(|(key, ..)| *key == c).map_or(Action::CancelPrefix, |(_, action, _)| action.clone())
         }
@@ -442,8 +430,9 @@ mod tests {
         for (c, action, _) in PREFIX {
             assert_eq!(map(char(*c), PREFIXED).as_ref(), Some(action), "{c}");
         }
-        assert_eq!(map(char('0'), PREFIXED), Some(Action::GoTab(0)));
-        assert_eq!(map(char('3'), PREFIXED), Some(Action::GoTab(3)));
+        for digit in '0'..='9' {
+            assert_eq!(map(char(digit), PREFIXED), Some(Action::CancelPrefix), "Ctrl+Y {digit} is gone");
+        }
         assert_eq!(map(char('?'), PREFIXED), Some(Action::ToggleHelp));
     }
 
@@ -568,7 +557,7 @@ mod tests {
             for (c, ..) in PREFIX {
                 assert!(commands.iter().any(|(k, _)| *k == c.to_string()), "{c} missing from help");
             }
-            assert!(commands.iter().any(|(k, _)| k == "0-9"));
+            assert!(!commands.iter().any(|(k, _)| k == "0-9"), "no tab digits any more");
         }
     }
 

@@ -149,7 +149,6 @@ impl Language {
 #[serde(default)]
 pub struct UiConfig {
     pub sidebar: bool,
-    pub max_tabs: usize,
     pub icons: IconSet,
     /// Interface language; unset follows the system locale.
     pub lang: Option<Lang>,
@@ -394,7 +393,6 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             sidebar: true,
-            max_tabs: 9,
             icons: IconSet::Emoji,
             lang: None,
             thumbnails: true,
@@ -492,6 +490,9 @@ impl std::fmt::Display for ConfigWarning {
     }
 }
 
+/// Real keys of older versions, now gone (`ui.max_tabs`: tabs are unlimited).
+const RETIRED: &[&str] = &["ui.max_tabs"];
+
 /// One `[section]`: each key is tried on its own, so an unknown or broken
 /// one is skipped (and reported) while the rest still apply.
 fn section<T: serde::de::DeserializeOwned + Default>(
@@ -506,6 +507,10 @@ fn section<T: serde::de::DeserializeOwned + Default>(
     let mut good = toml::Table::new();
     for (key, value) in table {
         let path = format!("{name}.{key}");
+        // Settings older versions had and this one dropped: ignored without a word.
+        if RETIRED.contains(&path.as_str()) {
+            continue;
+        }
         let one = toml::Table::from_iter([(key.clone(), value.clone())]);
         let mut unknown = false;
         let tried: Result<T, toml::de::Error> = serde_ignored::deserialize(toml::Value::Table(one), |_| unknown = true);
@@ -632,7 +637,6 @@ mod tests {
         assert_eq!(c.player.language, Language::Subtitles);
         assert_eq!(c.player.sub_lang, "es");
         assert!(c.ui.sidebar);
-        assert_eq!(c.ui.max_tabs, 9);
         assert_eq!(c.ui.icons, IconSet::Emoji);
         assert_eq!(c.ui.lang, None, "follows the system until chosen");
         assert_eq!(c.effects, EffectsConfig { startup: true, pages: true, dialogs: true });
@@ -874,5 +878,12 @@ mod tests {
         let c = Config::from_toml(&text).unwrap();
         assert_eq!(c.player.max_height, 480);
         assert_eq!(c.player.language, Language::Dubbed);
+    }
+
+    #[test]
+    fn an_old_max_tabs_line_is_ignored_quietly() {
+        let (config, warnings) = Config::parse("[ui]\nmax_tabs = 3\nsidebar = false\n").unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!config.ui.sidebar, "the rest still applies");
     }
 }

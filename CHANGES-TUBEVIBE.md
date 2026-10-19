@@ -602,8 +602,9 @@ could not update itself either. From now on:
   is gone: open tabs show only under TABS in the left menu, and the main
   pane gets that row back. *Home* was the browsing view's own tab (upstream
   *Inicio*); the menu already is that view.
-- `Ctrl+Y 1`–`9` still go to the tabs as numbered in the menu and
-  `Ctrl+Y 0` back to browsing. Help and hints say "in the menu" instead of
+- `Ctrl+Y 1`–`9` still went to the tabs as numbered in the menu and
+  `Ctrl+Y 0` back to browsing (both removed later in 0.8.6, see *Unlimited
+  tabs*). Help and hints say "in the menu" instead of
   mentioning the tab bar. Clicks land on the menu rows (nothing left to
   click at the top).
 
@@ -626,7 +627,7 @@ could not update itself either. From now on:
   tabs. tubevibe no longer turns that protocol on, and the README no longer
   asks you to edit `kitty.conf` or the Ghostty config.
 - **`Ctrl+Y n` and `Ctrl+Y p` are gone** (help, README). `Ctrl+Y 0`–`9`
-  stay. The new keys are in the full help (`Ctrl+Y ?`, under *Always*) and
+  stayed then (removed later, see *Unlimited tabs*). The new keys are in the full help (`Ctrl+Y ?`, under *Always*) and
   the README, not in the shortcut bar.
 
 ### Fullscreen works, from the video tab and from the lists (`browser-tab-keys`)
@@ -700,7 +701,8 @@ could not update itself either. From now on:
   and `Enter` opens it. Closing the tab under the cursor puts the cursor
   back on the sections.
 - Coming back to the menu from a video tab (`←` or `Ctrl+Y m`) leaves the
-  cursor on that tab. `Alt+,` / `Alt+.` and `Ctrl+Y 1`–`9` are unchanged.
+  cursor on that tab. `Alt+,` / `Alt+.` are unchanged (`Ctrl+Y 1`–`9`
+  were later removed).
 
 ### → opens the menu's row; ← comes back to where you were (`browser-tab-keys`)
 
@@ -757,8 +759,38 @@ could not update itself either. From now on:
   `f` goes fullscreen (the video then takes the keys). Fullscreen ends when
   the menu is called, since it would hide it. A click on Up Next gives it
   the keys back.
-- `Alt+,` / `Alt+.`, `Ctrl+Y 1`–`9` and restored tabs are unchanged; going
+- `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
+
+### Unlimited tabs; the menu's tab list scrolls (`browser-tab-keys`)
+
+- **No tab limit.** The `max_tabs` setting is gone, and so is its "At most N
+  tabs" message. An old `max_tabs` line in config.toml is ignored without a
+  warning (it was a real key, not a typo). Restored tabs (tabs.json) all
+  come back.
+- **`Ctrl+Y 0`–`9` are removed**, from the keys, the help, the shortcut bar,
+  the README and the website. `Ctrl+Y 1`–`9` went to the tab with that
+  number; `Ctrl+Y 0` went back to the browsing view. Use `Alt+,` / `Alt+.`,
+  the menu (`↑ ↓`, `Enter`) or a click. The tab numbers in the menu ("1 ",
+  "2 ") only existed for those keys, so they are gone too.
+- **The menu's tab list scrolls on its own.** The sections at the top and the
+  rule with Settings / About / Quit at the bottom stay put; TABS takes the
+  rows in between. With the menu's keys it keeps the cursor's tab in view,
+  otherwise the tab shown. The TABS title shows ▲/▼-style marks (from the
+  icon set) when tabs are hidden above or below. The mouse wheel over the
+  tabs scrolls them; the list follows the cursor or the tab shown again as
+  soon as that changes.
+- A short rule now sits above TABS too, like the one above Settings, only
+  while a tab is open.
+- **Short terminals:** the tab list shrinks down to one row. With no room
+  even for that, the whole menu becomes one list scrolled to the cursor (or
+  the tab shown), as a short menu did before.
+- Tests: `thirty_five_tabs_scroll_between_a_fixed_top_and_bottom`,
+  `a_short_menu_keeps_one_tab_row_then_falls_back_to_one_scrolled_list`,
+  `tab_rows_have_no_number`, `tabs_are_unlimited`,
+  `restoring_tabs_keeps_them_all_respects_the_setting_and_bad_files` (35
+  tabs), `the_wheel_over_the_menu_tabs_scrolls_them`,
+  `an_old_max_tabs_line_is_ignored_quietly`.
 
 ### One "shown" mark in the menu (`browser-tab-keys`)
 
@@ -819,7 +851,8 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   flag, in order, plus which tab was in front. It is rewritten whenever a
   tab opens or closes, so quitting any way (`q`, `Ctrl+C`, a closed
   terminal, a crash) leaves it current.
-- On startup they come back under TABS in the menu, up to `max_tabs`, with
+- On startup they come back under TABS in the menu, all of them (once up to
+  `max_tabs`, a limit since removed), with
   the browsing view in front. Nothing plays and nothing is fetched: a tab
   loads its details, comments and SponsorBlock segments the first time it's
   shown, and `Enter` plays it (from where the history says it was left).

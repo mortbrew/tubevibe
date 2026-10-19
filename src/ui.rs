@@ -93,6 +93,9 @@ pub struct Icons {
     pub update: &'static str,
     /// The update is downloading.
     pub downloading: &'static str,
+    /// More tabs above / below the menu's visible ones.
+    pub more_above: &'static str,
+    pub more_below: &'static str,
     /// The update failed.
     pub failed: &'static str,
     /// A file moved to the trash; also anything removed or deleted.
@@ -163,6 +166,8 @@ const EMOJI: Icons = Icons {
     up_to_date: "✅",
     update: "⬆",
     downloading: "⬇",
+    more_above: "🔼",
+    more_below: "🔽",
     failed: "❌",
     trash: "🗑",
     notify: "🔔",
@@ -256,6 +261,9 @@ const NERD: Icons = Icons {
     up_to_date: "\u{f058}",
     update: "\u{f0aa}",
     downloading: "\u{f0ab}",
+    // nf-fa-angle_up, angle_down.
+    more_above: "\u{f106}",
+    more_below: "\u{f107}",
     failed: "\u{f057}",
     trash: "\u{f1f8}",
     // nf-fa-bell, bell_slash, nf-md-play_pause, nf-fa-forward, stop,
@@ -301,6 +309,8 @@ const UNICODE: Icons = Icons {
     up_to_date: "✔",
     update: "↑",
     downloading: "↓",
+    more_above: "▴",
+    more_below: "▾",
     failed: "✘",
     trash: "✕",
     // Text symbols only: none of these turns into a colour emoji.
@@ -1029,38 +1039,71 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         let row = (ListItem::new(line).style(style), Some(Spot::Section(i)));
         if pinned { bottom.push(row) } else { top.push(row) }
     }
-    if !state.tabs.is_empty() {
-        top.push((ListItem::new(""), None));
-        top.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
-        for (i, tab) in state.tabs.iter().enumerate() {
-            // Lit like a focused section while it is shown or the menu's cursor is on it.
-            // With the menu's keys only the cursor's row is lit; the tab still
-            // shown keeps its colour.
-            let active = state.menu_row() == MenuRow::Tab(i) && menu_focused(state);
-            let shown = state.shown_row() == Some(MenuRow::Tab(i));
-            let style = if active {
-                Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold()
-            } else if shown {
-                Style::new().fg(SHOWN)
-            } else {
-                Style::new().fg(FG)
-            };
-            let line =
-                format!("{}{} {} {}", if active { "▌" } else { " " }, i + 1, tab_icon(icons, tab), tab.playback.title);
-            top.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
-        }
+    let mut tabs: Vec<(ListItem, Option<Spot>)> = Vec::new();
+    for (i, tab) in state.tabs.iter().enumerate() {
+        // The cursor's row has the focus highlight; the tab shown, the "shown" mark.
+        let active = state.menu_row() == MenuRow::Tab(i) && menu_focused(state);
+        let shown = state.shown_row() == Some(MenuRow::Tab(i));
+        let style = if active {
+            Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold()
+        } else if shown {
+            Style::new().fg(SHOWN)
+        } else {
+            Style::new().fg(FG)
+        };
+        let line = format!("{}{} {}", if active { "▌" } else { " " }, tab_icon(icons, tab), tab.playback.title);
+        tabs.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
     }
     // A blank row, then the rule: inset two columns on each side.
-    let rule =
-        format!("{SEPARATOR_INSET}{}", "─".repeat(usize::from(inner.width).saturating_sub(2 * SEPARATOR_INSET.len())));
+    let rule = || {
+        let width = usize::from(inner.width).saturating_sub(2 * SEPARATOR_INSET.len());
+        (ListItem::new(Line::from(format!("{SEPARATOR_INSET}{}", "─".repeat(width))).fg(MUTED)), None)
+    };
     let room = usize::from(inner.height);
-    let gap = room.saturating_sub(top.len() + 1 + bottom.len()).max(1);
+    // Above the tabs: a blank row, the rule, the TABS title. Below: a blank row, the rule, Settings…
+    let (tabs_head, tail) = (if tabs.is_empty() { 0 } else { 3 }, 2 + bottom.len());
+    let tab_rows = room.saturating_sub(top.len() + tabs_head + tail);
+    if room >= top.len() + tabs_head + tail + usize::from(!tabs.is_empty()) {
+        // The top and the bottom stay put; the tabs take what is left and scroll.
+        let shown = tabs.len().min(tab_rows);
+        let offset = tab_offset(state, tabs.len(), shown);
+        let mut items = top;
+        if !tabs.is_empty() {
+            let mut title = lang.pick(" PESTAÑAS", " TABS").to_owned();
+            if offset > 0 {
+                title.push_str(&format!(" {}", icons.more_above));
+            }
+            if offset + shown < tabs.len() {
+                title.push_str(&format!(" {}", icons.more_below));
+            }
+            items.push((ListItem::new(""), None));
+            items.push(rule());
+            items.push((ListItem::new(Line::from(title).fg(MUTED).bold()), None));
+            items.extend(tabs.into_iter().skip(offset).take(shown));
+        }
+        let gap = room.saturating_sub(items.len() + 1 + bottom.len()).max(1);
+        items.extend((0..gap).map(|_| (ListItem::new(""), None)));
+        items.push(rule());
+        items.extend(bottom);
+        return items;
+    }
+    // Too short for even one tab row: one list, scrolled so the cursor's row
+    // shows (or, without the menu's keys, the tab shown).
     let mut items = top;
-    items.extend((0..gap).map(|_| (ListItem::new(""), None)));
-    items.push((ListItem::new(Line::from(rule).fg(MUTED)), None));
+    if !tabs.is_empty() {
+        items.push((ListItem::new(""), None));
+        items.push(rule());
+        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
+        items.extend(tabs);
+    }
+    items.push((ListItem::new(""), None));
+    items.push(rule());
     items.extend(bottom);
-    // Too short for all of it: scrolled so the chosen section shows.
-    let spot = match state.menu_row() {
+    let row = match state.shown_row() {
+        Some(MenuRow::Tab(i)) if !menu_focused(state) => MenuRow::Tab(i),
+        _ => state.menu_row(),
+    };
+    let spot = match row {
         MenuRow::Section(i) => Spot::Section(i),
         MenuRow::Tab(i) => Spot::Tab(i + 1),
     };
@@ -1068,6 +1111,31 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     let skip = (chosen + 1).saturating_sub(room);
     items.drain(..skip);
     items
+}
+
+/// The first of `total` tabs to show in `rows` rows. It follows the cursor's
+/// tab (with the menu's keys) or else the tab shown; after the wheel it
+/// stays where the wheel left it until that tab changes.
+fn tab_offset(state: &State, total: usize, rows: usize) -> usize {
+    let anchor = match state.menu_row() {
+        MenuRow::Tab(i) if menu_focused(state) => Some(i),
+        _ => state.active.checked_sub(1),
+    };
+    let mut scroll = state.tab_scroll.get();
+    if anchor != scroll.anchor {
+        scroll.wheeled = false;
+    }
+    if let Some(i) = anchor.filter(|_| !scroll.wheeled) {
+        if i < scroll.offset {
+            scroll.offset = i;
+        } else if i >= scroll.offset + rows {
+            scroll.offset = i + 1 - rows;
+        }
+    }
+    scroll.anchor = anchor;
+    scroll.offset = scroll.offset.min(total - rows.min(total));
+    state.tab_scroll.set(scroll);
+    scroll.offset
 }
 
 /// How far the rule above Settings stays from each side of the menu.
@@ -2776,7 +2844,7 @@ mod tests {
     fn tabs_appear_in_the_menu_only() {
         let screen = render(&with_tab());
         assert!(screen.contains("PESTAÑAS"));
-        assert_eq!(screen.matches("1 ▶ title a").count(), 1, "the menu, no tab bar: {screen}");
+        assert_eq!(screen.matches("│ ▶ title a ").count(), 1, "the menu, no tab bar: {screen}");
         assert!(!screen.contains("Inicio"), "{screen}");
         // The tab's pane starts on the first row, next to the menu's title.
         assert!(screen.lines().next().unwrap().contains("▶ title a · chan a"), "{screen}");
@@ -2809,10 +2877,10 @@ mod tests {
         s.update(Action::FocusMenu);
         assert_eq!(s.menu_row(), MenuRow::Tab(0));
         let screen = render(&s);
-        assert!(screen.contains("▌1 ▶ title a"), "{screen}");
+        assert!(screen.contains("▌▶ title a"), "{screen}");
         s.update(Action::Down);
         let screen = render(&s);
-        assert!(!screen.contains("▌1 ▶ title a") && screen.contains("▌⚙"), "on Settings now: {screen}");
+        assert!(!screen.contains("▌▶ title a") && screen.contains("▌⚙"), "on Settings now: {screen}");
     }
 
     #[test]
@@ -2867,7 +2935,7 @@ mod tests {
         let mut s = state();
         assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+Y ?"]);
         s.update(Action::Prefix);
-        assert!(hint_keys(&s).contains(&"b".to_string()) && hint_keys(&s).contains(&"0-9".to_string()));
+        assert!(hint_keys(&s).contains(&"b".to_string()) && !hint_keys(&s).contains(&"0-9".to_string()));
         let tab = with_tab();
         assert!(hint_keys(&tab).contains(&"Espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
         let list = with_items(Items::Videos(vec![video("a")]));
@@ -3422,7 +3490,8 @@ mod tests {
         assert_eq!(spot_at(&s, find(&screen, "title 30  1:00")), Some(Spot::Row(30)));
         s.update(Action::Enter); // plays video 50 in tab 1
         let screen = render(&s);
-        assert_eq!(spot_at(&s, find(&screen, "1 ▶ title 50")), Some(Spot::Tab(1)));
+        let (x, y) = find(&screen, "│ ▶ title 50 ");
+        assert_eq!(spot_at(&s, (x + 2, y)), Some(Spot::Tab(1)));
         assert!(!screen.contains("Inicio"), "no tab bar to click");
         assert_eq!(spot_at(&s, (80, 20)), Some(Spot::Video));
         let info = Info { position: Some(0.0), duration: Some(100.0), ..Info::default() };
@@ -3616,7 +3685,7 @@ mod tests {
         assert_eq!((s.active, s.focus), (1, Focus::Menu));
         assert_eq!(corner(&s), MUTED, "the video pane is dim while the menu has the keys");
         let screen = render_with(&s, &View { embedded: false, ..VIEW });
-        assert!(screen.contains("▌1 "), "the cursor's tab is lit: {screen}");
+        assert!(screen.contains("▌▶ title a"), "the cursor's tab is lit: {screen}");
         assert!(screen.contains("A continuación · 2 · Tab"), "Up Next not lit either: {screen}");
     }
 
@@ -3993,5 +4062,121 @@ mod tests {
         s.menu = at(Section::Descargas);
         assert_eq!(shown_rows(&s).len(), 1);
         assert!(shown_rows(&s)[0].contains(Section::Configuracion.label(Lang::En)), "{:?}", shown_rows(&s));
+    }
+
+    /// 35 video tabs (titles "title 0" … "title 34"), the last one shown.
+    fn with_35_tabs() -> State {
+        let mut s = with_items(Items::Videos((0..35).map(|i| video(&i.to_string())).collect()));
+        for i in 0..35 {
+            s.update(Action::GoTab(0));
+            s.focus = Focus::List;
+            s.stack[0].selected = i;
+            s.update(Action::Enter);
+        }
+        assert_eq!((s.tabs.len(), s.active), (35, 35));
+        s
+    }
+
+    fn tab_rows_shown(screen: &[String]) -> Vec<usize> {
+        (0..35).filter(|i| screen.iter().any(|l| l.contains(&format!(" title {i} ")) && l.starts_with('│'))).collect()
+    }
+
+    #[test]
+    fn thirty_five_tabs_scroll_between_a_fixed_top_and_bottom() {
+        let mut s = with_35_tabs();
+        let empty = render_screen(&state(), 130, 40);
+        let screen = render_screen(&s, 130, 40);
+        let at = |screen: &[String], text: &str| row_of(screen, text);
+        // The top and the bottom are where they are with no tabs.
+        for label in [Section::Inicio, Section::Descargas, Section::Configuracion, Section::Salir] {
+            let label = label.label(Lang::Es);
+            assert_eq!(at(&screen, label), at(&empty, label), "{label}\n{}", screen.join("\n"));
+        }
+        // A rule above the tabs too, and the title says more are above.
+        let title = at(&screen, "PESTAÑAS");
+        assert!(screen[title - 1].contains("──") && screen[title - 2].trim_matches(['│', ' ']).is_empty());
+        assert!(
+            screen[title].contains(icons(s.config.ui.icons).more_above)
+                && !screen[title].contains(icons(s.config.ui.icons).more_below),
+            "{}",
+            screen[title]
+        );
+        // The tab shown is in view, the last rows of the tab area.
+        let rows = tab_rows_shown(&screen);
+        assert_eq!(*rows.last().unwrap(), 34, "{}", screen.join("\n"));
+        assert!(rows.len() < 35 && rows.windows(2).all(|w| w[1] == w[0] + 1), "{rows:?}");
+        let count = rows.len();
+        // Alt+. wraps to the first tab: the list follows.
+        s.update(Action::NextTab);
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(tab_rows_shown(&screen), (0..count).collect::<Vec<_>>());
+        let title = at(&screen, "PESTAÑAS");
+        assert!(
+            screen[title].contains(icons(s.config.ui.icons).more_below)
+                && !screen[title].contains(icons(s.config.ui.icons).more_above)
+        );
+        // Alt+, back to the last.
+        s.update(Action::PrevTab);
+        assert_eq!(*tab_rows_shown(&render_screen(&s, 130, 40)).last().unwrap(), 34);
+        // The menu's cursor walks the tabs up; the list keeps it in view, then
+        // down past the last tab to Settings while the tab shown stays put.
+        s.update(Action::FocusMenu);
+        for _ in 0..34 {
+            s.update(Action::Up);
+        }
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(tab_rows_shown(&screen)[0], 0);
+        assert!(screen.iter().any(|l| l.contains("▌▶ title 0 ")), "{}", screen.join("\n"));
+        // Exactly one shown mark, on tab 35 — out of view now, so none drawn.
+        assert!(shown_rows(&s).is_empty(), "{:?}", shown_rows(&s));
+        // The wheel scrolls the tabs on its own, and no further than the end.
+        for _ in 0..100 {
+            s.update(Action::ScrollTabs(1));
+        }
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(*tab_rows_shown(&screen).last().unwrap(), 34);
+        s.update(Action::ScrollTabs(-3));
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(*tab_rows_shown(&screen).last().unwrap(), 31);
+        // Settings, About and Quit are still at the bottom, clickable.
+        let quit = at(&screen, Section::Salir.label(Lang::Es));
+        assert_eq!(quit, at(&empty, Section::Salir.label(Lang::Es)));
+    }
+
+    #[test]
+    fn a_short_menu_keeps_one_tab_row_then_falls_back_to_one_scrolled_list() {
+        let mut s = with_35_tabs();
+        // The shortest height that still pins both ends has one tab row.
+        let empty = render_screen(&state(), 130, 40);
+        let quit_row = row_of(&empty, Section::Salir.label(Lang::Es));
+        let mut pinned = None;
+        for height in (10..40).rev() {
+            let screen = render_screen(&s, 130, height);
+            let rows = tab_rows_shown(&screen);
+            if rows.len() == 1 {
+                pinned = Some(height);
+                assert_eq!(rows, [34], "the tab shown");
+                assert!(screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))));
+                assert!(screen.iter().any(|l| l.contains("YOUTUBE")), "the top stays");
+                break;
+            }
+        }
+        let pinned = pinned.expect("a height with one tab row");
+        assert!(pinned < 40 && quit_row > 0);
+        // One row shorter: one list, scrolled to the cursor (Quit after Up from the first section).
+        let screen = render_screen(&s, 130, pinned - 1);
+        assert!(tab_rows_shown(&screen).contains(&34), "the tab shown: {}", screen.join("\n"));
+        s.update(Action::FocusMenu);
+        s.menu_tab = None;
+        s.menu = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
+        let screen = render_screen(&s, 130, pinned - 1);
+        assert!(screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))), "{}", screen.join("\n"));
+    }
+
+    #[test]
+    fn tab_rows_have_no_number() {
+        let screen = render(&with_tab());
+        assert!(screen.contains("│ ▶ title a ") && !screen.contains("1 ▶ title a"), "{screen}");
     }
 }

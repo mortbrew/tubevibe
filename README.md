@@ -251,7 +251,6 @@ Global commands use a **`Ctrl+Y` prefix** (tmux style): press `Ctrl+Y`, then:
 | `b` | show / hide the menu |
 | `m` | go to the menu |
 | `f` | fullscreen |
-| `0-9` | the tab with that number in the menu (`0` = back to browsing) |
 | `x` | close the tab · in either Watch Later or a playlist: remove the selected video (asks first) |
 | `/` | search videos |
 | `l` | English / español |

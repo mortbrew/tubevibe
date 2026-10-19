@@ -592,6 +592,8 @@ pub enum Action {
     PrevTab,
     /// 0 is Inicio, n is the n-th video tab.
     GoTab(usize),
+    /// The wheel over the menu's tabs: rows to scroll them by.
+    ScrollTabs(isize),
     CloseTab,
     /// The player went away on its own (window closed, video ended, failed to start).
     PlayerClosed(TabId, Option<String>),
@@ -977,6 +979,15 @@ struct Pending {
     skip_later: bool,
 }
 
+/// The menu's tab list scroll: the first tab shown, the tab it keeps in view,
+/// and whether the wheel has let it go (until that tab changes).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TabScroll {
+    pub offset: usize,
+    pub anchor: Option<usize>,
+    pub wheeled: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub config: Config,
@@ -1000,6 +1011,8 @@ pub struct State {
     pub menu_tab: Option<usize>,
     /// The section whose list the browsing view shows (marked in the menu).
     pub shown_section: Option<usize>,
+    /// How far the menu's tab list is scrolled; kept by the drawing, moved by the wheel.
+    pub tab_scroll: std::cell::Cell<TabScroll>,
     /// The section asked for, until its list replaces the one shown.
     pending_section: Option<usize>,
     /// My Recommendations as last loaded (when) and left (cursor, pages):
@@ -1103,6 +1116,7 @@ impl State {
             menu: 0,
             menu_tab: None,
             shown_section: None,
+            tab_scroll: Default::default(),
             pending_section: None,
             home_cache: None,
             prompt: None,
@@ -1810,6 +1824,12 @@ impl State {
             Action::NextTab | Action::PrevTab => {}
             Action::GoTab(n) if n <= self.tabs.len() => self.show_tab(n),
             Action::GoTab(_) => {}
+            Action::ScrollTabs(rows) => {
+                let mut scroll = self.tab_scroll.get();
+                scroll.offset = scroll.offset.saturating_add_signed(rows);
+                scroll.wheeled = true;
+                self.tab_scroll.set(scroll);
+            }
             Action::CloseTab => {
                 if let Some(id) = self.active_tab().map(|t| t.id) {
                     self.remove_tab(id);
@@ -1989,9 +2009,6 @@ impl State {
             return;
         }
         for t in saved.tabs {
-            if self.tabs.len() >= self.config.ui.max_tabs {
-                break;
-            }
             if t.queue.is_empty() || self.tabs.iter().any(|open| open.playback.queue.first() == t.queue.first()) {
                 continue;
             }
@@ -3759,14 +3776,6 @@ impl State {
             self.show_tab(i + 1);
             return Vec::new();
         }
-        if self.tabs.len() >= self.config.ui.max_tabs {
-            let (max, close) = (
-                self.tr("Máximo de", "At most"),
-                self.tr("pestañas: cerrá una con Ctrl+Y x", "tabs: close one with Ctrl+Y x"),
-            );
-            self.status = format!("{max} {} {close}", self.config.ui.max_tabs);
-            return Vec::new();
-        }
         let id = TabId(self.next_tab);
         self.next_tab += 1;
         // Local files have no details to look at first: they always play.
@@ -5465,16 +5474,15 @@ mod tests {
     }
 
     #[test]
-    fn restoring_tabs_respects_the_limit_the_setting_and_bad_files() {
+    fn restoring_tabs_keeps_them_all_respects_the_setting_and_bad_files() {
         let mut s = state();
-        for id in ["a", "b", "c"] {
-            s.play(Playback::youtube(video(id)));
+        for i in 0..35 {
+            s.play(Playback::youtube(video(&format!("v{i}"))));
         }
         let saved = s.saved_tabs();
-        let mut few = state();
-        few.config.ui.max_tabs = 2;
-        few.update(Action::TabsRestored(Ok(saved.clone())));
-        assert_eq!(few.tabs.len(), 2, "no more than max_tabs");
+        let mut many = state();
+        many.update(Action::TabsRestored(Ok(saved.clone())));
+        assert_eq!(many.tabs.len(), 35, "no limit");
         let mut off = state();
         off.config.ui.restore_tabs = false;
         off.update(Action::TabsRestored(Ok(saved)));
@@ -5659,17 +5667,15 @@ mod tests {
     }
 
     #[test]
-    fn max_tabs_is_enforced() {
-        let config = Config { ui: UiConfig { max_tabs: 1, ..Default::default() }, ..Default::default() };
-        let mut s = State::new(config, vec![]);
-        s.config.player.autoplay = true;
-        let id = load_id(&open(&mut s, Section::Suscripciones));
-        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
-        play(&mut s, 0);
-        s.update(Action::GoTab(0));
-        s.stack[0].selected = 1;
-        assert!(s.update(Action::Enter).is_empty());
-        assert!(s.status.contains("Máximo"));
+    fn tabs_are_unlimited() {
+        let ids: Vec<String> = (0..40).map(|i| format!("v{i}")).collect();
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut s = with_videos(&ids);
+        for i in 0..40 {
+            play(&mut s, i);
+        }
+        assert_eq!((s.tabs.len(), s.active), (40, 40));
+        assert!(!s.status.contains("tabs:") && !s.status.contains("Máximo"), "{}", s.status);
     }
 
     #[test]
