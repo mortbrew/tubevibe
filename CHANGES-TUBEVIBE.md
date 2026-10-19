@@ -550,7 +550,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, border styles, AI summary marks, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, border styles, AI summary marks, tabs in the menu only, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -588,6 +588,37 @@ could not update itself either. From now on:
   a summary. Videos not looked at yet carry no mark even if YouTube has a
   summary: flat lists don't say, and asking per row would mean a request
   per video. Nothing new is fetched for the mark.
+
+### Tabs live in the menu only (`menu-layout-borders`)
+
+- **No more tab bar.** The row across the top (*Home* and the video tabs)
+  is gone: open tabs show only under TABS in the left menu, and the main
+  pane gets that row back. *Home* was the browsing view's own tab (upstream
+  *Inicio*); the menu already is that view.
+- `Ctrl+y 1`–`9` still go to the tabs as numbered in the menu, `Ctrl+y 0`
+  back to browsing, and `Ctrl+y n`/`p` next/previous. Help and hints say
+  "as listed in the menu" instead of mentioning the tab bar. Clicks land on
+  the menu rows (nothing left to click at the top).
+
+### Open tabs come back after a restart (`menu-layout-borders`)
+
+- The open tabs are kept in **`~/.local/share/tubevibe/tabs.json`** (the
+  data folder, not config.toml): each tab's title, subtitle, video (id,
+  title, channel, duration…), queue (URLs or file paths) and audio-only
+  flag, in order, plus which tab was in front. It is rewritten whenever a
+  tab opens or closes, so quitting any way (`q`, `Ctrl+C`, a closed
+  terminal, a crash) leaves it current.
+- On startup they come back under TABS in the menu, up to `max_tabs`, with
+  the browsing view in front. Nothing plays and nothing is fetched: a tab
+  loads its details, comments and SponsorBlock segments the first time it's
+  shown, and `Enter` plays it (from where the history says it was left).
+- A missing file, or one from another version, restores nothing. A file
+  that can't be read warns in the status bar (*"Could not restore the tabs:
+  …"*), is set aside as `tabs.json.bak`, and startup carries on.
+- **Settings → Restore Tabs on Startup** (*Recuperar las pestañas al
+  abrir*), on by default, saved as `[ui] restore_tabs = true | false`. Off,
+  tubevibe starts with no tabs (and stops keeping the old ones). Icon: 📑 /
+  nf-fa-window_restore `f2d2` / ❐.
 
 ### Watch Later fails with a clear message, errors in English (`watch-later-null-fix`)
 

@@ -20,6 +20,8 @@ pub struct Paths {
     pub history: PathBuf,
     /// `downloads.json`: finished downloads, newest first.
     pub downloads: PathBuf,
+    /// `tabs.json`: the video tabs open when the app last ran.
+    pub tabs: PathBuf,
 }
 
 impl Paths {
@@ -37,6 +39,7 @@ impl Paths {
             watched: data.join("watched.txt"),
             history: data.join("history.json"),
             downloads: data.join("downloads.json"),
+            tabs: data.join("tabs.json"),
         }
     }
 }
@@ -75,6 +78,58 @@ pub fn load_history(path: &Path) -> Vec<HistoryEntry> {
 
 pub fn save_history(path: &Path, history: &[HistoryEntry]) -> io::Result<()> {
     write_atomic(path, &serde_json::to_string(history).map_err(io::Error::other)?)
+}
+
+/// What `tabs.json` holds: the open tabs, in the menu's order.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavedTabs {
+    /// [`TABS_VERSION`]; a file from another version restores nothing.
+    pub version: u32,
+    /// The tab shown when it was saved (0: browsing), for the record.
+    #[serde(default)]
+    pub active: usize,
+    #[serde(default)]
+    pub tabs: Vec<SavedTab>,
+}
+
+/// One open tab: enough to list it in the menu and play it again.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavedTab {
+    pub title: String,
+    /// Channel or folder.
+    #[serde(default)]
+    pub subtitle: String,
+    /// The YouTube video; none for local files.
+    #[serde(default)]
+    pub video: Option<Video>,
+    /// URLs or paths, played in order.
+    pub queue: Vec<String>,
+    #[serde(default)]
+    pub audio_only: bool,
+}
+
+pub const TABS_VERSION: u32 = 1;
+
+/// The tabs open last time. Missing: none. Another version: none, quietly.
+/// Damaged: none, the file set aside as `tabs.json.bak`, and why.
+pub fn load_tabs(path: &Path) -> Result<SavedTabs, String> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(SavedTabs::default()),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let version = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v["version"].as_u64());
+    if version.is_some_and(|v| v != u64::from(TABS_VERSION)) {
+        return Ok(SavedTabs::default());
+    }
+    serde_json::from_str::<SavedTabs>(&text).map_err(|e| {
+        let _ = std::fs::rename(path, path.with_extension("json.bak"));
+        format!("{}: {e}", path.display())
+    })
+}
+
+pub fn save_tabs(path: &Path, tabs: &SavedTabs) -> io::Result<()> {
+    write_atomic(path, &serde_json::to_string_pretty(tabs).map_err(io::Error::other)?)
 }
 
 /// Finished downloads whose file is still there.
@@ -303,6 +358,47 @@ mod tests {
         assert_eq!(videos[1].channel_id.as_deref(), Some("UCa"));
         assert_eq!(videos[1].channel_url.as_deref(), Some("https://www.youtube.com/@a"));
         assert_eq!(videos[1].duration, Some(3723));
+    }
+
+    #[test]
+    fn tabs_round_trip_and_tolerate_bad_files() {
+        let path = temp_dir("tabs").join("data/tabs.json");
+        assert_eq!(load_tabs(&path), Ok(SavedTabs::default()), "no file: no tabs");
+        let tabs = SavedTabs {
+            version: TABS_VERSION,
+            active: 2,
+            tabs: vec![
+                SavedTab {
+                    title: "title a".into(),
+                    subtitle: "chan a".into(),
+                    video: Some(video("a")),
+                    queue: vec![video("a").url()],
+                    audio_only: false,
+                },
+                SavedTab {
+                    title: "song.mp3".into(),
+                    subtitle: "~/Music".into(),
+                    video: None,
+                    queue: vec!["/m/song.mp3".into(), "/m/next.mp3".into()],
+                    audio_only: true,
+                },
+            ],
+        };
+        save_tabs(&path, &tabs).unwrap();
+        assert_eq!(load_tabs(&path), Ok(tabs));
+        // Another version's file: nothing, and it stays as it is.
+        std::fs::write(&path, r#"{"version": 9, "tabs": "who knows"}"#).unwrap();
+        assert_eq!(load_tabs(&path), Ok(SavedTabs::default()));
+        assert!(path.exists());
+        // Damaged: nothing, a reason, and the file set aside.
+        std::fs::write(&path, "{ not json").unwrap();
+        let error = load_tabs(&path).unwrap_err();
+        assert!(error.contains("tabs.json"), "{error}");
+        assert!(!path.exists() && path.with_extension("json.bak").exists());
+        // Unknown fields from a newer tubevibe are fine.
+        std::fs::write(&path, r#"{"version": 1, "glow": true, "tabs": [{"title": "t", "queue": ["u"], "x": 1}]}"#)
+            .unwrap();
+        assert_eq!(load_tabs(&path).unwrap().tabs.len(), 1);
     }
 
     #[test]

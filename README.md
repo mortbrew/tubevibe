@@ -248,7 +248,7 @@ Global commands use a **`Ctrl+y` prefix** (tmux style): press `Ctrl+y`, then:
 | `b` | show / hide the menu |
 | `m` | go to the menu |
 | `f` | fullscreen |
-| `n` `p` `0-9` | next / previous / numbered tab (`0` = Inicio) |
+| `n` `p` `0-9` | next / previous / numbered tab, as listed in the menu (`0` = back to browsing) |
 | `x` | close the tab · in either Watch Later or a playlist: remove the selected video (asks first) |
 | `/` | search videos |
 | `l` | English / español |
@@ -332,6 +332,7 @@ music_dirs = ["~/Música", "/mnt/discos"]
 [ui]
 icons = "emoji"          # emoji | nerd | unicode
 border_style = "plain"   # plain | rounded | thick | double | none
+restore_tabs = true      # reopen the tabs that were open last time (kept in ~/.local/share/tubevibe/tabs.json)
 omarchy_theme = true     # use the current Omarchy theme's colours (Tokyo Night when off or not on Omarchy)
 lang = "en"              # en | es (unset: the system language)
 thumbnails = true        # thumbnail in the preview panel (kitty)

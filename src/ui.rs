@@ -7,7 +7,7 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Flex, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Tabs};
+use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::app::{
     Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, Prompt, Section, Setting, State, Tab,
@@ -68,7 +68,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 33],
+    pub settings: [&'static str; 34],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -134,8 +134,8 @@ const EMOJI: Icons = Icons {
         "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "🎨", "📷", "🐭", "🎦",
-        "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📑", "🎨", "📷", "🐭",
+        "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -206,6 +206,7 @@ const NERD: Icons = Icons {
         "\u{f0ac}",
         "\u{f118}",
         "\u{f00ce}",
+        "\u{f2d2}",
         "\u{f1fc}",
         "\u{f03e}",
         "\u{f245}",
@@ -265,8 +266,8 @@ const NERD: Icons = Icons {
 const UNICODE: Icons = Icons {
     sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◐", "▨", "➚", "◆", "✦", "≈", "✸", "▷",
-        "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "❐", "◐", "▨", "➚", "◆", "✦", "≈", "✸",
+        "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -344,7 +345,7 @@ fn bouncing_bar(width: usize, elapsed: Duration) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Areas {
     pub sidebar: Option<Rect>,
-    pub tabs: Rect,
+    /// The main pane; open tabs are listed in the menu only (no tab bar).
     pub content: Rect,
     pub status: Rect,
     /// Keys that work right now, with what they do.
@@ -355,9 +356,8 @@ pub fn areas(area: Rect, sidebar: bool) -> Areas {
     let [body, status, hints] =
         Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).areas(area);
     let width = if sidebar { SIDEBAR_WIDTH } else { 0 };
-    let [side, main] = Layout::horizontal([Constraint::Length(width), Constraint::Fill(1)]).areas(body);
-    let [tabs, content] = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(main);
-    Areas { sidebar: sidebar.then_some(side), tabs, content, status, hints }
+    let [side, content] = Layout::horizontal([Constraint::Length(width), Constraint::Fill(1)]).areas(body);
+    Areas { sidebar: sidebar.then_some(side), content, status, hints }
 }
 
 /// What is under the mouse pointer.
@@ -365,7 +365,7 @@ pub fn areas(area: Rect, sidebar: bool) -> Areas {
 pub enum Spot {
     /// A section of the menu, in `Section::ALL` order.
     Section(usize),
-    /// A tab, in the menu or the tab bar; 0 is Inicio.
+    /// A tab in the menu (1 and up); 0 is the browsing view.
     Tab(usize),
     /// A row of the current list.
     Row(usize),
@@ -395,18 +395,6 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
         let inner = Block::bordered().inner(side);
         let line = usize::from(y.checked_sub(inner.y)?);
         return sidebar_items(state, icons(state.config.ui.icons), inner).get(line)?.1;
-    }
-    if areas.tabs.contains(at) {
-        // Tabs draws ` title ` and a one-cell divider after each.
-        let mut start = areas.tabs.x;
-        for (i, title) in tab_titles(state, icons(state.config.ui.icons)).iter().enumerate() {
-            let end = start + Span::raw(title.as_str()).width() as u16 + 2;
-            if x < end {
-                return (x >= start).then_some(Spot::Tab(i));
-            }
-            start = end + 1;
-        }
-        return None;
     }
     if !areas.content.contains(at) {
         return None;
@@ -514,7 +502,6 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
     if let Some(side) = areas.sidebar {
         draw_sidebar(frame, state, icons, side);
     }
-    draw_tabs(frame, state, icons, areas.tabs);
     match state.active_tab() {
         None => draw_inicio(frame, state, icons, view, areas.content),
         Some(tab) => {
@@ -1057,27 +1044,6 @@ fn later_lines(state: &State, icons: &Icons, id: &str, lang: Lang) -> Vec<Line<'
         lines.push(Line::from(format!("{} {label}", icons.section(Section::Guardados))).fg(CYAN));
     }
     lines
-}
-
-fn tab_titles(state: &State, icons: &Icons) -> Vec<String> {
-    let home = state.lang().pick("Inicio", "Home");
-    std::iter::once(format!("{} {home}", icons.section(Section::Inicio)))
-        .chain(
-            state
-                .tabs
-                .iter()
-                .enumerate()
-                .map(|(i, t)| format!("{} {} {}", i + 1, tab_icon(icons, t), truncate(&t.playback.title, 20))),
-        )
-        .collect()
-}
-
-fn draw_tabs(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
-    let tabs = Tabs::new(tab_titles(state, icons))
-        .select(state.active)
-        .style(Style::new().fg(MUTED))
-        .highlight_style(Style::new().fg(BLUE).add_modifier(Modifier::BOLD));
-    frame.render_widget(tabs, area);
 }
 
 /// The search box and the rest of Inicio below it.
@@ -2569,7 +2535,9 @@ mod tests {
         assert_eq!(with.content.x, SIDEBAR_WIDTH);
         let without = areas(area, false);
         assert_eq!(without.sidebar, None);
-        assert_eq!(without.content, Rect::new(0, 1, 100, 27));
+        assert_eq!(without.content, Rect::new(0, 0, 100, 28), "no tab bar: the pane starts at the top");
+        assert_eq!(with.content.y, 0);
+        assert_eq!(with.content.height, with.sidebar.unwrap().height, "as tall as the menu");
         assert_eq!(without.status, Rect::new(0, 28, 100, 1));
         assert_eq!(without.hints, Rect::new(0, 29, 100, 1));
     }
@@ -2603,7 +2571,7 @@ mod tests {
     fn icon_set_follows_the_config() {
         let mut s = state();
         s.config.ui.icons = IconSet::Nerd;
-        assert!(render(&s).contains(&format!("{} Inicio", NERD.sections[0])));
+        assert!(render(&s).contains(&format!("{} Mis recomendados", NERD.sections[0])));
     }
 
     #[test]
@@ -2721,10 +2689,13 @@ mod tests {
     }
 
     #[test]
-    fn tabs_appear_in_bar_and_sidebar() {
+    fn tabs_appear_in_the_menu_only() {
         let screen = render(&with_tab());
         assert!(screen.contains("PESTAÑAS"));
-        assert_eq!(screen.matches("1 ▶ title a").count(), 2, "{screen}");
+        assert_eq!(screen.matches("1 ▶ title a").count(), 1, "the menu, no tab bar: {screen}");
+        assert!(!screen.contains("Inicio"), "{screen}");
+        // The tab's pane starts on the first row, next to the menu's title.
+        assert!(screen.lines().next().unwrap().contains("▶ title a · chan a"), "{screen}");
     }
 
     #[test]
@@ -2758,7 +2729,7 @@ mod tests {
         assert!(!screen.contains("Inicio"), "only the logo");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 120, 40), 5, 5), None);
         s.update(Action::EndSplash);
-        assert!(render(&s).contains("Inicio"));
+        assert!(render(&s).contains("Mis recomendados"));
     }
 
     #[test]
@@ -2966,7 +2937,9 @@ mod tests {
         s.update(Action::ToggleUiLang);
         s.update(Action::GoTab(0));
         let screen = render(&s);
-        for text in ["Home", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"] {
+        for text in
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"]
+        {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
         assert!(!screen.contains("Ver después"), "{screen}");
@@ -3278,7 +3251,7 @@ mod tests {
         s.update(Action::Enter); // plays video 50 in tab 1
         let screen = render(&s);
         assert_eq!(spot_at(&s, find(&screen, "1 ▶ title 50")), Some(Spot::Tab(1)));
-        assert_eq!(spot_at(&s, find(&screen, "Inicio ")), Some(Spot::Tab(0)));
+        assert!(!screen.contains("Inicio"), "no tab bar to click");
         assert_eq!(spot_at(&s, (80, 20)), Some(Spot::Video));
         let info = Info { position: Some(0.0), duration: Some(100.0), ..Info::default() };
         let content = areas(screen_area, s.sidebar).content;

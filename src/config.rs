@@ -176,6 +176,8 @@ pub struct UiConfig {
     pub favorites_first: bool,
     /// How every pane's border is drawn.
     pub border_style: BorderStyle,
+    /// The video tabs open when the app closed come back in the menu.
+    pub restore_tabs: bool,
 }
 
 /// The line every pane is framed with (`[ui] border_style`).
@@ -397,6 +399,7 @@ impl Default for UiConfig {
             notify_new: true,
             favorites_first: true,
             border_style: BorderStyle::Plain,
+            restore_tabs: true,
         }
     }
 }

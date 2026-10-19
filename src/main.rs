@@ -166,6 +166,8 @@ struct Runtime {
     config_path: Option<PathBuf>,
     paths: Paths,
     state: State,
+    /// What `tabs.json` holds now.
+    tabs_saved: store::SavedTabs,
     players: HashMap<TabId, Player>,
     tx: mpsc::Sender<Action>,
     rx: mpsc::Receiver<Action>,
@@ -251,11 +253,15 @@ impl Runtime {
         state.refresh_favorites();
         state.splash = state.config.ui.splash;
         state.set_downloads(store::load_downloads(&paths.downloads));
+        // Last time's tabs, back in the menu (nothing plays or loads yet).
+        state.update(Action::TabsRestored(store::load_tabs(&paths.tabs)));
+        let tabs_saved = state.saved_tabs();
         let (tx, rx) = mpsc::channel();
         let mut runtime = Self {
             config_path,
             paths,
             state,
+            tabs_saved,
             players: HashMap::new(),
             tx,
             rx,
@@ -504,6 +510,7 @@ impl Runtime {
                 self.stop(id);
             }
             self.closing.retain(|handle| !handle.is_finished());
+            self.save_tabs();
             // Leaving fullscreen any way (Esc, another tab, closing) restores the window.
             if self.window_fullscreen && !self.state.fullscreen {
                 player::set_window_fullscreen(false);
@@ -521,6 +528,19 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    /// `tabs.json` follows the open tabs as they open, close or switch, so
+    /// quitting any way (q, Ctrl+C, a crash, SIGTERM) keeps the last ones.
+    fn save_tabs(&mut self) {
+        let tabs = self.state.saved_tabs();
+        if tabs == self.tabs_saved {
+            return;
+        }
+        if let Err(e) = store::save_tabs(&self.paths.tabs, &tabs) {
+            dbg(format!("saving {}: {e}", self.paths.tabs.display()));
+        }
+        self.tabs_saved = tabs;
     }
 
     /// The Omarchy theme's colours when they changed (or Tokyo Night when it
