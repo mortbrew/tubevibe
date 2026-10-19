@@ -6876,6 +6876,54 @@ mod tests {
     }
 
     #[test]
+    fn every_quit_path_just_quits() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let press = |s: &mut State, key: KeyEvent| {
+            let action = crate::keymap::map(key, s.key_context()).expect("mapped");
+            s.update(action)
+        };
+        let ctrl_y_q = |s: &mut State| {
+            let mut effects = press(s, KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
+            effects.extend(press(s, KeyEvent::from(KeyCode::Char('q'))));
+            effects
+        };
+        let relaunches = |e: &[Effect]| {
+            e.iter().any(|e| matches!(e, Effect::Open(..) | Effect::Reopen(..) | Effect::SelfUpdate { .. }))
+        };
+        // The browsing view, a video tab, the menu over that tab, fullscreen.
+        let setups: [fn(&mut State); 4] = [
+            |_| {},
+            |s| {
+                play(s, 0);
+            },
+            |s| {
+                play(s, 0);
+                s.update(Action::FocusMenu);
+            },
+            |s| {
+                play(s, 0);
+                s.update(Action::ToggleFullscreen);
+            },
+        ];
+        for (i, setup) in setups.iter().enumerate() {
+            let mut s = with_videos(&["a"]);
+            setup(&mut s);
+            let effects = ctrl_y_q(&mut s);
+            assert!(s.quit && !relaunches(&effects), "case {i}: {effects:?}");
+            // What the runtime does after the loop: where each video was left.
+            let after = s.update(Action::Stopped { video: "a".into(), position: Some(5), duration: Some(60) });
+            assert!(!relaunches(&after), "case {i}: {after:?}");
+        }
+        // Ctrl+C, and Enter on Quit in the menu.
+        let mut s = with_videos(&["a"]);
+        assert!(!relaunches(&press(&mut s, KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL))) && s.quit);
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::Salir);
+        assert!(!relaunches(&press(&mut s, KeyEvent::from(KeyCode::Enter))) && s.quit);
+    }
+
+    #[test]
     fn menu_cursor_leaves_a_closed_tab() {
         let mut s = with_videos(&["a"]);
         play(&mut s, 0);
