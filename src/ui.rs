@@ -787,7 +787,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     };
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
     let list = List::new(related.iter().map(|v| video_row(state, icons, view, v)))
-        .block(panel(title, if focused { BLUE } else { MUTED }))
+        .block(focus_panel(title, focused))
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
     let selected = (!related.is_empty()).then_some(tab.related);
@@ -946,12 +946,27 @@ fn panel<'a>(title: impl Into<Line<'a>>, color: Color) -> Block<'a> {
     framed().border_style(Style::new().fg(color)).title(title)
 }
 
+/// A pane that takes the keys in turn (the menu, the list, Up next): its
+/// border lights up in blue while it has them. With no border to light,
+/// its title does.
+fn focus_panel<'a>(title: impl Into<Line<'a>>, focused: bool) -> Block<'a> {
+    let mut title = title.into();
+    if focused && BORDERS.get() == BorderStyle::None {
+        title = title.patch_style(Style::new().fg(BLUE).bg(HIGHLIGHT).add_modifier(Modifier::BOLD));
+    }
+    panel(title, if focused { BLUE } else { MUTED })
+}
+
+/// Whether the keys go to the menu: the browsing view, with the menu in focus.
+fn menu_focused(state: &State) -> bool {
+    state.active == 0 && state.focus == Focus::Menu
+}
+
 /// The menu's lines, each with what a click on it does, for a menu whose
 /// inside is `inner`: Settings, About and Quit pinned to its bottom under a
 /// short rule; when there is no room for that, right below the rest.
 fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'static>, Option<Spot>)> {
     let lang = state.lang();
-    let on_inicio = state.active == 0;
     let mut top: Vec<(ListItem, Option<Spot>)> = Vec::new();
     let mut bottom: Vec<(ListItem, Option<Spot>)> = Vec::new();
     let mut group = None;
@@ -978,7 +993,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
             label.push_str(&format!(" {}", icons.update));
         }
         let selected = i == state.menu;
-        let focused = selected && on_inicio && state.focus == Focus::Menu;
+        let focused = selected && menu_focused(state);
         let color = SECTION_COLORS[i];
         let mut style = Style::new().fg(if selected { color } else { FG });
         if focused {
@@ -1029,7 +1044,7 @@ fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         Span::styled("tube", Style::new().fg(RED).bold()),
         Span::styled("vibe ", Style::new().fg(FG).bold()),
     ]);
-    frame.render_widget(List::new(items).block(panel(title, MUTED)), area);
+    frame.render_widget(List::new(items).block(focus_panel(title, menu_focused(state))), area);
 }
 
 /// "In YouTube Watch Later" / "In tubevibe Watch Later" lines of a video's preview.
@@ -1310,7 +1325,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
     let focused = state.focus == Focus::List;
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
     let list = List::new(items)
-        .block(panel(title, if focused { BLUE } else { MUTED }))
+        .block(focus_panel(title, focused))
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
     let selected = (!listing.items.is_empty()).then_some(listing.selected);
@@ -3198,6 +3213,61 @@ mod tests {
         // And down from it back to the top.
         s.update(Action::Down);
         assert_eq!(s.menu, 0);
+    }
+
+    #[test]
+    fn the_menu_border_lights_up_when_the_menu_has_the_keys() {
+        let gruvbox = crate::theme::parse_colors_toml(
+            &std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/omarchy/gruvbox/colors.toml"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        for palette in [crate::theme::TOKYO_NIGHT, gruvbox] {
+            let (blue, muted, highlight) = if palette == crate::theme::TOKYO_NIGHT {
+                (BLUE, MUTED, HIGHLIGHT)
+            } else {
+                (palette.blue, palette.muted, palette.highlight)
+            };
+            for style in BorderStyle::ALL {
+                let mut s = state();
+                s.palette = palette;
+                s.config.ui.border_style = style;
+                let size = Rect::new(0, 0, 130, 40);
+                let side = areas(size, true).sidebar.unwrap();
+                let (left, right, mid) = (side.x, side.right() - 1, side.y + side.height / 2);
+                let draw = |s: &State| {
+                    let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+                    terminal.draw(|f| draw(f, s, &VIEW)).unwrap();
+                    terminal.backend().buffer().clone()
+                };
+                let rule_row = |buffer: &ratatui::buffer::Buffer| {
+                    (0..side.height)
+                        .find(|&y| buffer[(left + 4, y)].symbol() == "─" && buffer[(left + 1, y)].symbol() == " ")
+                        .unwrap()
+                };
+                s.focus = Focus::Menu;
+                let menu = draw(&s);
+                s.focus = Focus::List;
+                let list = draw(&s);
+                if style == BorderStyle::None {
+                    // No border to light: the title does, on the highlight.
+                    assert_eq!(menu[(left + 6, 0)].bg, highlight, "{style:?}: tube… on the highlight");
+                    assert_ne!(list[(left + 6, 0)].bg, highlight, "{style:?}");
+                } else {
+                    for (x, y) in [(left, 0), (left, mid), (right, mid), (left + 1, side.bottom() - 1)] {
+                        assert_eq!(menu[(x, y)].fg, blue, "{style:?} focused at {x},{y}");
+                        assert_eq!(list[(x, y)].fg, muted, "{style:?} unfocused at {x},{y}");
+                    }
+                }
+                // The rule above Settings, About and Quit stays dim either way.
+                for buffer in [&menu, &list] {
+                    let y = rule_row(buffer);
+                    assert_eq!(buffer[(left + 4, y)].fg, muted, "{style:?}: the rule");
+                }
+            }
+        }
     }
 
     #[test]
