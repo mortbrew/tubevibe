@@ -1461,7 +1461,9 @@ impl State {
                 }
             }
             Action::ConfigWarnings(warnings) => {
-                if let Some(warning) = crate::config::ConfigWarning::summary(&warnings, self.lang()) {
+                if let Some(warning) =
+                    crate::config::ConfigWarning::summary(&warnings, self.lang(), self.icons().warning)
+                {
                     let reloaded = self.tr("Configuración recargada", "Settings reloaded");
                     self.status = if self.status == reloaded { format!("{reloaded} · {warning}") } else { warning };
                 }
@@ -1488,7 +1490,12 @@ impl State {
                     return vec![Effect::Subscribe { channel_id, name, subscribe: false }];
                 }
                 Some(Confirm::Trash(paths)) => {
-                    self.status = format!("🗑 {} {}…", self.tr("A la papelera:", "To the trash:"), paths.len());
+                    self.status = format!(
+                        "{} {} {}…",
+                        self.icons().trash,
+                        self.tr("A la papelera:", "To the trash:"),
+                        paths.len()
+                    );
                     return vec![Effect::Trash(paths)];
                 }
                 Some(Confirm::TrashDownloads { files, cancel, remove }) => {
@@ -1506,13 +1513,17 @@ impl State {
                 }
                 Some(Confirm::Quit(_)) => self.quit = true,
                 Some(Confirm::DeletePlaylist { id, title }) => {
-                    self.status = format!("🗑 {} {title}…", self.tr("Borrando la lista", "Deleting the playlist"));
+                    self.status = format!(
+                        "{} {} {title}…",
+                        self.icons().trash,
+                        self.tr("Borrando la lista", "Deleting the playlist")
+                    );
                     return vec![Effect::DeletePlaylist { id, title }];
                 }
                 Some(Confirm::RemoveFromSaved(video)) => return self.unsave(&video),
                 Some(Confirm::RemoveFromLater(video)) => {
                     let removing = self.tr("Quitando de Ver después de YouTube:", "Removing from YouTube Watch Later:");
-                    self.status = format!("🗑 {removing} {}…", video.title);
+                    self.status = format!("{} {removing} {}…", self.icons().trash, video.title);
                     return vec![Effect::EditLater { video, add: false }];
                 }
                 Some(Confirm::RemoveFromPlaylist { playlist, video }) if playlist.id == LIKED => {
@@ -1523,7 +1534,7 @@ impl State {
                 }
                 Some(Confirm::RemoveFromPlaylist { playlist, video }) => {
                     let removing = self.tr("Quitando de", "Removing from");
-                    self.status = format!("🗑 {removing} {}: {}…", playlist.title, video.title);
+                    self.status = format!("{} {removing} {}: {}…", self.icons().trash, playlist.title, video.title);
                     return vec![Effect::RemoveFromPlaylist { playlist: playlist.id, video }];
                 }
                 None => {}
@@ -1657,8 +1668,11 @@ impl State {
                 tab.ended = true;
                 tab.on_related = !tab.related_videos().is_empty();
                 self.fullscreen = false;
-                self.status =
-                    self.tr("⏹ Video cerrado · Enter lo vuelve a ver", "⏹ Video closed · Enter plays it again").into();
+                self.status = format!(
+                    "{} {}",
+                    self.icons().stop,
+                    self.tr("Video cerrado · Enter lo vuelve a ver", "Video closed · Enter plays it again")
+                );
             }
             Action::Stopped { video, position, duration } => {
                 let Some(entry) = self.history.iter_mut().find(|e| e.video.id == video) else { return Vec::new() };
@@ -1688,7 +1702,12 @@ impl State {
                     return Vec::new();
                 }
                 let end = segment.end.div_ceil(1000) as u32;
-                self.status = format!("⏩ {}: {}", lang.pick("Salteado", "Skipped"), segment.label(lang));
+                self.status = format!(
+                    "{} {}: {}",
+                    crate::ui::icons(self.config.ui.icons).skip,
+                    lang.pick("Salteado", "Skipped"),
+                    segment.label(lang)
+                );
                 return vec![Effect::Command(id, PlayerCommand::SeekTo(end))];
             }
             Action::Volume(delta) => return self.command(PlayerCommand::Volume(delta)),
@@ -2522,8 +2541,12 @@ impl State {
         let extras = checks.iter().filter(|c| !c.tool.required() && !c.ok()).count();
         let on_screen = self.stack.last().is_some_and(|l| l.items == Items::System);
         if !lacking.is_empty() {
-            self.status =
-                format!("⚠ {}: {}", self.tr("Falta o hay que actualizar", "Missing or outdated"), lacking.join(", "));
+            self.status = format!(
+                "{} {}: {}",
+                self.icons().warning,
+                self.tr("Falta o hay que actualizar", "Missing or outdated"),
+                lacking.join(", ")
+            );
             self.show_system();
         } else if !on_screen && extras > 0 && !self.status.starts_with('⚠') {
             // (a config warning already showing matters more)
@@ -2942,10 +2965,11 @@ impl State {
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
         let name = self.saved_name();
         if self.saved.iter().any(|v| v.id == video.id) {
-            self.status = format!("🔖 {} {name}: {}", self.tr("Ya está en", "Already in"), video.title);
+            self.status =
+                format!("{} {} {name}: {}", self.icons().saved, self.tr("Ya está en", "Already in"), video.title);
             return Vec::new();
         }
-        self.status = format!("🔖 {} {name}: {}", self.tr("Guardado en", "Saved to"), video.title);
+        self.status = format!("{} {} {name}: {}", self.icons().saved, self.tr("Guardado en", "Saved to"), video.title);
         self.saved.insert(0, video);
         self.sync_saved();
         vec![Effect::SaveSaved(self.saved.clone())]
@@ -2955,7 +2979,8 @@ impl State {
     fn unsave(&mut self, video: &Video) -> Vec<Effect> {
         self.saved.retain(|v| v.id != video.id);
         let name = self.saved_name();
-        self.status = format!("🗑 {} {name}: {}", self.tr("Quitado de", "Removed from"), video.title);
+        self.status =
+            format!("{} {} {name}: {}", self.icons().trash, self.tr("Quitado de", "Removed from"), video.title);
         self.sync_saved();
         vec![Effect::SaveSaved(self.saved.clone())]
     }
@@ -2996,13 +3021,14 @@ impl State {
             .unwrap_or_else(|| playlist.clone());
         if let Err(error) = result {
             self.status = match self.lang() {
-                Lang::Es => format!("❌ No se pudo quitar {} de {name}: {error}", video.title),
-                Lang::En => format!("❌ Could not remove {} from {name}: {error}", video.title),
+                Lang::Es => format!("{} No se pudo quitar {} de {name}: {error}", self.icons().failed, video.title),
+                Lang::En => format!("{} Could not remove {} from {name}: {error}", self.icons().failed, video.title),
             };
             return;
         }
         self.drop_from_playlist(&playlist, &video.id);
-        self.status = format!("🗑 {} {name}: {}", self.tr("Quitado de", "Removed from"), video.title);
+        self.status =
+            format!("{} {} {name}: {}", self.icons().trash, self.tr("Quitado de", "Removed from"), video.title);
     }
 
     /// Takes a video out of the shown lists of a playlist.
@@ -3031,7 +3057,7 @@ impl State {
             Ok(false) => self.add_later(video),
             Err(error) => {
                 let failed = self.tr("No se pudo mirar Ver después de YouTube", "Could not check YouTube Watch Later");
-                self.status = format!("❌ {failed}: {error}");
+                self.status = format!("{} {failed}: {error}", self.icons().failed);
                 Vec::new()
             }
         }
@@ -3041,10 +3067,18 @@ impl State {
         if let Err(error) = result {
             let title = &video.title;
             self.status = match (self.lang(), add) {
-                (Lang::Es, true) => format!("❌ No se pudo guardar {title} en Ver después de YouTube: {error}"),
-                (Lang::Es, false) => format!("❌ No se pudo quitar {title} de Ver después de YouTube: {error}"),
-                (Lang::En, true) => format!("❌ Could not save {title} to YouTube Watch Later: {error}"),
-                (Lang::En, false) => format!("❌ Could not remove {title} from YouTube Watch Later: {error}"),
+                (Lang::Es, true) => {
+                    format!("{} No se pudo guardar {title} en Ver después de YouTube: {error}", self.icons().failed)
+                }
+                (Lang::Es, false) => {
+                    format!("{} No se pudo quitar {title} de Ver después de YouTube: {error}", self.icons().failed)
+                }
+                (Lang::En, true) => {
+                    format!("{} Could not save {title} to YouTube Watch Later: {error}", self.icons().failed)
+                }
+                (Lang::En, false) => {
+                    format!("{} Could not remove {title} from YouTube Watch Later: {error}", self.icons().failed)
+                }
             };
             return;
         }
@@ -3059,7 +3093,8 @@ impl State {
             self.later.insert(0, video);
         } else {
             self.status = format!(
-                "🗑 {}: {}",
+                "{} {}: {}",
+                self.icons().trash,
                 self.tr("Quitado de Ver después de YouTube", "Removed from YouTube Watch Later"),
                 video.title
             );
@@ -3229,7 +3264,11 @@ impl State {
 
     fn playlist_deleted(&mut self, id: String, title: String, result: Result<(), String>) {
         if let Err(error) = result {
-            self.status = format!("❌ {} {title}: {error}", self.tr("No se pudo borrar", "Could not delete"));
+            self.status = format!(
+                "{} {} {title}: {error}",
+                self.icons().failed,
+                self.tr("No se pudo borrar", "Could not delete")
+            );
             return;
         }
         for listing in &mut self.stack {
@@ -3238,7 +3277,7 @@ impl State {
                 listing.selected = listing.selected.min(playlists.len().saturating_sub(1));
             }
         }
-        self.status = format!("🗑 {} {title}", self.tr("Lista borrada:", "Playlist deleted:"));
+        self.status = format!("{} {} {title}", self.icons().trash, self.tr("Lista borrada:", "Playlist deleted:"));
     }
 
     fn trashed(&mut self, result: Result<Vec<PathBuf>, String>) {
@@ -3246,7 +3285,8 @@ impl State {
             Ok(paths) => paths,
             Err(error) => {
                 self.status = format!(
-                    "❌ {} {error}",
+                    "{} {} {error}",
+                    self.icons().failed,
                     self.tr("No se pudo mandar a la papelera:", "Could not move to the trash:")
                 );
                 return;
@@ -3263,7 +3303,7 @@ impl State {
             self.tr("a la papelera", "moved to the trash"),
             self.tr("(se recuperan desde la papelera del sistema)", "(recover them from the system trash)"),
         );
-        self.status = format!("🗑 {} {sent} {recover}", paths.len());
+        self.status = format!("{} {} {sent} {recover}", self.icons().trash, paths.len());
     }
 
     fn rate(&mut self, rating: Rating) -> Vec<Effect> {
@@ -3282,7 +3322,11 @@ impl State {
 
     fn rated(&mut self, video: String, title: String, rating: Rating, result: Result<(), String>) {
         if let Err(error) = result {
-            self.status = format!("❌ {} {title}: {error}", self.tr("No se pudo votar", "Could not vote on"));
+            self.status = format!(
+                "{} {} {title}: {error}",
+                self.icons().failed,
+                self.tr("No se pudo votar", "Could not vote on")
+            );
             return;
         }
         let done = match rating {
@@ -3302,11 +3346,12 @@ impl State {
         match result {
             Ok(true) => {
                 self.subs.insert(channel_id);
-                self.status = format!("🔔 {}: {name}", self.tr("Suscripto", "Subscribed"));
+                self.status = format!("{} {}: {name}", self.icons().notify, self.tr("Suscripto", "Subscribed"));
             }
             Ok(false) => {
                 self.subs.remove(&channel_id);
-                self.status = format!("🔕 {}: {name}", self.tr("Desuscripto", "Unsubscribed"));
+                self.status =
+                    format!("{} {}: {name}", self.icons().unsubscribed, self.tr("Desuscripto", "Unsubscribed"));
                 for listing in self.stack.iter_mut().filter(|l| l.kind == ListKind::MyChannels) {
                     if let Items::Channels(channels) = &mut listing.items {
                         channels.retain(|c| c.id != channel_id);
@@ -3316,7 +3361,7 @@ impl State {
             }
             Err(error) => {
                 let failed = self.tr("No se pudo cambiar la suscripción a", "Could not change the subscription to");
-                self.status = format!("❌ {failed} {name}: {error}");
+                self.status = format!("{} {failed} {name}: {error}", self.icons().failed);
                 return Vec::new();
             }
         }
@@ -3334,11 +3379,14 @@ impl State {
             let (id, playback) = (tab.id, tab.playback.clone());
             self.fullscreen = false;
             self.status = if playback.audio_only {
-                self.tr("🎧 Solo audio · a vuelve al video", "🎧 Sound only · a brings the video back")
+                format!(
+                    "{} {}",
+                    self.icons().audio,
+                    self.tr("Solo audio · a vuelve al video", "Sound only · a brings the video back")
+                )
             } else {
-                self.tr("Volviendo al video…", "Bringing the video back…")
-            }
-            .into();
+                self.tr("Volviendo al video…", "Bringing the video back…").into()
+            };
             return vec![Effect::Reopen(id, playback)];
         }
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
@@ -3395,7 +3443,8 @@ impl State {
         let mut history = Vec::new();
         if now {
             if let Some(start) = playback.start {
-                self.status = format!("⏯ {} {}", self.tr("Sigue desde", "Resuming at"), clock(start));
+                self.status =
+                    format!("{} {} {}", self.icons().resume, self.tr("Sigue desde", "Resuming at"), clock(start));
             }
             if let Some(video) = &playback.video {
                 history = self.watching(video.clone(), playback.start);
@@ -3446,7 +3495,7 @@ impl State {
         tab.playback.start = if first { tab.playback.start.or(resume) } else { resume };
         let (id, playback) = (tab.id, tab.playback.clone());
         if let Some(start) = playback.start {
-            self.status = format!("⏯ {} {}", self.tr("Sigue desde", "Resuming at"), clock(start));
+            self.status = format!("{} {} {}", self.icons().resume, self.tr("Sigue desde", "Resuming at"), clock(start));
         }
         let mut effects = vec![Effect::Open(id, playback.clone())];
         if let Some(video) = playback.video.filter(|_| first) {
@@ -3476,7 +3525,12 @@ impl State {
         self.history.retain(|e| e.video.id != video.id);
         self.youtube_history.retain(|e| e.video.id != video.id);
         self.sync_history();
-        self.status = format!("🗑 {}: {}", self.tr("Quitado del historial", "Removed from history"), video.title);
+        self.status = format!(
+            "{} {}: {}",
+            self.icons().trash,
+            self.tr("Quitado del historial", "Removed from history"),
+            video.title
+        );
         if on_youtube {
             let note = self.tr("(en YouTube sigue en tu historial)", "(still in your YouTube history)");
             self.status = format!("{} {note}", self.status);
@@ -3561,16 +3615,18 @@ impl State {
         let favorite = self.icons().favorite;
         let star = |v: &Video| if self.is_favorite(v) { format!("{favorite} ") } else { String::new() };
         let message = match new.as_slice() {
-            [one] => format!("🔔 {}{}: {}", star(one), one.channel, one.title),
+            [one] => format!("{} {}{}: {}", self.icons().notify, star(one), one.channel, one.title),
             [first, ..] if self.is_favorite(first) => format!(
-                "🔔 {favorite} {}: {} (+{} {})",
+                "{} {favorite} {}: {} (+{} {})",
+                self.icons().notify,
                 first.channel,
                 first.title,
                 new.len() - 1,
                 self.tr("más de tus canales", "more from your channels")
             ),
             many => format!(
-                "🔔 {} {}",
+                "{} {} {}",
+                self.icons().notify,
                 many.len(),
                 self.tr("videos nuevos de tus canales", "new videos from your channels")
             ),
@@ -3584,7 +3640,12 @@ impl State {
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
         let running = |d: &Download| d.video.id == video.id && matches!(d.state, DownloadState::Running { .. });
         if self.downloads.iter().any(running) {
-            self.status = format!("⬇ {}: {}", self.tr("Ya se está descargando", "Already downloading"), video.title);
+            self.status = format!(
+                "{} {}: {}",
+                self.icons().downloading,
+                self.tr("Ya se está descargando", "Already downloading"),
+                video.title
+            );
             return Vec::new();
         }
         let id = self.next_download;
@@ -3593,7 +3654,8 @@ impl State {
         self.downloads.insert(0, Download { id, video: video.clone(), state });
         self.sync_downloads();
         let see = self.tr("mirá Descargas", "see Downloads");
-        self.status = format!("⬇ {}: {} · {see}", self.tr("Descargando", "Downloading"), video.title);
+        self.status =
+            format!("{} {}: {} · {see}", self.icons().downloading, self.tr("Descargando", "Downloading"), video.title);
         vec![Effect::Download { id, video }]
     }
 
@@ -3605,12 +3667,18 @@ impl State {
         }
         self.status = match &result {
             Ok(path) => format!(
-                "✅ {} {}: {}",
+                "{} {} {}: {}",
+                crate::ui::icons(self.config.ui.icons).up_to_date,
                 lang.pick("Descarga lista en", "Downloaded to"),
                 path.parent().map_or_else(String::new, |p| p.display().to_string()),
                 d.video.title
             ),
-            Err(e) => format!("❌ {} {}: {e}", lang.pick("Falló la descarga de", "Download failed:"), d.video.title),
+            Err(e) => format!(
+                "{} {} {}: {e}",
+                crate::ui::icons(self.config.ui.icons).failed,
+                lang.pick("Falló la descarga de", "Download failed:"),
+                d.video.title
+            ),
         };
         d.state = match result {
             Ok(path) => DownloadState::Done(path),
@@ -3768,7 +3836,7 @@ impl State {
         if let Some(first) = failed.first() {
             let label = self.tr("no se pudieron mandar a la papelera", "could not go to the trash");
             let sep = if parts.is_empty() { "" } else { " · " };
-            line = format!("{line}{sep}❌ {} {label}: {first}", failed.len());
+            line = format!("{line}{sep}{} {} {label}: {first}", self.icons().failed, failed.len());
         }
         line
     }
@@ -3786,7 +3854,8 @@ impl State {
         let title = self.downloads[i].video.title.clone();
         let effects = if matches!(self.downloads[i].state, DownloadState::Running { .. }) {
             self.downloads[i].state = DownloadState::Cancelled;
-            self.status = format!("⏹ {}: {title}", self.tr("Descarga cancelada", "Download cancelled"));
+            self.status =
+                format!("{} {}: {title}", self.icons().stop, self.tr("Descarga cancelada", "Download cancelled"));
             vec![Effect::CancelDownload(id)]
         } else if let DownloadState::Done(path) = &self.downloads[i].state {
             // A finished one: its file goes to the trash, after asking.
@@ -3794,7 +3863,8 @@ impl State {
             return Vec::new();
         } else {
             self.downloads.remove(i);
-            self.status = format!("🗑 {}: {title}", self.tr("Quitado de la lista", "Taken off the list"));
+            self.status =
+                format!("{} {}: {title}", self.icons().trash, self.tr("Quitado de la lista", "Taken off the list"));
             vec![Effect::SaveDownloads(self.downloads.clone())]
         };
         self.sync_downloads();
@@ -3844,13 +3914,17 @@ impl State {
                 );
             }
             Err(TrashError::NotAFile) => {
-                self.status =
-                    format!("❌ {name} {}", self.tr("no es un archivo: no se tocó", "is not a file: left alone"));
+                self.status = format!(
+                    "{} {name} {}",
+                    self.icons().failed,
+                    self.tr("no es un archivo: no se tocó", "is not a file: left alone")
+                );
                 return Vec::new();
             }
             Err(TrashError::Failed(error)) => {
                 self.status = format!(
-                    "❌ {} {name}: {error}",
+                    "{} {} {name}: {error}",
+                    self.icons().failed,
                     self.tr("No se pudo mandar a la papelera", "Could not move to the trash")
                 );
                 return Vec::new();

@@ -48,7 +48,7 @@ impl YoutubeError {
                 format!("{} {e}", lang.pick("respuesta inesperada de YouTube:", "unexpected reply from YouTube:"))
             }
             Self::NoSession => {
-                lang.pick("sin sesión: configurala en ⚙ Configuración", "not logged in: set it up in ⚙ Settings").into()
+                lang.pick("sin sesión: configurala en Configuración", "not logged in: set it up in Settings").into()
             }
             Self::Http(reason) => format!("YouTube: {reason}"),
             Self::PrivateList(id) => {
@@ -59,10 +59,10 @@ impl YoutubeError {
                 };
                 match lang {
                     Lang::Es => format!(
-                        "YouTube no devolvió {name}: revisá que tengas la sesión iniciada (⚙ Configuración → Sesión desde un navegador)"
+                        "YouTube no devolvió {name}: revisá que tengas la sesión iniciada (Configuración → Sesión desde un navegador)"
                     ),
                     Lang::En => format!(
-                        "YouTube returned no data for {name}: check that you're signed in (⚙ Settings → Log in with a browser)"
+                        "YouTube returned no data for {name}: check that you're signed in (Settings → Log in with a browser)"
                     ),
                 }
             }
@@ -1632,7 +1632,7 @@ mod tests {
         assert!(matches!(&error, YoutubeError::PrivateList(id) if id == "WL"), "{error:?}");
         assert_eq!(
             error.message(Lang::En),
-            "YouTube returned no data for your Watch Later: check that you're signed in (⚙ Settings → Log in with a browser)"
+            "YouTube returned no data for your Watch Later: check that you're signed in (Settings → Log in with a browser)"
         );
         assert!(looks_logged_out(&Err(error)), "a stale login copy is read again once");
         // Any other playlist keeps yt-dlp's words.
@@ -1646,7 +1646,7 @@ mod tests {
         let parse = YoutubeError::from(parse);
         assert!(parse.message(Lang::En).starts_with("unexpected reply from YouTube: invalid type: null"));
         assert!(parse.message(Lang::Es).starts_with("respuesta inesperada de YouTube:"));
-        assert_eq!(YoutubeError::NoSession.message(Lang::En), "not logged in: set it up in ⚙ Settings");
+        assert_eq!(YoutubeError::NoSession.message(Lang::En), "not logged in: set it up in Settings");
         assert_eq!(YoutubeError::Failed("boom".into()).message(Lang::En), "yt-dlp failed: boom");
         assert_eq!(YoutubeError::Failed("boom".into()).message(Lang::Es), "yt-dlp falló: boom");
         let spawn = YoutubeError::from(std::io::Error::from(std::io::ErrorKind::NotFound));

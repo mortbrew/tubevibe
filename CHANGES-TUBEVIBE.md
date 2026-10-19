@@ -594,3 +594,31 @@ could not update itself either. From now on:
   icon of their own (Watch Later saving/checking 🕒, Liked/Disliked
   👍/👎, the favourite ⭐ in new-video notices, and the update
   ⬆/⬇/✅/❌ lines).
+
+### Every status icon follows the icon set (`watch-later-null-fix`)
+
+- New icons in all three sets (Emoji keeps the old emoji; Nerd uses Nerd
+  Fonts v3 Font Awesome / Material Design glyphs; Unicode uses text symbols
+  that never turn into colour emoji):
+
+  | Purpose | Emoji | Nerd | Unicode |
+  |---|---|---|---|
+  | Subscribed, new videos | 🔔 | nf-fa-bell `f0f3` | ⚑ |
+  | Unsubscribed | 🔕 | nf-fa-bell_slash `f1f6` | ⚐ |
+  | Resumes at | ⏯ | nf-md-play_pause `f040e` | ▸ |
+  | SponsorBlock skip | ⏩ | nf-fa-forward `f04e` | » |
+  | Video closed, download cancelled | ⏹ | nf-fa-stop `f04d` | ■ |
+  | Sound only | 🎧 | nf-fa-headphones `f025` | ♪ |
+  | Saved to tubevibe Watch Later | 🔖 | nf-fa-bookmark `f02e` | ♦ |
+  | Warnings (config.toml, missing tools) | ⚠ | nf-fa-warning `f071` | △ |
+  | Thumbnail loading | ⏳ | nf-fa-hourglass_half `f252` | ◌ |
+  | Donation line on About | ☕ | nf-fa-coffee `f0f4` | ♥ |
+
+- Every status message now takes its icon from the set: the ones above,
+  plus 🗑 (removed / deleted / trash), ❌ (failures), ✅ (download done) and
+  ⬇ (downloading, and the Downloads count in the menu), which already had
+  icons in each set. The ⚙ in "not logged in" messages is gone (they say
+  *Settings*).
+- Tests: every set has every icon; Nerd and Unicode have no emoji and Nerd
+  stays in the v3 Font Awesome / Material Design ranges; a status line
+  follows the chosen set.

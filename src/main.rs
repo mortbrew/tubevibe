@@ -834,10 +834,18 @@ impl Runtime {
             Effect::SaveSaved(videos) => {
                 if self.saved_unreadable {
                     let note = self.tr("no se guarda: no se pudo leer", "not saved: could not read");
-                    self.send(Action::Status(format!("⚠ {note} {}", self.paths.later.display())));
+                    self.send(Action::Status(format!(
+                        "{} {note} {}",
+                        tubevibe::ui::icons(self.state.config.ui.icons).warning,
+                        self.paths.later.display()
+                    )));
                 } else if let Err(e) = store::save_later(&self.paths.later, &videos) {
                     let failed = self.tr("No se pudo guardar", "Could not save");
-                    self.send(Action::Status(format!("❌ {failed} {}: {e}", self.paths.later.display())));
+                    self.send(Action::Status(format!(
+                        "{} {failed} {}: {e}",
+                        tubevibe::ui::icons(self.state.config.ui.icons).failed,
+                        self.paths.later.display()
+                    )));
                 }
             }
             Effect::SaveHistory(history) => {
