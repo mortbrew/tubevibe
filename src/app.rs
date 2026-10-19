@@ -277,6 +277,10 @@ impl Setting {
     }
 }
 
+/// How long My Recommendations, once loaded, is shown again as it was
+/// instead of being read again from YouTube.
+pub const HOME_FRESH: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// A row of the menu the cursor can be on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuRow {
@@ -994,6 +998,9 @@ pub struct State {
     /// The menu's cursor on an open tab (its index in `tabs`) instead of on
     /// `menu`: ↑ ↓ walk the sections and the tabs in the order they show.
     pub menu_tab: Option<usize>,
+    /// My Recommendations as last loaded (when) and left (cursor, pages):
+    /// shown again without asking YouTube for `HOME_FRESH`.
+    pub home_cache: Option<(std::time::Instant, Listing)>,
     pub prompt: Option<Prompt>,
     pub query: String,
     /// Lists on Inicio; the last one is shown.
@@ -1091,6 +1098,7 @@ impl State {
             fullscreen: false,
             menu: 0,
             menu_tab: None,
+            home_cache: None,
             prompt: None,
             query: String::new(),
             stack: Vec::new(),
@@ -1376,6 +1384,13 @@ impl State {
         }
         if let Some(tab) = self.active_tab() {
             self.last_tab = Some(tab.id);
+        }
+        // A new login, or another language: My Recommendations is read again.
+        let title = Section::Inicio.label(self.lang());
+        if effects.iter().any(|e| matches!(e, Effect::StartSession { .. }))
+            || self.home_cache.as_ref().is_some_and(|(_, l)| l.title != title)
+        {
+            self.home_cache = None;
         }
         // The cursor leaves a closed tab, and the menu once the list has the keys.
         if self.menu_tab.is_some_and(|i| i >= self.tabs.len()) || (self.active == 0 && self.focus == Focus::List) {
@@ -2131,6 +2146,7 @@ impl State {
     }
 
     fn open_section(&mut self, section: Section) -> Vec<Effect> {
+        self.keep_home();
         self.menu_from(section);
         let title = section.label(self.lang()).to_owned();
         match section {
@@ -2139,6 +2155,15 @@ impl State {
                 let hint = self
                     .tr("Sin sesión: elegí un navegador en Configuración", "Not logged in: pick a browser in Settings");
                 self.status = hint.into();
+                Vec::new()
+            }
+            Section::Inicio if self.home_cache.as_ref().is_some_and(|(at, _)| at.elapsed() < HOME_FRESH) => {
+                let (_, listing) = self.home_cache.clone().expect("checked");
+                // Whatever was loading is not wanted any more.
+                (self.pending, self.loading) = (None, None);
+                self.status = format!("{} · {}", listing.title, listing.items.len());
+                self.show(listing);
+                self.refilter();
                 Vec::new()
             }
             Section::Inicio => {
@@ -2247,6 +2272,7 @@ impl State {
     }
 
     fn show(&mut self, listing: Listing) {
+        self.keep_home();
         self.stack = vec![listing];
         self.focus = Focus::List;
     }
@@ -2735,13 +2761,28 @@ impl State {
                 self.status = format!("{} · {} · {}", listing.title, listing.items.len(), notes.join(" · "));
             }
         }
+        let home = pending.skip_later && !pending.push;
         if pending.push {
             self.stack.push(listing);
             self.focus = Focus::List;
         } else {
             self.show(listing);
         }
+        // Only a load that worked is kept (errors returned above).
+        if home && let Some(root) = self.stack.first() {
+            self.home_cache = Some((std::time::Instant::now(), root.clone()));
+        }
         Vec::new()
+    }
+
+    /// Leaving My Recommendations: the cached copy keeps where I was in it
+    /// (selection, pages loaded); its load time stays.
+    fn keep_home(&mut self) {
+        if let (Some((_, cached)), Some(root)) = (&mut self.home_cache, self.stack.first())
+            && root.skip_later
+        {
+            *cached = Listing { more: None, ..root.clone() };
+        }
     }
 
     fn show_system(&mut self) {
@@ -5126,6 +5167,58 @@ mod tests {
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
         assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a"), video("b")]));
         assert_eq!(s.listing().unwrap().title, "Mis recomendados");
+    }
+
+    #[test]
+    fn my_recommendations_are_kept_for_a_minute() {
+        let fetches =
+            |e: &[Effect]| e.iter().filter(|e| matches!(e, Effect::Load { source: Source::Recommended, .. })).count();
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::Inicio));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b"), video("c")]))));
+        s.stack[0].selected = 2;
+        let subs = load_id(&open(&mut s, Section::Suscripciones));
+        s.update(Action::Loaded(subs, Ok(Items::Videos(vec![video("x")]))));
+        // Back within 60 s: the same list, where I left it, nothing asked.
+        let effects = open(&mut s, Section::Inicio);
+        assert_eq!(fetches(&effects), 0, "{effects:?}");
+        assert!(effects.is_empty(), "no history or Watch Later reads either: {effects:?}");
+        assert_eq!(s.listing().unwrap().title, "Mis recomendados");
+        assert_eq!(s.listing().unwrap().selected, 2, "cursor kept");
+        assert!(s.pending.is_none());
+        // After 60 s it is read again, as before.
+        let old = std::time::Instant::now().checked_sub(HOME_FRESH + std::time::Duration::from_secs(1)).unwrap();
+        s.home_cache.as_mut().unwrap().0 = old;
+        assert_eq!(fetches(&open(&mut s, Section::Inicio)), 1);
+    }
+
+    #[test]
+    fn a_failed_recommendations_load_is_not_kept() {
+        let fetches =
+            |e: &[Effect]| e.iter().filter(|e| matches!(e, Effect::Load { source: Source::Recommended, .. })).count();
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::Inicio));
+        s.update(Action::Loaded(id, Err("HTTP 500".into())));
+        assert!(s.home_cache.is_none());
+        assert_eq!(fetches(&open(&mut s, Section::Inicio)), 1, "tried again at once");
+        // Subscriptions (same feed code) still reads every time.
+        let id = load_id(&open(&mut s, Section::Suscripciones));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("x")]))));
+        assert!(
+            open(&mut s, Section::Suscripciones)
+                .iter()
+                .any(|e| matches!(e, Effect::Load { source: Source::Subscriptions, .. }))
+        );
+        // A new login or another language drops the copy.
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::Inicio));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a")]))));
+        assert!(s.home_cache.is_some());
+        s.update(Action::ToggleUiLang);
+        assert!(s.home_cache.is_none());
     }
 
     #[test]

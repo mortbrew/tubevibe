@@ -726,6 +726,23 @@ could not update itself either. From now on:
     now sets the cursor itself, so a section opened any other way (a
     click, a key) comes back right too.
 
+### My Recommendations is kept for a minute (`browser-tab-keys`)
+
+- Opening **My Recommendations** asked YouTube for the whole home feed
+  every time, even a few seconds after the last one. Now a feed that loaded
+  is kept for 60 seconds: opening it again within that minute shows the
+  same list right away, with the cursor and the pages already loaded as
+  you left them, and nothing is fetched (not the feed, nor the history or
+  Watch Later reads that go with it). Videos watched meanwhile are still
+  hidden. After 60 seconds it is read again as before.
+- A load that failed is not kept: the next open tries again at once. A new
+  login (or *Read the Login Again*) and switching the interface language
+  drop the copy too.
+- There is no refresh key; the minute is counted from the last load that
+  worked. Only My Recommendations changed: Subscriptions, Discover
+  Channels (same feed code), Watch Later, My Playlists, My Channels and
+  History still read on every open.
+
 ### Video tab: ← goes to the menu, Shift+← → seek (`browser-tab-keys`)
 
 - `←` in a video tab (and in its Up Next list) now goes to the left menu,
