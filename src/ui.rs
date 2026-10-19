@@ -115,7 +115,7 @@ pub struct Icons {
     pub waiting: &'static str,
     /// The donation line on About.
     pub donate: &'static str,
-    /// YouTube's AI summary: in the preview, and after a title that has one.
+    /// YouTube's AI summary: its heading in the preview and the video tab.
     pub summary: &'static str,
 }
 
@@ -1477,10 +1477,6 @@ fn video_row_dated<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, 
         spans.push(Span::styled(v.title.as_str(), MUTED));
     } else {
         spans.push(Span::styled(v.title.as_str(), FG));
-    }
-    // YouTube has an AI summary of it (known once it was looked at).
-    if state.summary(&v.id).is_some() {
-        spans.push(Span::styled(format!(" {}", icons.summary), BLUE));
     }
     spans.push(Span::styled(format!("  {}", v.duration_label()), MUTED));
     if let Some(at) = state.resume_at(&v.id) {
@@ -3433,22 +3429,6 @@ mod tests {
         assert!(screen.contains("palabra…"), "cut with the mark: {screen}");
         let (x, y) = find(&screen, "title r1  1:00");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
-    }
-
-    #[test]
-    fn titles_with_an_ai_summary_carry_its_icon() {
-        let mut s = with_items(Items::Videos(vec![video("a"), video("b"), video("c")]));
-        s.update(Action::Summarized("a".into(), Ok(Some("Sum".into()))));
-        s.update(Action::Summarized("b".into(), Ok(None)));
-        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
-            s.config.ui.icons = set;
-            let mark = icons(set).summary;
-            let screen = render(&s);
-            let row = |id: &str| screen.lines().find(|l| l.contains(&format!("title {id}"))).unwrap().to_owned();
-            assert!(row("a").contains(&format!("title a {mark}  1:00")), "{set:?}: {}", row("a"));
-            assert!(!row("b").contains(mark), "asked, has none: {}", row("b"));
-            assert!(!row("c").contains(mark), "not asked yet: {}", row("c"));
-        }
     }
 
     #[test]
