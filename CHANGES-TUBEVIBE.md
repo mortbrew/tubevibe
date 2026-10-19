@@ -550,7 +550,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, border styles, AI summary marks, tabs in the menu only, tabs restored, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, border styles, tabs in the menu only, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -577,17 +577,11 @@ could not update itself either. From now on:
   uses Plain; the rest of the config still loads.
 - Its own icon in each set: 🔲 / nf-md-border_outside `f00ce` / ▢.
 
-### AI summary mark on titles (`menu-layout-borders`)
+### AI summary heading follows the icon set (`menu-layout-borders`)
 
-- A video whose YouTube AI summary tubevibe already has shows the summary
-  icon after its title in every list (✦ in Emoji and Unicode,
-  nf-md-creation `f0674` in Nerd). The *AI summary* heading in the preview
-  uses the same icon.
-- What it means: tubevibe fetched that video's watch page this session
-  (its preview rested on it, or its tab opened) and YouTube's page carried
-  a summary. Videos not looked at yet carry no mark even if YouTube has a
-  summary: flat lists don't say, and asking per row would mean a request
-  per video. Nothing new is fetched for the mark.
+- The *AI summary* heading in the preview and the video tab uses the icon
+  set's own summary icon: ✦ in Emoji and Unicode, nf-md-creation `f0674`
+  in Nerd.
 
 ### Tabs live in the menu only (`menu-layout-borders`)
 
