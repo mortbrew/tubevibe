@@ -152,16 +152,16 @@ earlier version of this branch did; it was taken out whole).
   there already it says *"🕒 Already in Watch Later"*: no prompt, nothing
   removed. The right-click item reads *Save to Watch Later* / *Already in
   Watch Later*.
-- **`Ctrl+y` `x` removes from YouTube lists**: in Watch Later or any
+- **`Ctrl+Y` `x` removes from YouTube lists**: in Watch Later or any
   YouTube playlist opened from *My Playlists* (mine, saved), it asks
   *"Remove <video> from <playlist>?"* and, on yes, takes the selected video
   out on YouTube; the list updates when YouTube says it is done, errors go
   to the status bar. In **Liked videos** removing is taking the like back
   (the same request as `g` on a liked video). In a video tab, or anywhere
-  else, `Ctrl+y` `x` still closes the tab. The right-click menu of those
+  else, `Ctrl+Y` `x` still closes the tab. The right-click menu of those
   lists offers *Remove from this list*.
 - **Plain `x` no longer removes** videos from Watch Later or playlists (it
-  says *"Ctrl+y x removes it from this list"*). Elsewhere it is unchanged:
+  says *"Ctrl+Y x removes it from this list"*). Elsewhere it is unchanged:
   History (remove), Downloads (cancel / forget), My Videos / My Music
   (trash), My Playlists (delete the whole playlist).
 - **How a playlist removal is sent**: Watch Later as before
@@ -195,7 +195,7 @@ earlier version of this branch did; it was taken out whole).
 
 ### Fix: removing from Saved Shorts failed with "http status 400"
 
-- **What most likely happened** (not yet confirmed on a live account): `Ctrl+y` `x` in *Saved Shorts* answered
+- **What most likely happened** (not yet confirmed on a live account): `Ctrl+Y` `x` in *Saved Shorts* answered
   *"Could not remove from Saved Shorts <video>: YouTube: http status 400"*.
   The app could not find the entry's `setVideoId` on that playlist's page
   (it only looked in two shapes of row, and Shorts come in others), so it
@@ -254,7 +254,7 @@ the same recommendations you see on youtube.com or the phone app.
   `~/.local/share/tubevibe/later.json`; tubetui's copy is brought over on the first run), which the Watch Later change hid
   when the menu entry became YouTube's Watch Later. Whatever was in that
   file shows again. It is separate from YouTube's Watch Later.
-  - Inside it `Ctrl+y` `x` (or right-click → *Remove from this list*) takes
+  - Inside it `Ctrl+Y` `x` (or right-click → *Remove from this list*) takes
     the selected video out after asking; plain `x` only says how.
   - `l` adds to it (see below; `w` is now YouTube's Watch Later).
   - The menu name is one constant, `SAVED_FOR_LATER` in `src/app.rs`;
@@ -277,7 +277,7 @@ the same recommendations you see on youtube.com or the phone app.
 - **Keys**: `w` adds to YouTube's Watch Later (what `l` did, "Already in
   YouTube Watch Later" when it is there); `l` adds to tubevibe's local
   Watch Later ("Already in tubevibe Watch Later" when it is there). The
-  key hints, help screen (`Ctrl+y ?`), right-click menu and README say so.
+  key hints, help screen (`Ctrl+Y ?`), right-click menu and README say so.
 - The setting now reads *Hide YouTube Watch Later videos in My
   Recommendations* (only YouTube's list is hidden there).
 
@@ -550,7 +550,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Ctrl+Tab, tabs restored, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Alt+, / Alt+. tabs, fullscreen fix, consistency pass, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -602,40 +602,94 @@ could not update itself either. From now on:
   is gone: open tabs show only under TABS in the left menu, and the main
   pane gets that row back. *Home* was the browsing view's own tab (upstream
   *Inicio*); the menu already is that view.
-- `Ctrl+y 1`–`9` still go to the tabs as numbered in the menu and
-  `Ctrl+y 0` back to browsing. Help and hints say "in the menu" instead of
+- `Ctrl+Y 1`–`9` still go to the tabs as numbered in the menu and
+  `Ctrl+Y 0` back to browsing. Help and hints say "in the menu" instead of
   mentioning the tab bar. Clicks land on the menu rows (nothing left to
   click at the top).
 
-### Ctrl+Tab and Ctrl+Shift+Tab switch tabs (`browser-tab-keys`)
+### Alt+, and Alt+. switch tabs (`browser-tab-keys`)
 
-- **`Ctrl+Tab`** goes to the next tab in the menu and **`Ctrl+Shift+Tab`**
-  to the previous one, like a browser, from any pane (lists, the search box,
-  a video tab). They wrap around: from the last tab to the first and back.
-  From the browsing view, `Ctrl+Tab` goes to the first tab and
-  `Ctrl+Shift+Tab` to the last. With no tabs open they do nothing.
-- **`Ctrl+y n` and `Ctrl+y p` are gone** (help, README). `Ctrl+y 0`–`9`
-  stay. The new keys are in the full help (`Ctrl+y ?`, under *Always*) and
+- **`Alt+.`** goes to the next tab in the menu and **`Alt+,`** to the
+  previous one (the `>` and `<` keys), from any pane: lists, the search
+  box, a video tab. One hand, next to each other. They wrap around: from
+  the last tab to the first and back. From the browsing view, `Alt+.` goes
+  to the first tab and `Alt+,` to the last. With no tabs open they do
+  nothing.
+- Every terminal sends `Alt+key` as `Esc` and the key without any setting,
+  and none of the usual ones (kitty, Ghostty, Alacritty, foot, WezTerm,
+  GNOME Terminal, Konsole) nor Omarchy's Hyprland binds use `Alt+,` or
+  `Alt+.` by default, so nothing has to be changed in the terminal. On
+  macOS, where Option+, and Option+. type `≤` and `≥` unless the terminal
+  treats Option as Alt, those count as the tab keys too.
+- The first try, `Ctrl+Tab` / `Ctrl+Shift+Tab`, is gone: it needed the kitty
+  keyboard protocol and kitty and Ghostty keep `Ctrl+Tab` for their own
+  tabs. tubevibe no longer turns that protocol on, and the README no longer
+  asks you to edit `kitty.conf` or the Ghostty config.
+- **`Ctrl+Y n` and `Ctrl+Y p` are gone** (help, README). `Ctrl+Y 0`–`9`
+  stay. The new keys are in the full help (`Ctrl+Y ?`, under *Always*) and
   the README, not in the shortcut bar.
-- Terminals send `Ctrl+Tab` as a plain `Tab` unless they speak the kitty
-  keyboard protocol, so tubevibe now turns it on where the terminal has it
-  (kitty, Ghostty, Alacritty 0.13+, foot, WezTerm): only "disambiguate
-  escape codes", so text, `Enter`, `Tab`, `Shift+Tab`, `Backspace` and
-  `Esc` work as before and no release or repeat events are asked for (any
-  that arrive are ignored). It is switched off again on quit, before
-  opening the config in the editor (and back on after), and on a crash,
-  while still on tubevibe's screen. `Ctrl+Shift+Tab` is read in each form
-  terminals send it (`BackTab` with Ctrl, `Tab` with Ctrl+Shift).
-- kitty and Ghostty use `Ctrl+Tab` for their own tabs by default; the
-  README shows the two lines that hand it to tubevibe. Elsewhere, `Ctrl+y
-  1`–`9` always works.
 
-### Mouse help in English (`browser-tab-keys`)
+### Fullscreen works, from the video tab and from the lists (`browser-tab-keys`)
 
-- The help's Mouse section named its actions in Spanish whatever the
-  language (*clic*, *doble clic*, *rueda*, *clic der.*, *clic barra*). In
-  English they are now *Click*, *Double Click*, *Wheel*, *Click Video*,
-  *Right Click* and *Click Progress Bar*.
+- **What went wrong:** in window mode (the default) `f` in a video tab
+  blanked the terminal to "make room" for a picture that lives in mpv's own
+  window, and when the tab had no running player (a restored tab, or a video
+  that had ended) the terminal stayed blank with nothing to show. In the
+  lists `f` did nothing at all.
+- **Window mode:** `f` now asks mpv to put its own window in fullscreen and
+  leaves the terminal as it is. On Hyprland, if mpv's window did not follow
+  (a window rule, an older mpv), tubevibe tells Hyprland directly through
+  `hyprctl`: the current Lua dispatcher (`hl.dsp.window.fullscreen`) first,
+  the classic `fullscreen` dispatcher on older versions. mpv's own `f` and
+  `Esc` are followed (tubevibe watches mpv's `fullscreen` property), and
+  `f`, `Esc` or moving to another tab in tubevibe takes mpv out again.
+- **Embedded and overlay:** the video fills the terminal as before, and the
+  terminal window itself goes fullscreen on Hyprland (found through the
+  process tree, then `hyprctl`) as well as on X11 (`wmctrl`).
+- **From the lists:** `f` goes fullscreen for the video that is playing (in
+  embedded mode it switches to that video's tab first).
+- **Never a blank screen:** with nothing to show, `f` says why in the status
+  bar instead: *Nothing is playing · open a video, then f*, *The video isn't
+  playing · Enter plays it, then f*, or *Audio Only: no picture · a brings
+  the video back*.
+
+### Consistency pass (`browser-tab-keys`)
+
+- **Key names** are written one way: `Space`, `Del`, `Backspace`, `Enter`,
+  `Esc` in English, `Espacio`, `Supr`, `Retroceso` in Spanish. No more
+  *espacio* in the English interface.
+- **One language at a time:** error messages from YouTube, the updater,
+  downloads and the config file now follow the interface language (they
+  were Spanish-only or English-only); HTTP errors read *HTTP 400 · reason*.
+  The help's mouse names follow the language (*Click*, *Double Click*,
+  *Wheel*, *Click Video*, *Right Click*, *Click Bar*).
+- **Settings in Title Case:** every setting name in English (*Downloads
+  Folder*, *Tell Me About New Videos from My Channels*…), values styled the
+  same way (*On* / *Off*, *Emoji* / *Nerd Font* / *Unicode*, *Original +
+  subtitles*…), Spanish ones capitalised (*Sí* / *No*, *Español (es)*).
+- **Pane, dialog and help titles in Title Case:** *AI Summary*, *Up Next*,
+  *No Related Videos*, *Comments Are Off*, *Keyboard Shortcuts · Any Key
+  Closes*, *System Check*…
+- **One name per thing:** *System Check* everywhere (Settings, the page,
+  messages and the README; it was also *Check the system*), *Audio Only*
+  likewise.
+- **`Ctrl+Y`** is written that way everywhere: the app, the help, the
+  README, the website and this file.
+- **Folders follow the system:** with no folders set, My Videos, My Music
+  and downloads use the system's own folders (XDG `Videos` / `Music`, in
+  the system's language) instead of a hard-coded `~/Música`, and their
+  labels follow the interface language.
+- **Help:** lists `Enter` in a video tab, `j` `k` and `Esc` in Up Next,
+  `Backspace` as back, `f` in the lists and the new tab keys.
+- **Icons:** the marks in Downloads (marked, downloading, done, failed,
+  stopped) and in the System Check (fine, warning, missing, optional) come
+  from the chosen icon set instead of fixed characters, each two cells wide
+  so the columns line up.
+- **docs/:** the old Spanish tubetui website and benchmark page are now
+  English tubevibe pages; the benchmark says its numbers were measured on
+  tubetui and both credit polblancoo.
+- **README config example** uses English and standard paths (`~/Videos`,
+  `~/Music`, `~/Downloads`, `sub_lang = "en"`) and section names in English.
 
 ### Open tabs come back after a restart (`menu-layout-borders`)
 
