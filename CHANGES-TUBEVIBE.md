@@ -354,7 +354,7 @@ polblancoo; this fork now carries its own name.
   the orange ▶️ emoji. It is one cell wide everywhere, with one space after
   it (`▶ tubevibe`). The Nerd Font logo is red too; the plain-Unicode set
   already used ▶.
-- **Menu**: one blank row between the title and the YOUTUBE header, like the
+- **Menu** (removed again in 0.8.6): one blank row between the title and the YOUTUBE header, like the
   ones between the other groups. Clicks still land on the right entry (the
   click map is built from the same rows); the whole menu needs 27 rows.
 - **Donations**: About, README, `donate.toml` and the old website page (`docs/index.html`) say the addresses belong to
@@ -761,6 +761,33 @@ could not update itself either. From now on:
   the keys back.
 - `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
+
+### Video tab: comments full height, Up next right under the summary (`browser-tab-keys`)
+
+- **Comments take the right side of the video tab from top to bottom**
+  (when it's 100 columns wide or more, as before). The left column has the
+  thumbnail and details on top, the AI summary under them across the
+  column's whole width, and **Up next** one blank row below the summary's
+  last line.
+- **The whole summary shows, with no more rows than it needs.** The layout
+  is recomputed on every draw, so it follows the summary's arrival, a
+  resize, and new detail lines (the size, the "Enter plays it" note). A very
+  long summary or a short terminal caps it so Up next keeps 7 rows (its
+  border plus 5 videos). Past that the summary is cut with "…", as before.
+  Clicks on Up next still land on the rows as drawn.
+- The thumbnail is now two fifths of the left column, at most 36 columns
+  (22 at 130 columns), so the details beside it keep room.
+- **Embedded / overlay video:** unchanged. The picture covers the whole
+  inside of the video tab; the details, summary, Up next and comments
+  layout only shows when the video plays in its own window or hasn't
+  started.
+- **Menu:** the blank row between the logo and YOUTUBE (added in 0.8.1) is
+  gone, and YOUTUBE sits right under the logo. The other groups keep their
+  blank row.
+- Tests: `up_next_keeps_seven_rows_under_a_long_summary_at_any_height`,
+  `a_short_summary_takes_only_its_rows_and_narrow_tabs_have_no_comments`,
+  `youtube_is_right_under_the_logo`; the summary render test now checks the
+  full-height comments.
 
 ### x in the menu closes a tab; chevrons above and below (`browser-tab-keys`)
 

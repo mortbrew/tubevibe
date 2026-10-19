@@ -76,12 +76,12 @@ Every video opens in its own tab.
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
   dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`w` adds), **tubevibe Watch Later** (`l` adds),
   **download** with subtitles (`d`), open the **channel** (`c`)
-- **Comments**: next to *Up next* when the video plays in its own window or
+- **Comments**: the full height of the tab's right side, beside the details and *Up next*, when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
   scroll them
 - **AI summary**: YouTube's *AI-generated video summary*, on the videos
-  that have one, right under the details of the same tabs (and in the
-  preview of lists). Video descriptions are not shown
+  that have one, right under the details of the same tabs, across the left
+  column and all of it (and in the preview of lists). Video descriptions are not shown
 
 **TUBEVIBE** (lists the app makes itself)
 - **Según lo que vi / From What I Watched**: what YouTube puts *Up next* to the last 10 videos you

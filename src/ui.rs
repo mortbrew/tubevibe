@@ -611,6 +611,8 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
 struct WatchLayout {
     thumbnail: Rect,
     details: Rect,
+    /// The AI summary, under the thumbnail and details, the left column's width.
+    summary: Rect,
     related: Rect,
     /// Beside "Up next", when there is room.
     comments: Option<Rect>,
@@ -621,44 +623,58 @@ const WATCH_THUMBNAIL_WIDTH: u16 = 36;
 /// Narrower than this, a video tab shows no comments.
 const COMMENTS_MIN_WIDTH: u16 = 100;
 
+/// The tab, its inside, and the rows its details and AI summary took.
+type DrawnCard = (TabId, Rect, (u16, u16));
+
 thread_local! {
     /// Rows the details card of a video tab took when last drawn, with the
     /// area it was drawn in: it grows to hold the AI summary, so a click on
     /// "Up next" must find the rows where they were drawn.
-    static CARD_ROWS: std::cell::Cell<Option<(TabId, Rect, u16)>> = const { std::cell::Cell::new(None) };
+    static CARD_ROWS: std::cell::Cell<Option<DrawnCard>> = const { std::cell::Cell::new(None) };
 }
 
 fn watch_layout(inner: Rect) -> WatchLayout {
-    watch_layout_with(inner, 0)
+    watch_layout_with(inner, (0, 0))
 }
 
 /// The layout of `tab` as last drawn in `inner`.
 fn tab_layout(tab: &Tab, inner: Rect) -> WatchLayout {
     let drawn = CARD_ROWS.with(std::cell::Cell::get).filter(|(id, area, _)| *id == tab.id && *area == inner);
-    watch_layout_with(inner, drawn.map_or(0, |(_, _, rows)| rows))
+    watch_layout_with(inner, drawn.map_or((0, 0), |(_, _, rows)| rows))
 }
 
-/// `card_rows`: what the details need, when more than the thumbnail's height.
-fn watch_layout_with(inner: Rect, card_rows: u16) -> WatchLayout {
-    let width = WATCH_THUMBNAIL_WIDTH.min(inner.width / 3);
+/// `detail_rows` / `summary_rows`: what the details (beside the thumbnail,
+/// when more than its height) and the AI summary under them need.
+/// Wide enough, the comments take the right side from top to bottom; the
+/// left column has the thumbnail and details, then the AI summary across it,
+/// then "Up next" right below.
+fn watch_layout_with(inner: Rect, (detail_rows, summary_rows): (u16, u16)) -> WatchLayout {
+    let (left, comments) = if inner.width >= COMMENTS_MIN_WIDTH {
+        // "Up next" a little wider: its rows carry date, channel, title and length.
+        let [left, comments] = Layout::horizontal([Constraint::Fill(11), Constraint::Fill(9)]).areas(inner);
+        (left, Some(comments))
+    } else {
+        (inner, None)
+    };
+    // Two fifths of the left column, at most 36 columns.
+    let width = WATCH_THUMBNAIL_WIDTH.min(left.width * 2 / 5);
     let rows = (u32::from(width) * 9 / 32) as u16;
-    let card_rows = rows.max(7).max(card_rows);
-    let [card, _, below] =
-        Layout::vertical([Constraint::Length(card_rows), Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
+    let card_rows = rows.max(detail_rows);
+    let [card, summary, _, related] = Layout::vertical([
+        Constraint::Length(card_rows),
+        Constraint::Length(summary_rows),
+        Constraint::Length(1),
+        Constraint::Fill(1),
+    ])
+    .areas(left);
     let [thumbnail, _, details] =
         Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
-    let (related, comments) = if below.width >= COMMENTS_MIN_WIDTH {
-        // "Up next" a little wider: its rows carry date, channel, title and length.
-        let [related, comments] = Layout::horizontal([Constraint::Fill(11), Constraint::Fill(9)]).areas(below);
-        (related, Some(comments))
-    } else {
-        (below, None)
-    };
-    WatchLayout { thumbnail: Rect { height: rows.min(card.height), ..thumbnail }, details, related, comments }
+    WatchLayout { thumbnail: Rect { height: rows.min(card.height), ..thumbnail }, details, summary, related, comments }
 }
 
-/// Rows of the details card kept for "Up next" at least, however long the summary.
-const UP_NEXT_MIN_ROWS: u16 = 6;
+/// Rows "Up next" keeps at least (its border and five videos), however long
+/// the summary: past that the summary is cut with "…".
+const UP_NEXT_MIN_ROWS: u16 = 7;
 
 /// `text` broken into lines of at most `width` columns: its own line breaks
 /// kept, words kept whole when they fit, longer ones cut.
@@ -734,7 +750,9 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
         layout.details
     } else {
-        Rect { x: inner.x, width: inner.width, ..layout.details }
+        // No thumbnail: the details take the left column's whole width.
+        let left = layout.related;
+        Rect { x: left.x, width: left.width, ..layout.details }
     };
     let watch = tab.watch.as_ref();
     let mut channel = vec![Span::styled(video.channel.as_str(), MAGENTA)];
@@ -789,22 +807,26 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     if let Some(elapsed) = view.opening {
         lines.push(Line::from(loading_text(lang.pick("el video", "the video"), elapsed, lang)).fg(YELLOW));
     }
-    // The AI summary right under the last detail; the card grows to hold it.
-    let mut card_rows = 0;
-    if let Some(summary) = state.tab_summary_lookup(tab) {
-        let used = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width);
-        let most = inner.height.saturating_sub(UP_NEXT_MIN_ROWS + 1);
-        let room = usize::from(most).saturating_sub(used);
-        lines.extend(summary_lines(summary, details.width, room, lang, icons.summary));
-        card_rows =
-            (Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width)
-                as u16)
-                .min(most);
-    }
-    CARD_ROWS.with(|c| c.set(Some((tab.id, inner, card_rows))));
-    layout = watch_layout_with(inner, card_rows);
+    // The details card grows to hold them all, up to what leaves "Up next" its rows.
+    let paragraph = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true });
+    let most_card = inner.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
+    let detail_rows = (paragraph.line_count(details.width) as u16).min(most_card);
+    layout = watch_layout_with(inner, (detail_rows, 0));
     let details = Rect { y: layout.details.y, height: layout.details.height, ..details };
-    frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), details);
+    frame.render_widget(paragraph, details);
+    // The AI summary across the left column, all of it, as long as "Up next"
+    // keeps its rows (then cut with "…").
+    let mut summary_rows = 0;
+    if let Some(summary) = state.tab_summary_lookup(tab) {
+        let width = layout.related.width;
+        let most = inner.height.saturating_sub(layout.details.height + 1 + UP_NEXT_MIN_ROWS);
+        let lines = summary_lines(summary, width, usize::from(most), lang, icons.summary);
+        let wrapped = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true });
+        summary_rows = (wrapped.line_count(width) as u16).min(most);
+        layout = watch_layout_with(inner, (detail_rows, summary_rows));
+        frame.render_widget(wrapped, layout.summary);
+    }
+    CARD_ROWS.with(|c| c.set(Some((tab.id, inner, (detail_rows, summary_rows)))));
 
     let related = tab.related_videos();
     let focused = state.key_context().related;
@@ -1003,9 +1025,11 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     for (i, section) in Section::ALL.iter().enumerate() {
         let pinned = section.group() == Group::App;
         if group != Some(section.group()) && !pinned {
+            // A blank row above every group but the first, right under the logo.
+            if group.is_some() {
+                top.push((ListItem::new(""), None));
+            }
             group = Some(section.group());
-            // A blank row above every group, the first too (under the title).
-            top.push((ListItem::new(""), None));
             top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()), None));
         }
         let mut label = section.label(lang).to_owned();
@@ -3268,7 +3292,7 @@ mod tests {
     }
 
     #[test]
-    fn the_menu_starts_after_a_blank_row_and_clicks_hit_every_entry() {
+    fn the_menu_starts_under_the_logo_and_clicks_hit_every_entry() {
         let screen_area = Rect::new(0, 0, 130, 40);
         for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
             let mut s = state();
@@ -3276,10 +3300,7 @@ mod tests {
             let screen = render(&s);
             let (_, title) = find(&screen, "tube");
             let (_, header) = find(&screen, " YOUTUBE");
-            assert_eq!(header, title + 2, "one blank row between the title and YOUTUBE:\n{screen}");
-            let blank = screen.lines().nth(usize::from(title + 1)).unwrap();
-            assert!(blank.chars().take(20).all(|c| c == ' ' || c == '│'), "{blank:?}");
-            assert_eq!(spot(&s, None, screen_area, 3, title + 1), None, "the blank row is not an entry");
+            assert_eq!(header, title + 1, "YOUTUBE right under the logo:\n{screen}");
             assert_eq!(spot(&s, None, screen_area, 3, header), None, "nor the header");
             let icons = icons(set);
             for (i, section) in Section::ALL.iter().enumerate() {
@@ -3384,19 +3405,19 @@ mod tests {
     #[test]
     fn a_short_menu_puts_settings_right_below_and_scrolls_to_the_choice() {
         let mut s = state();
-        // 29 rows: one row short of the whole menu, no room for a gap.
-        let screen = render_screen(&s, 130, 29);
+        // 28 rows: one row short of the whole menu, no room for a gap.
+        let screen = render_screen(&s, 130, 28);
         assert!(!screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))), "cut at the bottom");
         let downloads = row_of(&screen, Section::Descargas.label(Lang::Es));
         assert!(screen[downloads + 2].contains("──"), "blank, then the rule: {}", screen.join("\n"));
         // Up from the first section wraps to Quit, which is scrolled into view.
         s.update(Action::Up);
         assert_eq!(Section::ALL[s.menu], Section::Salir);
-        let screen = render_screen(&s, 130, 29);
+        let screen = render_screen(&s, 130, 28);
         let quit = row_of(&screen, Section::Salir.label(Lang::Es));
-        assert_eq!(quit, 25, "the menu's last row: {}", screen.join("\n"));
+        assert_eq!(quit, 24, "the menu's last row: {}", screen.join("\n"));
         let salir = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
-        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 29), 5, quit as u16), Some(Spot::Section(salir)));
+        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 28), 5, quit as u16), Some(Spot::Section(salir)));
         // And down from it back to the top.
         s.update(Action::Down);
         assert_eq!(s.menu, 0);
@@ -3577,9 +3598,19 @@ mod tests {
         let (_, status) = find(&screen, "▶ Enter lo reproduce");
         let (x, heading) = find(&screen, "✦ Resumen IA");
         assert_eq!(heading, status + 2, "one blank line under the status line:\n{screen}");
-        assert!(blank_above(&screen, x, heading), "{screen}");
+        // Across the left column, under the thumbnail, all of it; Up next one
+        // blank row below its last line.
+        let (up_next_x, up_next) = find(&screen, "┌ A continuación");
+        assert_eq!(x, up_next_x, "the left column's width:\n{screen}");
         assert!(screen.contains("UFD Tech explores") && screen.contains("THE END."), "whole: {screen}");
-        assert!(find(&screen, "THE END.").1 < find(&screen, "A continuación").1, "Up next below it");
+        assert_eq!(find(&screen, "THE END.").1 + 2, up_next, "Up next right below it:\n{screen}");
+        // The comments run the whole height of the tab, on the right.
+        let lines: Vec<&str> = screen.lines().collect();
+        let (cx, top) = find(&screen, "┌ Comentarios");
+        assert_eq!(top, 1, "from the tab's top:\n{screen}");
+        let bottom = lines.iter().rposition(|l| l.chars().nth(usize::from(cx)) == Some('└')).unwrap();
+        assert_eq!(bottom, lines.len() - 4, "to its bottom:\n{screen}");
+        assert!(cx > up_next_x + 40, "on the right");
         // Clicks on Up next find the rows where they were drawn.
         let screen_area = Rect::new(0, 0, 130, 40);
         let (x, y) = find(&screen, "title r2  1:00");
@@ -3588,7 +3619,8 @@ mod tests {
         let (plain, plain_screen) = details_tab(None);
         let (hx, hy) = find(&plain_screen, "✦ Resumen IA · no disponible para este video");
         assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
-        assert!(blank_above(&plain_screen, hx, hy), "{plain_screen}");
+        assert_eq!(hy + 2, find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
+        assert_eq!(hx, find(&plain_screen, "┌ A continuación").0);
         let (x, y2) = find(&plain_screen, "title r2  1:00");
         assert!(y2 < y, "Up next moves up without a summary");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
@@ -3611,6 +3643,44 @@ mod tests {
         assert!(!screen.contains("✦"), "live: never asked: {screen}");
         let (x, y) = find(&screen, "title r1  1:00");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
+    }
+
+    /// The tab drawn at `width` × `height`, window mode.
+    fn tab_screen(s: &State, width: u16, height: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, s, &View { embedded: false, ..VIEW })).unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer.content.chunks(width as usize).map(|row| row.iter().map(|c| c.symbol()).collect()).collect()
+    }
+
+    #[test]
+    fn up_next_keeps_seven_rows_under_a_long_summary_at_any_height() {
+        let long = "palabra ".repeat(800);
+        let (s, _) = details_tab(Some(&long));
+        for height in [24, 30, 40, 60] {
+            let screen = tab_screen(&s, 130, height);
+            let top = row_of(&screen, "┌ A continuación");
+            // The tab's inside ends 4 rows above the screen's: border, status, hints.
+            let bottom = usize::from(height) - 4;
+            assert_eq!(bottom - top + 1, 7, "{height} rows:\n{}", screen.join("\n"));
+            assert!(screen.iter().any(|l| l.contains("palabra…")), "cut with the mark");
+            // A click on Up next, after the layout changed size.
+            let (x, y) = (screen[top + 1].find("title r1").unwrap(), top + 1);
+            let x = screen[y][..x].chars().count() as u16;
+            assert_eq!(spot(&s, None, Rect::new(0, 0, 130, height), x, y as u16), Some(Spot::Row(0)));
+        }
+    }
+
+    #[test]
+    fn a_short_summary_takes_only_its_rows_and_narrow_tabs_have_no_comments() {
+        let (s, _) = details_tab(Some("Corto."));
+        let screen = tab_screen(&s, 130, 40);
+        let summary = row_of(&screen, "Corto.");
+        assert_eq!(row_of(&screen, "┌ A continuación"), summary + 2, "{}", screen.join("\n"));
+        // Narrow: no comments, Up next and the summary take the whole width.
+        let screen = tab_screen(&s, 100, 40);
+        assert!(!screen.iter().any(|l| l.contains("Comentarios")), "{}", screen.join("\n"));
+        assert!(screen[row_of(&screen, "┌ A continuación")].trim_end().ends_with("┐│"));
     }
 
     #[test]
@@ -3746,7 +3816,7 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
         assert_eq!(id, "a");
-        assert_eq!((cells.width, cells.height), (34, 34 * 9 / 32), "a third of the tab, at most 36 columns");
+        assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
         let (x, y) = find(&screen, "title r2  1:00");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
         assert_eq!((hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()), ("Espacio", "Tab"), "Space before Tab");
@@ -4115,7 +4185,7 @@ mod tests {
         let title = at(&screen, "PESTAÑAS");
         assert!(screen[title - 1].trim_matches(['│', ' ']).is_empty(), "{}", screen.join("\n"));
         assert!(screen[title].contains(up) && !screen.iter().any(|l| l.contains(down)), "{}", screen.join("\n"));
-        let last = at(&screen, " title 34 ");
+        let last = at(&screen, "│ ▶ title 34 ");
         assert!(screen[last + 1].trim_matches(['│', ' ']).is_empty(), "the gap above the rule");
         // The tab shown is in view, the last rows of the tab area.
         let rows = tab_rows_shown(&screen);
@@ -4208,6 +4278,14 @@ mod tests {
     fn tab_rows_have_no_number() {
         let screen = render(&with_tab());
         assert!(screen.contains("│ ▶ title a ") && !screen.contains("1 ▶ title a"), "{screen}");
+    }
+
+    #[test]
+    fn youtube_is_right_under_the_logo() {
+        let screen = render_screen(&state(), 130, 40);
+        assert!(screen[0].contains("▶ tubevibe") && screen[1].contains("│ YOUTUBE "), "{}", screen.join("\n"));
+        let tubevibe = row_of(&screen, "│ TUBEVIBE ");
+        assert!(screen[tubevibe - 1].trim_matches(['│', ' ']).is_empty(), "later groups keep their blank row");
     }
 
     #[test]
