@@ -998,6 +998,10 @@ pub struct State {
     /// The menu's cursor on an open tab (its index in `tabs`) instead of on
     /// `menu`: ↑ ↓ walk the sections and the tabs in the order they show.
     pub menu_tab: Option<usize>,
+    /// The section whose list the browsing view shows (marked in the menu).
+    pub shown_section: Option<usize>,
+    /// The section asked for, until its list replaces the one shown.
+    pending_section: Option<usize>,
     /// My Recommendations as last loaded (when) and left (cursor, pages):
     /// shown again without asking YouTube for `HOME_FRESH`.
     pub home_cache: Option<(std::time::Instant, Listing)>,
@@ -1098,6 +1102,8 @@ impl State {
             fullscreen: false,
             menu: 0,
             menu_tab: None,
+            shown_section: None,
+            pending_section: None,
             home_cache: None,
             prompt: None,
             query: String::new(),
@@ -2172,9 +2178,28 @@ impl State {
     fn menu_from(&mut self, section: Section) {
         self.menu = Self::section_index(section);
         self.menu_tab = None;
+        self.pending_section = Some(self.menu);
+    }
+
+    /// The menu row of what the main area shows: the tab, or the section
+    /// of the browsing view's list (none before any list).
+    pub fn shown_row(&self) -> Option<MenuRow> {
+        match self.active.checked_sub(1) {
+            Some(i) if i < self.tabs.len() => Some(MenuRow::Tab(i)),
+            _ => self.shown_section.filter(|_| !self.stack.is_empty()).map(MenuRow::Section),
+        }
     }
 
     fn open_section(&mut self, section: Section) -> Vec<Effect> {
+        let effects = self.open_section_now(section);
+        // Neither shown nor loading (a hint, no login): the list stays as it was.
+        if self.pending.is_none() && effects.is_empty() {
+            self.pending_section = None;
+        }
+        effects
+    }
+
+    fn open_section_now(&mut self, section: Section) -> Vec<Effect> {
         self.keep_home();
         self.menu_from(section);
         let title = section.label(self.lang()).to_owned();
@@ -2302,6 +2327,9 @@ impl State {
 
     fn show(&mut self, listing: Listing) {
         self.keep_home();
+        if let Some(i) = self.pending_section.take() {
+            self.shown_section = Some(i);
+        }
         self.stack = vec![listing];
         self.focus = Focus::List;
     }
@@ -2823,6 +2851,9 @@ impl State {
             }
             self.active = 0;
             self.stack.push(Listing::new(title, Items::System, ListKind::Plain));
+            if let Some(i) = self.pending_section.take() {
+                self.shown_section = Some(i);
+            }
             self.focus = Focus::List;
         }
     }
@@ -2911,7 +2942,12 @@ impl State {
             if self.stack.len() > 1 {
                 self.stack.pop();
             } else if self.sidebar {
+                // Back to the menu on the section shown, wherever the cursor was.
                 self.focus = Focus::Menu;
+                // (or the one loading to replace it).
+                if let Some(i) = self.pending_section.or(self.shown_section) {
+                    (self.menu, self.menu_tab) = (i, None);
+                }
             }
         }
     }
@@ -6760,13 +6796,19 @@ mod tests {
                 continue;
             }
             let mut s = with_videos(&["a"]);
+            s.config.session.browser = "brave".into();
             s.focus = Focus::Menu;
             s.menu = i;
-            s.update(Action::MenuOpen);
-            s.prompt = None;
+            let effects = s.update(Action::MenuOpen);
+            // A search box or a hint only: the list shown (Subscriptions) stays, and so its row.
+            let expected = if s.prompt.take().is_some() || (effects.is_empty() && s.shown_section != Some(i)) {
+                State::section_index(Section::Suscripciones)
+            } else {
+                i
+            };
             s.focus = Focus::List;
             s.update(Action::Back);
-            assert_eq!((s.focus, s.menu_row()), (Focus::Menu, MenuRow::Section(i)), "{section:?}");
+            assert_eq!((s.focus, s.menu_row()), (Focus::Menu, MenuRow::Section(expected)), "{section:?}");
         }
     }
 
@@ -6805,6 +6847,24 @@ mod tests {
             (s.focus, s.menu_row()),
             (Focus::Menu, MenuRow::Section(State::section_index(Section::Configuracion)))
         );
+    }
+
+    #[test]
+    fn search_results_and_the_startup_check_mark_their_section_shown() {
+        let mut s = with_videos(&["a"]);
+        s.update(Action::FocusSearch);
+        type_text(&mut s, "rust");
+        let id = match s.update(Action::Enter).as_slice() {
+            [Effect::Search { id, .. }] => *id,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(1)), "not yet: Subscriptions still shown");
+        s.update(Action::Page(id, Ok(SearchPage { videos: vec![video("r")], next: None })));
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::BuscarVideos))));
+        use crate::doctor::Tool;
+        let mut s = state();
+        s.update(Action::SystemChecked(Manager::Apt, vec![check(Tool::Mpv, false), check(Tool::YtDlp, true)]));
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::Configuracion))));
     }
 
     #[test]
@@ -6921,6 +6981,38 @@ mod tests {
         s.focus = Focus::Menu;
         s.menu = State::section_index(Section::Salir);
         assert!(!relaunches(&press(&mut s, KeyEvent::from(KeyCode::Enter))) && s.quit);
+    }
+
+    #[test]
+    fn the_shown_row_is_what_the_main_area_shows() {
+        let mut s = with_videos(&["a"]);
+        let subs = State::section_index(Section::Suscripciones);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(subs)));
+        // The cursor moves, the mark stays.
+        s.focus = Focus::Menu;
+        s.update(Action::Down);
+        s.update(Action::Down);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(subs)));
+        // A tab shown takes it; Esc to the menu keeps it there.
+        s.focus = Focus::List;
+        let a = play(&mut s, 0);
+        s.update(Action::FocusMenu);
+        s.update(Action::Up);
+        assert_eq!((s.shown_row(), s.tabs[0].id), (Some(MenuRow::Tab(0)), a));
+        // Another section takes the mark once its list replaces the one shown.
+        s.menu_tab = None;
+        s.menu = State::section_index(Section::Descargas);
+        s.update(Action::Enter);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::Descargas))));
+        // Hint only (logged out): the list shown keeps the mark.
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::Inicio);
+        s.update(Action::Enter);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(subs)));
+        s.focus = Focus::List;
+        s.update(Action::Back);
+        assert_eq!(s.menu_row(), MenuRow::Section(subs), "Esc lands on what is shown");
     }
 
     #[test]

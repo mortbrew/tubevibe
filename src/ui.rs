@@ -51,6 +51,8 @@ const LINE: Color = TOKYO_NIGHT.line;
 const BLUE: Color = TOKYO_NIGHT.blue;
 const CYAN: Color = TOKYO_NIGHT.cyan;
 const MAGENTA: Color = TOKYO_NIGHT.magenta;
+/// The menu row of what the main area shows, when the cursor is elsewhere.
+const SHOWN: Color = MAGENTA;
 const GREEN: Color = TOKYO_NIGHT.green;
 const ORANGE: Color = TOKYO_NIGHT.orange;
 const YELLOW: Color = TOKYO_NIGHT.yellow;
@@ -1010,12 +1012,14 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         if *section == Section::AcercaDe && state.update.is_some() {
             label.push_str(&format!(" {}", icons.update));
         }
-        let selected = state.menu_row() == MenuRow::Section(i);
-        let focused = selected && menu_focused(state);
+        let focused = state.menu_row() == MenuRow::Section(i) && menu_focused(state);
+        let shown = state.shown_row() == Some(MenuRow::Section(i));
         let color = SECTION_COLORS[i];
-        let mut style = Style::new().fg(if selected { color } else { FG });
+        let mut style = Style::new().fg(FG);
         if focused {
-            style = style.bg(HIGHLIGHT).add_modifier(Modifier::BOLD);
+            style = style.fg(color).bg(HIGHLIGHT).add_modifier(Modifier::BOLD);
+        } else if shown {
+            style = style.fg(SHOWN);
         }
         let line = Line::from(vec![
             Span::styled(if focused { "▌" } else { " " }, color),
@@ -1032,13 +1036,12 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
             // Lit like a focused section while it is shown or the menu's cursor is on it.
             // With the menu's keys only the cursor's row is lit; the tab still
             // shown keeps its colour.
-            let cursor = state.menu_row() == MenuRow::Tab(i);
-            let shown = state.active == i + 1;
-            let active = if menu_focused(state) { cursor } else { shown };
+            let active = state.menu_row() == MenuRow::Tab(i) && menu_focused(state);
+            let shown = state.shown_row() == Some(MenuRow::Tab(i));
             let style = if active {
                 Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold()
-            } else if cursor || shown {
-                Style::new().fg(MAGENTA)
+            } else if shown {
+                Style::new().fg(SHOWN)
             } else {
                 Style::new().fg(FG)
             };
@@ -3930,5 +3933,65 @@ mod tests {
         assert_eq!(pad("abcdef", 4), "abcd");
         assert_eq!(pad_cells("🔴 en vivo", 14), "🔴 en vivo    ");
         assert_eq!(pad_cells("● en vivo", 14), "● en vivo     ");
+    }
+
+    /// The text of each sidebar row drawn in the "shown" mark (not the cursor's highlight).
+    fn shown_rows(s: &State) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+        terminal.draw(|f| draw(f, s, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let side = areas(Rect::new(0, 0, 130, 40), true).sidebar.unwrap();
+        (side.y + 1..side.bottom() - 1)
+            .filter(|&y| {
+                (side.x + 1..side.right() - 1).any(|x| {
+                    let c = &buffer[(x, y)];
+                    c.symbol().chars().any(char::is_alphanumeric) && c.fg == SHOWN && c.bg != HIGHLIGHT
+                })
+            })
+            .map(|y| {
+                (side.x + 1..side.right() - 1).map(|x| buffer[(x, y)].symbol()).collect::<String>().trim().to_owned()
+            })
+            .collect()
+    }
+
+    fn at(section: Section) -> usize {
+        Section::ALL.iter().position(|x| *x == section).unwrap()
+    }
+
+    #[test]
+    fn one_row_is_marked_shown() {
+        let en = |mut s: State| {
+            s.config.ui.lang = Some(Lang::En);
+            s
+        };
+        // A list shown, the cursor moved off it: its row keeps the mark.
+        let mut s = en(with_items(Items::Videos(vec![video("a")])));
+        let shown = s.shown_row();
+        s.focus = Focus::Menu;
+        s.menu = at(Section::Configuracion);
+        let rows = shown_rows(&s);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert!(shown.is_some());
+        // The cursor on the shown row: its focus highlight, no second mark.
+        if let Some(crate::app::MenuRow::Section(i)) = shown {
+            s.menu = i;
+            assert_eq!(shown_rows(&s), Vec::<String>::new());
+        }
+        // A tab shown, the cursor on a section: the tab's row has the mark, alone.
+        let mut s = en(with_items(Items::Videos(vec![video("a")])));
+        s.update(Action::Enter);
+        assert!(s.active > 0);
+        s.focus = Focus::Menu;
+        s.menu_tab = None;
+        s.menu = at(Section::Descargas);
+        let rows = shown_rows(&s);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert!(!rows[0].contains(Section::Descargas.label(Lang::En)), "{rows:?}");
+        // Settings shown: Settings has the mark.
+        let mut s = en(open_settings());
+        s.focus = Focus::Menu;
+        s.menu = at(Section::Descargas);
+        assert_eq!(shown_rows(&s).len(), 1);
+        assert!(shown_rows(&s)[0].contains(Section::Configuracion.label(Lang::En)), "{:?}", shown_rows(&s));
     }
 }

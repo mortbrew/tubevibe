@@ -760,6 +760,25 @@ could not update itself either. From now on:
 - `Alt+,` / `Alt+.`, `Ctrl+Y 1`–`9` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
 
+### One "shown" mark in the menu (`browser-tab-keys`)
+
+The menu row for whatever the main area is showing now always has the same
+pink "shown" mark (the theme's magenta, remapped under Omarchy) when the
+cursor isn't on it. That applies to a section and to a video tab alike. The
+cursor row keeps its own focus highlight, and exactly one row is marked.
+
+- Search results mark Search Videos or Search Channels. The startup System
+  Check and the browser picker mark Settings.
+- The mark moves only when another list actually replaces the one shown.
+  Opening a search box, or a section that only shows a hint (for example My
+  Playlists while logged out), leaves the mark where it was. In that case ←
+  lands on the marked row.
+- Before this, a shown tab had a highlighted background and the selected
+  section kept its own section colour.
+- Tests: `one_row_is_marked_shown` (render),
+  `the_shown_row_is_what_the_main_area_shows`, and
+  `search_results_and_the_startup_check_mark_their_section_shown`.
+
 ### My Recommendations is kept for a minute (`browser-tab-keys`)
 
 - Opening **My Recommendations** asked YouTube for the whole home feed
