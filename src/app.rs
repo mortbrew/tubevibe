@@ -168,6 +168,8 @@ pub enum Setting {
     Autoplay,
     AppLang,
     Icons,
+    BorderStyle,
+    RestoreTabs,
     OmarchyTheme,
     Thumbnails,
     Mouse,
@@ -190,7 +192,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 32] = [
+    pub const ALL: [Self; 34] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -204,6 +206,8 @@ impl Setting {
         Self::Autoplay,
         Self::AppLang,
         Self::Icons,
+        Self::BorderStyle,
+        Self::RestoreTabs,
         Self::OmarchyTheme,
         Self::Thumbnails,
         Self::Mouse,
@@ -242,6 +246,8 @@ impl Setting {
             Self::Autoplay => ("Enter en un video", "Enter on a video"),
             Self::AppLang => ("Idioma de la app (Ctrl+y + l)", "App language (Ctrl+y + l)"),
             Self::Icons => ("Íconos", "Icons"),
+            Self::BorderStyle => ("Estilo de los bordes", "Border Style"),
+            Self::RestoreTabs => ("Recuperar las pestañas al abrir", "Restore Tabs on Startup"),
             Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
             Self::Thumbnails => ("Portadas de los videos (kitty)", "Video thumbnails (kitty)"),
             Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to copy text: Shift)"),
@@ -488,6 +494,8 @@ pub enum Action {
     SubsLoaded(HashSet<String>),
     /// The watch page of a tab's video arrived.
     Watched(TabId, Result<Watch, String>),
+    /// What `tabs.json` had at startup (or why it couldn't be read).
+    TabsRestored(Result<crate::store::SavedTabs, String>),
     /// The login was (re)read. `cookies` is for the runtime; `subs` are my channels.
     SessionReady {
         cookies: Option<PathBuf>,
@@ -898,6 +906,9 @@ pub struct Tab {
     /// Its video has played at least once; until then it is not in the
     /// history nor marked as watched.
     pub started: bool,
+    /// Brought back from `tabs.json`: its details and SponsorBlock segments
+    /// are fetched the first time it is shown, not at startup.
+    pub restored: bool,
 }
 
 impl Tab {
@@ -914,6 +925,7 @@ impl Tab {
             comments_from: 0,
             ended: false,
             started: true,
+            restored: false,
         }
     }
 
@@ -1238,6 +1250,11 @@ impl State {
             .into(),
             Setting::AppLang => lang.name().into(),
             Setting::Icons => self.config.ui.icons.as_str().into(),
+            Setting::BorderStyle => self.config.ui.border_style.label(lang).into(),
+            Setting::RestoreTabs => {
+                let (es, en) = on_off(self.config.ui.restore_tabs);
+                self.tr(es, en).into()
+            }
             Setting::Thumbnails => {
                 let (es, en) = on_off(self.config.ui.thumbnails);
                 self.tr(es, en).into()
@@ -1310,7 +1327,8 @@ impl State {
         if let Some(effects) = self.in_context_menu(&action) {
             return effects;
         }
-        let effects = self.apply(action);
+        let mut effects = self.apply(action);
+        effects.extend(self.load_restored_tab());
         // Fullscreen belongs to a video tab; leaving it ends fullscreen.
         if self.active_tab().is_none() {
             self.fullscreen = false;
@@ -1792,8 +1810,75 @@ impl State {
                 self.confirm = Some(Confirm::Quit(self.downloading()));
             }
             Action::Quit => self.quit = true,
+            Action::TabsRestored(result) => self.restore_tabs(result),
         }
         Vec::new()
+    }
+
+    /// The open tabs as `tabs.json` keeps them.
+    pub fn saved_tabs(&self) -> crate::store::SavedTabs {
+        let tabs = self
+            .tabs
+            .iter()
+            .map(|t| crate::store::SavedTab {
+                title: t.playback.title.clone(),
+                subtitle: t.playback.subtitle.clone(),
+                video: t.playback.video.clone(),
+                queue: t.playback.queue.clone(),
+                audio_only: t.playback.audio_only,
+            })
+            .collect();
+        crate::store::SavedTabs { version: crate::store::TABS_VERSION, active: self.active, tabs }
+    }
+
+    /// Last time's tabs back in the menu: nothing plays and nothing is
+    /// fetched until one is shown. The browsing view stays in front.
+    fn restore_tabs(&mut self, result: Result<crate::store::SavedTabs, String>) {
+        let saved = match result {
+            Ok(saved) => saved,
+            Err(error) => {
+                let note = self.tr("No se pudieron recuperar las pestañas", "Could not restore the tabs");
+                self.status = format!("{} {note}: {error}", self.icons().warning);
+                return;
+            }
+        };
+        if !self.config.ui.restore_tabs {
+            return;
+        }
+        for t in saved.tabs {
+            if self.tabs.len() >= self.config.ui.max_tabs {
+                break;
+            }
+            if t.queue.is_empty() || self.tabs.iter().any(|open| open.playback.queue.first() == t.queue.first()) {
+                continue;
+            }
+            let playback = Playback {
+                title: t.title,
+                subtitle: t.subtitle,
+                video: t.video,
+                queue: t.queue,
+                audio_only: t.audio_only,
+                start: None,
+            };
+            let id = TabId(self.next_tab);
+            self.next_tab += 1;
+            let mut tab = Tab::new(id, playback);
+            (tab.ended, tab.started, tab.restored) = (true, false, true);
+            self.tabs.push(tab);
+        }
+    }
+
+    /// A restored tab shown for the first time: now its details are asked for.
+    fn load_restored_tab(&mut self) -> Vec<Effect> {
+        let sponsorblock = self.config.player.sponsorblock;
+        let Some(tab) = self.active_tab_mut().filter(|t| t.restored) else { return Vec::new() };
+        tab.restored = false;
+        let Some(video) = &tab.playback.video else { return Vec::new() };
+        let mut effects = vec![Effect::Watch { tab: tab.id, video: video.id.clone() }];
+        if sponsorblock {
+            effects.push(Effect::Segments { tab: tab.id, video: video.id.clone() });
+        }
+        effects
     }
 
     fn move_selection(&mut self, delta: isize) -> Vec<Effect> {
@@ -2104,6 +2189,14 @@ impl State {
             Setting::Icons => {
                 self.config.ui.icons = self.config.ui.icons.next();
                 save("ui", "icons", SettingValue::Text(self.config.ui.icons.as_str().into()))
+            }
+            Setting::RestoreTabs => {
+                self.config.ui.restore_tabs = !self.config.ui.restore_tabs;
+                save("ui", "restore_tabs", SettingValue::Bool(self.config.ui.restore_tabs))
+            }
+            Setting::BorderStyle => {
+                self.config.ui.border_style = self.config.ui.border_style.next();
+                save("ui", "border_style", SettingValue::Text(self.config.ui.border_style.as_str().into()))
             }
             Setting::Thumbnails => {
                 self.config.ui.thumbnails = !self.config.ui.thumbnails;
@@ -4955,6 +5048,73 @@ mod tests {
     }
 
     #[test]
+    fn open_tabs_come_back_in_the_menu_without_playing_or_loading() {
+        let mut s = state();
+        s.play(Playback::youtube(video("a")));
+        let song = Playback {
+            title: "song.mp3".into(),
+            subtitle: "~/Music".into(),
+            video: None,
+            queue: vec!["/m/song.mp3".into(), "/m/next.mp3".into()],
+            audio_only: true,
+            start: Some(30),
+        };
+        s.play(song.clone());
+        let saved = s.saved_tabs();
+        assert_eq!((saved.version, saved.active, saved.tabs.len()), (crate::store::TABS_VERSION, 2, 2));
+        assert_eq!(saved.tabs[1].queue, song.queue);
+
+        let mut fresh = state();
+        assert!(fresh.update(Action::TabsRestored(Ok(saved.clone()))).is_empty(), "nothing plays, nothing loads");
+        assert_eq!(fresh.tabs.len(), 2);
+        assert_eq!(fresh.active, 0, "the browsing view stays in front");
+        assert!(fresh.tabs.iter().all(|t| t.ended && !t.started && t.restored && t.watch.is_none()));
+        assert_eq!(fresh.tabs[0].playback, Playback::youtube(video("a")));
+        assert_eq!(fresh.tabs[1].playback.start, None, "where it was is the history's to say");
+        assert_eq!(fresh.saved_tabs().tabs, saved.tabs, "the same tabs, saved again as they were");
+        // Shown the first time: its details and segments are asked for, once.
+        let tab = fresh.tabs[0].id;
+        let effects = fresh.update(Action::GoTab(1));
+        assert_eq!(effects, [Effect::Watch { tab, video: "a".into() }, Effect::Segments { tab, video: "a".into() }]);
+        fresh.update(Action::GoTab(0));
+        assert!(fresh.update(Action::GoTab(1)).is_empty());
+        // Enter plays it, from where the history says.
+        assert!(matches!(fresh.update(Action::Enter).as_slice(), [Effect::Open(id, _), ..] if *id == tab));
+        // A local file tab has nothing to fetch.
+        assert!(fresh.update(Action::GoTab(2)).is_empty());
+    }
+
+    #[test]
+    fn restoring_tabs_respects_the_limit_the_setting_and_bad_files() {
+        let mut s = state();
+        for id in ["a", "b", "c"] {
+            s.play(Playback::youtube(video(id)));
+        }
+        let saved = s.saved_tabs();
+        let mut few = state();
+        few.config.ui.max_tabs = 2;
+        few.update(Action::TabsRestored(Ok(saved.clone())));
+        assert_eq!(few.tabs.len(), 2, "no more than max_tabs");
+        let mut off = state();
+        off.config.ui.restore_tabs = false;
+        off.update(Action::TabsRestored(Ok(saved)));
+        assert!(off.tabs.is_empty());
+        let mut broken = state();
+        broken.config.ui.lang = Some(Lang::En);
+        broken.update(Action::TabsRestored(Err("tabs.json: expected value".into())));
+        assert!(broken.tabs.is_empty());
+        assert!(broken.status.contains("Could not restore the tabs: tabs.json"), "{}", broken.status);
+        // Settings toggles it, saved to config.toml.
+        let mut t = state();
+        let effects = t.change_setting(Setting::RestoreTabs);
+        assert_eq!(
+            effects,
+            [Effect::SaveSetting { table: "ui", key: "restore_tabs", value: SettingValue::Bool(false) }]
+        );
+        assert!(!t.config.ui.restore_tabs);
+    }
+
+    #[test]
     fn channel_search_prompt() {
         let mut s = state();
         open(&mut s, Section::BuscarCanales);
@@ -5661,6 +5821,8 @@ mod tests {
         );
         assert_eq!(s.config.player.mode, PlayerMode::Overlay);
         assert_eq!(change(&mut s, Setting::Icons), [saved("ui", "icons", text("nerd"))]);
+        assert_eq!(change(&mut s, Setting::BorderStyle), [saved("ui", "border_style", text("rounded"))]);
+        assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);
     }

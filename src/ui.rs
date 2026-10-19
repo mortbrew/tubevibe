@@ -7,13 +7,13 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Flex, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Tabs};
+use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::app::{
     Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, Prompt, Section, Setting, State, Tab,
     YOUTUBE_LATER, language_label,
 };
-use crate::config::{IconSet, donations};
+use crate::config::{BorderStyle, IconSet, donations};
 use crate::doctor::{Manager, Tool};
 use crate::domain::{Channel, Download, DownloadState, Live, Playlist, Size, TabId, Video, clock, date_labels};
 use crate::i18n::Lang;
@@ -68,7 +68,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 32],
+    pub settings: [&'static str; 34],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -115,6 +115,8 @@ pub struct Icons {
     pub waiting: &'static str,
     /// The donation line on About.
     pub donate: &'static str,
+    /// YouTube's AI summary: in the preview, and after a title that has one.
+    pub summary: &'static str,
 }
 
 impl Icons {
@@ -132,8 +134,8 @@ const EMOJI: Icons = Icons {
         "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🎨", "📷", "🐭", "🎦", "✨",
-        "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📑", "🎨", "📷", "🐭",
+        "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -165,6 +167,7 @@ const EMOJI: Icons = Icons {
     warning: "⚠",
     waiting: "⏳",
     donate: "☕",
+    summary: "✦",
 };
 
 const NERD: Icons = Icons {
@@ -189,10 +192,40 @@ const NERD: Icons = Icons {
         "\u{f08b}",
     ],
     settings: [
-        "\u{f007}", "\u{f15b}", "\u{f021}", "\u{f08b}", "\u{f1ab}", "\u{f075}", "\u{f1de}", "\u{f008}", "\u{f025}",
-        "\u{f051}", "\u{f144}", "\u{f0ac}", "\u{f118}", "\u{f1fc}", "\u{f03e}", "\u{f245}", "\u{f04b}", "\u{f0d0}",
-        "\u{f0e7}", "\u{f0a1}", "\u{f03d}", "\u{f001}", "\u{f07b}", "\u{f02c}", "\u{f0f1}", "\u{f06e}", "\u{f017}",
-        "\u{f10b}", "\u{f0f3}", "\u{f005}", "\u{f01b}", "\u{f044}",
+        "\u{f007}",
+        "\u{f15b}",
+        "\u{f021}",
+        "\u{f08b}",
+        "\u{f1ab}",
+        "\u{f075}",
+        "\u{f1de}",
+        "\u{f008}",
+        "\u{f025}",
+        "\u{f051}",
+        "\u{f144}",
+        "\u{f0ac}",
+        "\u{f118}",
+        "\u{f00ce}",
+        "\u{f2d2}",
+        "\u{f1fc}",
+        "\u{f03e}",
+        "\u{f245}",
+        "\u{f04b}",
+        "\u{f0d0}",
+        "\u{f0e7}",
+        "\u{f0a1}",
+        "\u{f03d}",
+        "\u{f001}",
+        "\u{f07b}",
+        "\u{f02c}",
+        "\u{f0f1}",
+        "\u{f06e}",
+        "\u{f017}",
+        "\u{f10b}",
+        "\u{f0f3}",
+        "\u{f005}",
+        "\u{f01b}",
+        "\u{f044}",
     ],
     logo: "\u{f16a}",
     tab: "\u{f144}",
@@ -226,13 +259,15 @@ const NERD: Icons = Icons {
     warning: "\u{f071}",
     waiting: "\u{f252}",
     donate: "\u{f0f4}",
+    // nf-md-creation: sparkles.
+    summary: "\u{f0674}",
 };
 
 const UNICODE: Icons = Icons {
     sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "◐", "▨", "➚", "◆", "✦", "≈", "✸", "▷", "♫",
-        "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "❐", "◐", "▨", "➚", "◆", "✦", "≈", "✸",
+        "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -264,6 +299,7 @@ const UNICODE: Icons = Icons {
     warning: "△",
     waiting: "◌",
     donate: "♥",
+    summary: "✦",
 };
 
 pub fn icons(set: IconSet) -> &'static Icons {
@@ -309,7 +345,7 @@ fn bouncing_bar(width: usize, elapsed: Duration) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Areas {
     pub sidebar: Option<Rect>,
-    pub tabs: Rect,
+    /// The main pane; open tabs are listed in the menu only (no tab bar).
     pub content: Rect,
     pub status: Rect,
     /// Keys that work right now, with what they do.
@@ -320,9 +356,8 @@ pub fn areas(area: Rect, sidebar: bool) -> Areas {
     let [body, status, hints] =
         Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).areas(area);
     let width = if sidebar { SIDEBAR_WIDTH } else { 0 };
-    let [side, main] = Layout::horizontal([Constraint::Length(width), Constraint::Fill(1)]).areas(body);
-    let [tabs, content] = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(main);
-    Areas { sidebar: sidebar.then_some(side), tabs, content, status, hints }
+    let [side, content] = Layout::horizontal([Constraint::Length(width), Constraint::Fill(1)]).areas(body);
+    Areas { sidebar: sidebar.then_some(side), content, status, hints }
 }
 
 /// What is under the mouse pointer.
@@ -330,7 +365,7 @@ pub fn areas(area: Rect, sidebar: bool) -> Areas {
 pub enum Spot {
     /// A section of the menu, in `Section::ALL` order.
     Section(usize),
-    /// A tab, in the menu or the tab bar; 0 is Inicio.
+    /// A tab in the menu (1 and up); 0 is the browsing view.
     Tab(usize),
     /// A row of the current list.
     Row(usize),
@@ -359,19 +394,7 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     if let Some(side) = areas.sidebar.filter(|a| a.contains(at)) {
         let inner = Block::bordered().inner(side);
         let line = usize::from(y.checked_sub(inner.y)?);
-        return sidebar_items(state, icons(state.config.ui.icons)).get(line)?.1;
-    }
-    if areas.tabs.contains(at) {
-        // Tabs draws ` title ` and a one-cell divider after each.
-        let mut start = areas.tabs.x;
-        for (i, title) in tab_titles(state, icons(state.config.ui.icons)).iter().enumerate() {
-            let end = start + Span::raw(title.as_str()).width() as u16 + 2;
-            if x < end {
-                return (x >= start).then_some(Spot::Tab(i));
-            }
-            start = end + 1;
-        }
-        return None;
+        return sidebar_items(state, icons(state.config.ui.icons), inner).get(line)?.1;
     }
     if !areas.content.contains(at) {
         return None;
@@ -449,6 +472,7 @@ pub fn context_area(menu: &ContextMenu, screen: Rect) -> Rect {
 }
 
 pub fn draw(frame: &mut Frame, state: &State, view: &View) {
+    BORDERS.set(state.config.ui.border_style);
     draw_screen(frame, state, view);
     theme::recolor(frame.buffer_mut(), &state.palette);
 }
@@ -478,7 +502,6 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
     if let Some(side) = areas.sidebar {
         draw_sidebar(frame, state, icons, side);
     }
-    draw_tabs(frame, state, icons, areas.tabs);
     match state.active_tab() {
         None => draw_inicio(frame, state, icons, view, areas.content),
         Some(tab) => {
@@ -644,7 +667,7 @@ fn wrap_text(text: &str, width: u16) -> Vec<String> {
 /// A blank line, "✦ AI summary" and the summary wrapped at `width`, in at
 /// most `rows` lines: the last one ends in "…" when it does not all fit.
 /// Without one (`None`), the heading says so.
-fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang) -> Vec<Line<'static>> {
+fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang, icon: &str) -> Vec<Line<'static>> {
     if rows < 2 {
         return Vec::new();
     }
@@ -653,7 +676,7 @@ fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang) -> Vec
         None => lang.pick(" · no disponible para este video", " · not available for this video"),
     };
     let heading = Line::from(vec![
-        Span::styled(lang.pick("✦ Resumen IA", "✦ AI summary"), Style::new().fg(BLUE).bold()),
+        Span::styled(format!("{icon} {}", lang.pick("Resumen IA", "AI summary")), Style::new().fg(BLUE).bold()),
         Span::styled(note, MUTED),
     ]);
     let Some(text) = text else { return vec![Line::from(""), heading] };
@@ -743,7 +766,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         let used = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width);
         let most = inner.height.saturating_sub(UP_NEXT_MIN_ROWS + 1);
         let room = usize::from(most).saturating_sub(used);
-        lines.extend(summary_lines(summary, details.width, room, lang));
+        lines.extend(summary_lines(summary, details.width, room, lang, icons.summary));
         card_rows =
             (Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width)
                 as u16)
@@ -886,27 +909,59 @@ fn progress_line(info: &Info, segments: &[Segment], width: u16) -> Option<Line<'
     Some(Line::from(spans))
 }
 
-fn panel<'a>(title: impl Into<Line<'a>>, color: Color) -> Block<'a> {
-    Block::bordered().border_type(BorderType::Plain).border_style(Style::new().fg(color)).title(title)
+thread_local! {
+    /// `[ui] border_style` of the frame being drawn (set by [`draw`]).
+    static BORDERS: std::cell::Cell<BorderStyle> = const { std::cell::Cell::new(BorderStyle::Plain) };
 }
 
-/// The menu's lines, each with what a click on it does.
-fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option<Spot>)> {
+/// A border of blanks: no lines, but the same room, so nothing moves.
+const NO_BORDER: ratatui::symbols::border::Set<'static> = ratatui::symbols::border::Set {
+    top_left: " ",
+    top_right: " ",
+    bottom_left: " ",
+    bottom_right: " ",
+    vertical_left: " ",
+    vertical_right: " ",
+    horizontal_top: " ",
+    horizontal_bottom: " ",
+};
+
+/// The lines of `style`.
+pub fn border_set(style: BorderStyle) -> ratatui::symbols::border::Set<'static> {
+    match style {
+        BorderStyle::Plain => BorderType::Plain.to_border_set(),
+        BorderStyle::Rounded => BorderType::Rounded.to_border_set(),
+        BorderStyle::Thick => BorderType::Thick.to_border_set(),
+        BorderStyle::Double => BorderType::Double.to_border_set(),
+        BorderStyle::None => NO_BORDER,
+    }
+}
+
+/// Every pane's frame, in the chosen border style.
+fn framed<'a>() -> Block<'a> {
+    Block::bordered().border_set(border_set(BORDERS.get()))
+}
+
+fn panel<'a>(title: impl Into<Line<'a>>, color: Color) -> Block<'a> {
+    framed().border_style(Style::new().fg(color)).title(title)
+}
+
+/// The menu's lines, each with what a click on it does, for a menu whose
+/// inside is `inner`: Settings, About and Quit pinned to its bottom under a
+/// short rule; when there is no room for that, right below the rest.
+fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'static>, Option<Spot>)> {
     let lang = state.lang();
     let on_inicio = state.active == 0;
-    let mut items: Vec<(ListItem, Option<Spot>)> = Vec::new();
+    let mut top: Vec<(ListItem, Option<Spot>)> = Vec::new();
+    let mut bottom: Vec<(ListItem, Option<Spot>)> = Vec::new();
     let mut group = None;
     for (i, section) in Section::ALL.iter().enumerate() {
-        if group != Some(section.group()) {
+        let pinned = section.group() == Group::App;
+        if group != Some(section.group()) && !pinned {
             group = Some(section.group());
             // A blank row above every group, the first too (under the title).
-            items.push((ListItem::new(""), None));
-            if section.group() != Group::App {
-                items.push((
-                    ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()),
-                    None,
-                ));
-            }
+            top.push((ListItem::new(""), None));
+            top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()), None));
         }
         let mut label = section.label(lang).to_owned();
         // Only a count YouTube's whole list backs up.
@@ -934,24 +989,41 @@ fn sidebar_items(state: &State, icons: &Icons) -> Vec<(ListItem<'static>, Option
             Span::raw(format!("{} ", icons.sections[i])),
             Span::raw(label),
         ]);
-        items.push((ListItem::new(line).style(style), Some(Spot::Section(i))));
+        let row = (ListItem::new(line).style(style), Some(Spot::Section(i)));
+        if pinned { bottom.push(row) } else { top.push(row) }
     }
     if !state.tabs.is_empty() {
-        items.push((ListItem::new(""), None));
-        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
+        top.push((ListItem::new(""), None));
+        top.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
         for (i, tab) in state.tabs.iter().enumerate() {
             let active = state.active == i + 1;
             let style = if active { Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold() } else { Style::new().fg(FG) };
             let line =
                 format!("{}{} {} {}", if active { "▌" } else { " " }, i + 1, tab_icon(icons, tab), tab.playback.title);
-            items.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
+            top.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
         }
     }
+    // A blank row, then the rule: inset two columns on each side.
+    let rule =
+        format!("{SEPARATOR_INSET}{}", "─".repeat(usize::from(inner.width).saturating_sub(2 * SEPARATOR_INSET.len())));
+    let room = usize::from(inner.height);
+    let gap = room.saturating_sub(top.len() + 1 + bottom.len()).max(1);
+    let mut items = top;
+    items.extend((0..gap).map(|_| (ListItem::new(""), None)));
+    items.push((ListItem::new(Line::from(rule).fg(MUTED)), None));
+    items.extend(bottom);
+    // Too short for all of it: scrolled so the chosen section shows.
+    let chosen = items.iter().position(|(_, spot)| *spot == Some(Spot::Section(state.menu))).unwrap_or(0);
+    let skip = (chosen + 1).saturating_sub(room);
+    items.drain(..skip);
     items
 }
 
+/// How far the rule above Settings stays from each side of the menu.
+const SEPARATOR_INSET: &str = "  ";
+
 fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
-    let items = sidebar_items(state, icons).into_iter().map(|(item, _)| item);
+    let items = sidebar_items(state, icons, framed().inner(area)).into_iter().map(|(item, _)| item);
     let title = Line::from(vec![
         Span::styled(format!(" {} ", icons.logo), Style::new().fg(RED).bold()),
         Span::styled("tube", Style::new().fg(RED).bold()),
@@ -972,27 +1044,6 @@ fn later_lines(state: &State, icons: &Icons, id: &str, lang: Lang) -> Vec<Line<'
         lines.push(Line::from(format!("{} {label}", icons.section(Section::Guardados))).fg(CYAN));
     }
     lines
-}
-
-fn tab_titles(state: &State, icons: &Icons) -> Vec<String> {
-    let home = state.lang().pick("Inicio", "Home");
-    std::iter::once(format!("{} {home}", icons.section(Section::Inicio)))
-        .chain(
-            state
-                .tabs
-                .iter()
-                .enumerate()
-                .map(|(i, t)| format!("{} {} {}", i + 1, tab_icon(icons, t), truncate(&t.playback.title, 20))),
-        )
-        .collect()
-}
-
-fn draw_tabs(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
-    let tabs = Tabs::new(tab_titles(state, icons))
-        .select(state.active)
-        .style(Style::new().fg(MUTED))
-        .highlight_style(Style::new().fg(BLUE).add_modifier(Modifier::BOLD));
-    frame.render_widget(tabs, area);
 }
 
 /// The search box and the rest of Inicio below it.
@@ -1329,7 +1380,7 @@ fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, vi
         let used =
             Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(text_area.width);
         let room = usize::from(text_area.height).saturating_sub(used);
-        lines.extend(summary_lines(summary, text_area.width, room, lang));
+        lines.extend(summary_lines(summary, text_area.width, room, lang, icons.summary));
     }
     frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), text_area);
 }
@@ -1411,6 +1462,10 @@ fn video_row_dated<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, 
         spans.push(Span::styled(v.title.as_str(), MUTED));
     } else {
         spans.push(Span::styled(v.title.as_str(), FG));
+    }
+    // YouTube has an AI summary of it (known once it was looked at).
+    if state.summary(&v.id).is_some() {
+        spans.push(Span::styled(format!(" {}", icons.summary), BLUE));
     }
     spans.push(Span::styled(format!("  {}", v.duration_label()), MUTED));
     if let Some(at) = state.resume_at(&v.id) {
@@ -1895,10 +1950,7 @@ fn draw_help_section(frame: &mut Frame, title: &str, rows: &[(String, &'static s
             ])
         })
         .collect();
-    let block = Block::bordered()
-        .border_type(BorderType::Plain)
-        .border_style(Style::new().fg(LINE))
-        .title(Line::from(format!(" {title} ")).fg(BLUE).bold());
+    let block = framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
@@ -2483,7 +2535,9 @@ mod tests {
         assert_eq!(with.content.x, SIDEBAR_WIDTH);
         let without = areas(area, false);
         assert_eq!(without.sidebar, None);
-        assert_eq!(without.content, Rect::new(0, 1, 100, 27));
+        assert_eq!(without.content, Rect::new(0, 0, 100, 28), "no tab bar: the pane starts at the top");
+        assert_eq!(with.content.y, 0);
+        assert_eq!(with.content.height, with.sidebar.unwrap().height, "as tall as the menu");
         assert_eq!(without.status, Rect::new(0, 28, 100, 1));
         assert_eq!(without.hints, Rect::new(0, 29, 100, 1));
     }
@@ -2517,7 +2571,7 @@ mod tests {
     fn icon_set_follows_the_config() {
         let mut s = state();
         s.config.ui.icons = IconSet::Nerd;
-        assert!(render(&s).contains(&format!("{} Inicio", NERD.sections[0])));
+        assert!(render(&s).contains(&format!("{} Mis recomendados", NERD.sections[0])));
     }
 
     #[test]
@@ -2635,10 +2689,13 @@ mod tests {
     }
 
     #[test]
-    fn tabs_appear_in_bar_and_sidebar() {
+    fn tabs_appear_in_the_menu_only() {
         let screen = render(&with_tab());
         assert!(screen.contains("PESTAÑAS"));
-        assert_eq!(screen.matches("1 ▶ title a").count(), 2, "{screen}");
+        assert_eq!(screen.matches("1 ▶ title a").count(), 1, "the menu, no tab bar: {screen}");
+        assert!(!screen.contains("Inicio"), "{screen}");
+        // The tab's pane starts on the first row, next to the menu's title.
+        assert!(screen.lines().next().unwrap().contains("▶ title a · chan a"), "{screen}");
     }
 
     #[test]
@@ -2672,7 +2729,7 @@ mod tests {
         assert!(!screen.contains("Inicio"), "only the logo");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 120, 40), 5, 5), None);
         s.update(Action::EndSplash);
-        assert!(render(&s).contains("Inicio"));
+        assert!(render(&s).contains("Mis recomendados"));
     }
 
     #[test]
@@ -2880,7 +2937,9 @@ mod tests {
         s.update(Action::ToggleUiLang);
         s.update(Action::GoTab(0));
         let screen = render(&s);
-        for text in ["Home", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"] {
+        for text in
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"]
+        {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
         assert!(!screen.contains("Ver después"), "{screen}");
@@ -3086,6 +3145,91 @@ mod tests {
         assert!(render(&s).contains(&format!("▶ tubevibe  v{}", env!("CARGO_PKG_VERSION"))));
     }
 
+    fn render_screen(state: &State, width: u16, height: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, state, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer.content.chunks(width as usize).map(|row| row.iter().map(|c| c.symbol()).collect()).collect()
+    }
+
+    fn row_of(screen: &[String], text: &str) -> usize {
+        screen.iter().position(|l| l.contains(text)).unwrap_or_else(|| panic!("{text}\n{}", screen.join("\n")))
+    }
+
+    #[test]
+    fn settings_about_and_quit_sit_at_the_bottom_under_a_short_rule() {
+        let s = state();
+        let screen = render_screen(&s, 130, 40);
+        // 40 rows: the menu's frame ends at row 37 (status and hints below), its inside at 36.
+        let quit = row_of(&screen, Section::Salir.label(Lang::Es));
+        assert_eq!(quit, 36, "{}", screen.join("\n"));
+        assert_eq!(row_of(&screen, Section::AcercaDe.label(Lang::Es)), 35);
+        assert_eq!(row_of(&screen, Section::Configuracion.label(Lang::Es)), 34);
+        let rule: String = screen[33].chars().take(usize::from(SIDEBAR_WIDTH)).collect();
+        let inner: String = rule.chars().skip(1).take(usize::from(SIDEBAR_WIDTH) - 2).collect();
+        assert!(inner.starts_with("  ─") && inner.ends_with("─  "), "inset on both sides: {rule:?}");
+        assert!(inner.trim().chars().all(|c| c == '─'));
+        // Downloads stays with its group, a gap below it.
+        let downloads = row_of(&screen, Section::Descargas.label(Lang::Es));
+        assert!(downloads < 30, "{downloads}");
+        // A click on the pinned rows opens them.
+        let area = Rect::new(0, 0, 130, 40);
+        let salir = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
+        assert_eq!(spot(&s, None, area, 5, quit as u16), Some(Spot::Section(salir)));
+        assert_eq!(spot(&s, None, area, 5, 33), None, "the rule");
+    }
+
+    #[test]
+    fn a_short_menu_puts_settings_right_below_and_scrolls_to_the_choice() {
+        let mut s = state();
+        // 29 rows: one row short of the whole menu, no room for a gap.
+        let screen = render_screen(&s, 130, 29);
+        assert!(!screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))), "cut at the bottom");
+        let downloads = row_of(&screen, Section::Descargas.label(Lang::Es));
+        assert!(screen[downloads + 2].contains("──"), "blank, then the rule: {}", screen.join("\n"));
+        // Up from the first section wraps to Quit, which is scrolled into view.
+        s.update(Action::Up);
+        assert_eq!(Section::ALL[s.menu], Section::Salir);
+        let screen = render_screen(&s, 130, 29);
+        let quit = row_of(&screen, Section::Salir.label(Lang::Es));
+        assert_eq!(quit, 25, "the menu's last row: {}", screen.join("\n"));
+        let salir = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
+        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 29), 5, quit as u16), Some(Spot::Section(salir)));
+        // And down from it back to the top.
+        s.update(Action::Down);
+        assert_eq!(s.menu, 0);
+    }
+
+    #[test]
+    fn every_border_style_frames_the_panes_and_none_keeps_their_room() {
+        let corners = [
+            (BorderStyle::Plain, '┌'),
+            (BorderStyle::Rounded, '╭'),
+            (BorderStyle::Thick, '┏'),
+            (BorderStyle::Double, '╔'),
+        ];
+        for (style, corner) in corners {
+            let mut s = state();
+            s.config.ui.border_style = style;
+            let screen = render_screen(&s, 130, 40);
+            assert!(screen[0].starts_with(corner), "{style:?}: {}", screen[0]);
+        }
+        let mut s = state();
+        let plain = render_screen(&s, 130, 40);
+        s.config.ui.border_style = BorderStyle::None;
+        let none = render_screen(&s, 130, 40);
+        assert!(!none.iter().any(|l| l.contains('│') || l.contains('┌')), "{}", none.join("\n"));
+        // Same rows and columns for everything inside.
+        for label in ["tubevibe", Section::Inicio.label(Lang::Es), Section::Salir.label(Lang::Es)] {
+            assert_eq!(row_of(&plain, label), row_of(&none, label), "{label}");
+            let col = |screen: &[String]| {
+                let line = &screen[row_of(screen, label)];
+                Span::raw(&line[..line.find(label).unwrap()]).width()
+            };
+            assert_eq!(col(&plain), col(&none), "{label}");
+        }
+    }
+
     #[test]
     fn spots_under_the_pointer() {
         let screen_area = Rect::new(0, 0, 130, 40);
@@ -3107,7 +3251,7 @@ mod tests {
         s.update(Action::Enter); // plays video 50 in tab 1
         let screen = render(&s);
         assert_eq!(spot_at(&s, find(&screen, "1 ▶ title 50")), Some(Spot::Tab(1)));
-        assert_eq!(spot_at(&s, find(&screen, "Inicio ")), Some(Spot::Tab(0)));
+        assert!(!screen.contains("Inicio"), "no tab bar to click");
         assert_eq!(spot_at(&s, (80, 20)), Some(Spot::Video));
         let info = Info { position: Some(0.0), duration: Some(100.0), ..Info::default() };
         let content = areas(screen_area, s.sidebar).content;
@@ -3128,7 +3272,7 @@ mod tests {
 
     #[test]
     fn summary_lines_fit_their_rows_and_mark_the_cut() {
-        let lines = |rows| summary_lines(Some("uno dos tres cuatro cinco seis"), 9, rows, Lang::En);
+        let lines = |rows| summary_lines(Some("uno dos tres cuatro cinco seis"), 9, rows, Lang::En, "✦");
         let text = |l: &[Line]| l.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert!(lines(0).is_empty());
         assert!(lines(1).is_empty(), "no room for more than the blank line");
@@ -3136,9 +3280,9 @@ mod tests {
         assert_eq!(text(&lines(4))[2..], ["uno dos", "tres…"]);
         assert_eq!(text(&lines(4))[0], "", "a blank line above the heading");
         assert!(text(&lines(4))[1].starts_with("✦ AI summary"));
-        let none = summary_lines(None, 40, 9, Lang::En);
+        let none = summary_lines(None, 40, 9, Lang::En, "✦");
         assert_eq!(text(&none), ["", "✦ AI summary · not available for this video"]);
-        assert!(summary_lines(None, 40, 1, Lang::En).is_empty());
+        assert!(summary_lines(None, 40, 1, Lang::En, "✦").is_empty());
     }
 
     /// The row above `(x, y)` is empty there and the one above it is not:
@@ -3222,6 +3366,22 @@ mod tests {
     }
 
     #[test]
+    fn titles_with_an_ai_summary_carry_its_icon() {
+        let mut s = with_items(Items::Videos(vec![video("a"), video("b"), video("c")]));
+        s.update(Action::Summarized("a".into(), Ok(Some("Sum".into()))));
+        s.update(Action::Summarized("b".into(), Ok(None)));
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            s.config.ui.icons = set;
+            let mark = icons(set).summary;
+            let screen = render(&s);
+            let row = |id: &str| screen.lines().find(|l| l.contains(&format!("title {id}"))).unwrap().to_owned();
+            assert!(row("a").contains(&format!("title a {mark}  1:00")), "{set:?}: {}", row("a"));
+            assert!(!row("b").contains(mark), "asked, has none: {}", row("b"));
+            assert!(!row("c").contains(mark), "not asked yet: {}", row("c"));
+        }
+    }
+
+    #[test]
     fn preview_shows_the_ai_summary_in_all_its_room() {
         let mut s = with_items(Items::Videos(vec![video("a"), video("b")]));
         let short = "Uno dos tres. Fin corto.";
@@ -3236,9 +3396,9 @@ mod tests {
         let shown = screen.lines().filter(|l| l.contains(" w")).count();
         assert!(shown > 5, "not capped at 5 lines: {shown}\n{screen}");
         assert!(screen.contains('…') && !screen.contains("w400"), "cut at the bottom: {screen}");
-        // Not asked yet: nothing.
+        // Not asked yet: nothing (but "a" in the list keeps its mark).
         s.update(Action::Down);
-        assert!(!render(&s).contains("✦"));
+        assert!(!render(&s).contains("Resumen IA"));
         // Asked, it has none (or it could not be had): said so.
         for result in [Ok(None), Err("falló".to_owned())] {
             s.update(Action::Summarized("b".into(), result));

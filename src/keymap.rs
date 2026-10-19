@@ -137,7 +137,16 @@ fn space_key(keys: &str, lang: Lang) -> String {
 /// `Ctrl+y` commands plus the digits, in `lang`.
 pub fn prefix_rows(lang: Lang) -> Vec<(String, &'static str)> {
     let mut commands: Vec<_> = PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect();
-    commands.insert(6, ("0-9".into(), lang.pick("ir a la pestaña (0 = Inicio)", "go to tab (0 = Home)")));
+    commands.insert(
+        6,
+        (
+            "0-9".into(),
+            lang.pick(
+                "ir a la pestaña del menú (0 = volver a navegar)",
+                "go to a tab in the menu (0 = back to browsing)",
+            ),
+        ),
+    );
     commands
 }
 
