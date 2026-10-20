@@ -84,9 +84,9 @@ pub const IN_LISTS: &[(&str, Text)] = &[
     ("Esc  ←  h", Text::new("volver (también Retroceso)", "back (Backspace too)")),
     ("Tab", Text::new("ir al menú", "go to the menu")),
     ("/", Text::new("buscar (dentro de un canal: en ese canal)", "search (inside a channel: in that channel)")),
-    ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched videos (My Recommendations…)")),
+    ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched (My Recommendations…)")),
     ("Espacio", Text::new("marcar varios (videos, música, descargas)", "mark several (videos, music, downloads)")),
-    ("f", Text::new("pantalla completa del video que se reproduce", "fullscreen the video playing")),
+    ("f", Text::new("pantalla completa del video en curso", "fullscreen the video playing")),
     ("X  Supr", Text::new("quitar de la lista o a la papelera (pide s)", "remove from the list or trash (asks y)")),
 ];
 
@@ -194,7 +194,14 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         return Some(Action::EndSplash);
     }
     if ctx.help {
-        return Some(Action::ToggleHelp);
+        // A help taller than the screen scrolls; any other key closes it.
+        return Some(match key.code {
+            KeyCode::Up | KeyCode::Char('k') => Action::HelpScroll(-1),
+            KeyCode::Down | KeyCode::Char('j') => Action::HelpScroll(1),
+            KeyCode::PageUp => Action::HelpScroll(-10),
+            KeyCode::PageDown | KeyCode::Char(' ') => Action::HelpScroll(10),
+            _ => Action::ToggleHelp,
+        });
     }
     if ctx.confirm {
         return Some(Action::Confirm(matches!(key.code, KeyCode::Char('s' | 'S' | 'y' | 'Y'))));
@@ -367,7 +374,11 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             let mut menu = rows(IN_MENU, lang);
             // → opens too (not Quit); the bar keeps just Enter.
             menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
-            menu.push(("x  X".into(), lang.pick("cerrar la pestaña del cursor (X: y quitar)", "close the tab under the cursor (X: and remove)")));
+            // Tab and / share a row so the help fits 40 lines.
+            menu.truncate(2);
+            menu.push(("Tab  /".into(), lang.pick("ir a la lista / buscar videos", "go to the list / search videos")));
+            menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
+            menu.push(("X".into(), lang.pick("cerrarla y quitarla de su lista", "close the tab and remove it from its list")));
             menu
         }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),

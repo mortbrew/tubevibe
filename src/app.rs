@@ -623,6 +623,8 @@ pub enum Action {
     MenuCloseTab,
     /// `X` on a tab in the menu: like `X` in that tab.
     MenuTrash,
+    /// ↑ ↓ PgUp PgDn in a help taller than the screen.
+    HelpScroll(i16),
     /// `t`: the selected video in a new tab, left in the background.
     OpenInBackground,
     /// `t`: the selected video in a new tab, shown at once.
@@ -1031,6 +1033,8 @@ pub struct State {
     pub config: Config,
     pub sidebar: bool,
     pub help: bool,
+    /// Lines the help is scrolled down (clamped when drawn).
+    pub help_scroll: u16,
     /// The active video fills the terminal (video drawn in the app: kitty or overlay).
     pub fullscreen: bool,
     /// Window mode: the tab whose mpv window is in fullscreen. The terminal
@@ -1150,6 +1154,7 @@ impl State {
             focus: if config.ui.sidebar { Focus::Menu } else { Focus::List },
             config,
             help: false,
+            help_scroll: 0,
             fullscreen: false,
             menu: 0,
             menu_tab: None,
@@ -1495,7 +1500,11 @@ impl State {
                 self.sidebar = !self.sidebar;
                 self.focus = if self.sidebar && self.stack.is_empty() { Focus::Menu } else { Focus::List };
             }
-            Action::ToggleHelp => self.help = !self.help,
+            Action::ToggleHelp => {
+                self.help = !self.help;
+                self.help_scroll = 0;
+            }
+            Action::HelpScroll(by) => self.help_scroll = self.help_scroll.saturating_add_signed(by).min(500),
             Action::FocusMenu => {
                 // Back from a video tab: the tab stays shown, the cursor waits
                 // on it, and fullscreen (which hides the menu) ends.

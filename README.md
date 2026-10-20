@@ -253,7 +253,7 @@ setting.
 
 | Key | Action |
 |---|---|
-| `?` | every shortcut, explained |
+| `?` | every shortcut, explained (in a small window it scrolls with ↑ ↓) |
 | `M` | show / hide the menu |
 | `L` | English / español |
 | `Q` | quit (asks first; says so if downloads are running) |

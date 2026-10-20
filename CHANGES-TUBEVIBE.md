@@ -1137,6 +1137,20 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.8)
 
+### Help rows never run out of their box (`key-remap`)
+
+- Help descriptions now wrap by cell width, continuing indented under the
+  description, so no row is cut at any width. Menu: `x` closes the tab under
+  the cursor, `X` closes it and removes it from its list (two rows); `Tab`
+  and `/` share one. A few long descriptions were shortened, so Help still
+  fits 40 lines at 130 columns with nothing wrapped.
+- In a window too small for it (e.g. 100x40), Help scrolls: ↑ ↓ / j k,
+  PgUp PgDn (and Space); the title says so; any other key closes it.
+- The confirm box's area (used to keep a video from drawing over it) now
+  matches its wrapped size.
+- Test: `no_help_row_is_clipped` (both languages, 130x40, 118x40, 100x40,
+  80x30).
+
 ### R opens My Recommendations; X on a tab in the menu (`key-remap`)
 
 - **`R`** opens My Recommendations from anywhere, like choosing it in the

@@ -540,7 +540,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
             frame.render_widget(Paragraph::new(note).fg(MUTED).alignment(Alignment::Center), frame.area());
         }
         if state.help {
-            draw_help(frame, lang);
+            draw_help(frame, lang, state.help_scroll);
         }
         return;
     }
@@ -615,7 +615,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
     draw_status(frame, state, icons, view, areas.status);
     draw_hints(frame, &hints(state), areas.hints);
     if state.help {
-        draw_help(frame, lang);
+        draw_help(frame, lang, state.help_scroll);
     }
     if let Some(confirm) = &state.confirm {
         draw_confirm(frame, confirm, lang);
@@ -2307,74 +2307,118 @@ pub fn dialog_area(state: &State, screen: Rect) -> Option<Rect> {
     if state.help {
         Some(help_area(screen, state.lang()))
     } else {
-        state.confirm.as_ref().map(|_| centered(screen, 56, 5))
+        state.confirm.as_ref().map(|c| confirm_layout(screen, confirm_question(c, state.lang())).0)
     }
 }
 
-/// The help screen's two balanced columns, so everything fits on a laptop screen.
-type HelpSection = (&'static str, Vec<(String, &'static str)>);
+/// A help section: its title and its rows, already wrapped to the box.
+type HelpBox = (&'static str, Vec<Line<'static>>);
 
-/// The help's sections in two columns of about the same height.
-fn help_columns(lang: Lang) -> (Vec<HelpSection>, Vec<HelpSection>) {
-    let mut sections = keymap::help(lang);
-    let sizes: Vec<usize> = sections.iter().map(|(_, rows)| help_box_height(rows.len()) as usize).collect();
+/// The help's layout for a screen `width` wide: its width, the two columns
+/// of boxes (rows wrapped, continuation lines indented under the
+/// description) and the taller column's height.
+fn help_layout(width: u16, lang: Lang) -> (u16, [Vec<HelpBox>; 2], u16) {
+    let width = width.min(118);
+    // Outer border, a gap between the columns, each box's border.
+    let column = width.saturating_sub(3) / 2;
+    let text = usize::from(column.saturating_sub(2));
+    let mut boxes: Vec<HelpBox> = keymap::help(lang)
+        .into_iter()
+        .map(|(title, rows)| (title, help_rows(&rows, text)))
+        .collect();
+    let sizes: Vec<usize> = boxes.iter().map(|(_, lines)| lines.len() + 2).collect();
     let split =
-        (1..sections.len()).min_by_key(|&k| sizes[..k].iter().sum::<usize>().max(sizes[k..].iter().sum())).unwrap_or(1);
-    let right = sections.split_off(split);
-    (sections, right)
+        (1..boxes.len()).min_by_key(|&k| sizes[..k].iter().sum::<usize>().max(sizes[k..].iter().sum())).unwrap_or(1);
+    let right = boxes.split_off(split);
+    let height = |c: &[HelpBox]| c.iter().map(|(_, l)| l.len() as u16 + 2).sum::<u16>();
+    let tallest = height(&boxes).max(height(&right));
+    (width, [boxes, right], tallest)
 }
 
-/// A section's box: its rows between two border lines.
-fn help_box_height(rows: usize) -> u16 {
-    rows as u16 + 2
+/// One section's rows in `width` cells: keys aligned, then what they do,
+/// wrapped by cell width under itself.
+fn help_rows(rows: &[(String, &'static str)], width: usize) -> Vec<Line<'static>> {
+    let keys = rows.iter().map(|(k, _)| Span::raw(k.as_str()).width()).max().unwrap_or(0) + 2;
+    let room = width.saturating_sub(keys + 1).max(1);
+    let mut lines = Vec::new();
+    for (key, description) in rows {
+        let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
+        for (n, line) in wrapped.into_iter().enumerate() {
+            let lead = if n == 0 {
+                Span::styled(format!(" {}", pad_cells(key, keys)), key_style(key, CYAN))
+            } else {
+                Span::raw(" ".repeat(keys + 1))
+            };
+            let mut spans = vec![lead];
+            spans.extend(line.spans);
+            lines.push(Line::from(spans));
+        }
+    }
+    lines
 }
 
-fn help_column_height(sections: &[HelpSection]) -> u16 {
-    sections.iter().map(|(_, rows)| help_box_height(rows.len())).sum()
-}
-
-/// The help's size: the taller column inside the outer border.
+/// The help's size: the taller column inside the outer border, capped to
+/// the screen (then it scrolls).
 fn help_area(screen: Rect, lang: Lang) -> Rect {
-    let (left, right) = help_columns(lang);
-    centered(screen, 118, help_column_height(&left).max(help_column_height(&right)) + 2)
+    let (width, _, tallest) = help_layout(screen.width, lang);
+    centered(screen, width, tallest + 2)
 }
 
-fn draw_help(frame: &mut Frame, lang: Lang) {
-    let (left, right) = help_columns(lang);
+fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
+    let (_, columns, tallest) = help_layout(frame.area().width, lang);
     let area = help_area(frame.area(), lang);
     frame.render_widget(Clear, area);
-    let title =
-        lang.pick(" ⌨  Atajos de teclado · cualquier tecla cierra ", " ⌨  Keyboard Shortcuts · Any Key Closes ");
+    let scrolls = tallest + 2 > area.height;
+    let title = match (scrolls, lang) {
+        (false, Lang::Es) => " ⌨  Atajos de teclado · cualquier tecla cierra ",
+        (false, _) => " ⌨  Keyboard Shortcuts · Any Key Closes ",
+        (true, Lang::Es) => " ⌨  Atajos · ↑ ↓ desplazar · otra tecla cierra ",
+        (true, _) => " ⌨  Shortcuts · ↑ ↓ Scroll · Other Keys Close ",
+    };
     let block = panel(title, MAGENTA);
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let columns: [Rect; 2] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).spacing(1).areas(inner);
-    for (sections, column) in [left, right].iter().zip(columns) {
-        let heights = sections.iter().map(|(_, rows)| Constraint::Length(help_box_height(rows.len())));
-        for ((title, rows), cell) in sections.iter().zip(Layout::vertical(heights).split(column).iter()) {
-            draw_help_section(frame, title, rows, *cell);
+    if inner.is_empty() {
+        return;
+    }
+    // Drawn whole off screen, then the visible rows copied in.
+    let full = Rect::new(0, 0, inner.width, tallest.max(1));
+    let mut buffer = ratatui::buffer::Buffer::empty(full);
+    let halves: [Rect; 2] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).spacing(1).areas(full);
+    for (boxes, column) in columns.iter().zip(halves) {
+        let heights = boxes.iter().map(|(_, lines)| Constraint::Length(lines.len() as u16 + 2));
+        for ((title, lines), cell) in boxes.iter().zip(Layout::vertical(heights).split(column).iter()) {
+            let block =
+                framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
+            ratatui::widgets::Widget::render(Paragraph::new(lines.clone()).block(block), *cell, &mut buffer);
+        }
+    }
+    let top = scroll.min(tallest.saturating_sub(inner.height));
+    for y in 0..inner.height.min(tallest - top) {
+        for x in 0..inner.width {
+            if let (Some(from), Some(to)) =
+                (buffer.cell((x, y + top)).cloned(), frame.buffer_mut().cell_mut((inner.x + x, inner.y + y)))
+            {
+                *to = from;
+            }
         }
     }
 }
 
-/// One section of the help in its own box: keys aligned, then what they do.
-fn draw_help_section(frame: &mut Frame, title: &str, rows: &[(String, &'static str)], area: Rect) {
-    let width = rows.iter().map(|(keys, _)| Span::raw(keys.as_str()).width()).max().unwrap_or(0) + 2;
-    let lines: Vec<Line> = rows
-        .iter()
-        .map(|(keys, description)| {
-            Line::from(vec![
-                Span::styled(format!(" {}", pad_cells(keys, width)), key_style(keys, CYAN)),
-                Span::styled(*description, FG),
-            ])
-        })
-        .collect();
-    let block = framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
+    let question = confirm_question(confirm, lang);
+    let (area, message) = confirm_layout(frame.area(), question);
+    let mut lines = vec![Line::from("")];
+    lines.extend(message);
+    lines.push(Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED));
+    let title = lang.pick(" Confirmar ", " Confirm ");
+    frame.render_widget(Clear, area);
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
 }
 
-fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
-    let question = match confirm {
+/// The question a confirm box asks, with its coloured title and list name.
+fn confirm_question<'a>(confirm: &'a Confirm, lang: Lang) -> Line<'a> {
+    match confirm {
         Confirm::Unsubscribe { name, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Desuscribirte de ", "Unsubscribe from ")),
             Span::styled(name.as_str(), Style::new().fg(MAGENTA).bold()),
@@ -2470,14 +2514,7 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
                 Span::raw("?"),
             ])
         }
-    };
-    let (area, message) = confirm_layout(frame.area(), question);
-    let mut lines = vec![Line::from("")];
-    lines.extend(message);
-    lines.push(Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED));
-    let title = lang.pick(" Confirmar ", " Confirm ");
-    frame.render_widget(Clear, area);
-    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
+    }
 }
 
 /// The confirm box for `question` on `screen`: as wide as the question
@@ -5087,6 +5124,34 @@ mod tests {
             let mut s = state();
             s.confirm = Some(Confirm::RemoveFromLater(Video { title: long.clone(), ..video("a") }));
             let _ = render_screen(&s, w.max(1), h.max(1));
+        }
+    }
+
+    #[test]
+    fn no_help_row_is_clipped() {
+        for lang in [Lang::Es, Lang::En] {
+            // 130x40: everything at once, no scrolling.
+            let (_, _, tallest) = help_layout(130, lang);
+            assert!(tallest + 2 <= 40, "{lang:?}: {tallest}");
+            for (w, h) in [(130u16, 40u16), (118, 40), (100, 40), (80, 30)] {
+                let (width, columns, tallest) = help_layout(w, lang);
+                let text = usize::from((width - 3) / 2 - 2);
+                let mut s = state();
+                s.config.ui.lang = Some(lang);
+                s.help = true;
+                let mut seen = String::new();
+                for scroll in 0..=tallest {
+                    s.help_scroll = scroll;
+                    seen.push_str(&render_screen(&s, w, h).join("\n"));
+                }
+                for (title, lines) in columns.iter().flatten() {
+                    for line in lines {
+                        assert!(line.width() <= text, "{lang:?} {w}: {title}: {line:?}");
+                        let words: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+                        assert!(seen.contains(words.trim()), "{lang:?} {w}x{h}: {title}: {words}");
+                    }
+                }
+            }
         }
     }
 }
