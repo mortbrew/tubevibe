@@ -1,5 +1,11 @@
 # Benchmark
 
+> tubevibe is a fork of [tubetui](https://github.com/polblancoo/tubetui) by
+> polblancoo. These numbers were measured by polblancoo on tubetui (before and
+> after its 0.2.0 fixes), the code tubevibe grew from; tubevibe has not been measured on its
+> own yet. Its player, search and idle loop are the same code, so the figures
+> are a fair guide, not a tubevibe result.
+
 tubetui against the script it replaces (**ytv**: bash + fzf + yt-dlp + mpv)
 and two popular alternatives: **[ytfzf](https://github.com/pystardust/ytfzf)**
 (shell + fzf) and **[youtube-tui](https://github.com/siriusmart/youtube-tui)**

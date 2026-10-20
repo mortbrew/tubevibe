@@ -59,6 +59,8 @@ pub fn actions(
         (MouseEventKind::Down(MouseButton::Left), Spot::Progress(second)) => vec![Action::SeekTo(second)],
         (MouseEventKind::ScrollUp, Spot::Video | Spot::Progress(_)) => vec![Action::Volume(VOLUME_STEP)],
         (MouseEventKind::ScrollDown, Spot::Video | Spot::Progress(_)) => vec![Action::Volume(-VOLUME_STEP)],
+        (MouseEventKind::ScrollUp, Spot::Tab(i)) if i > 0 => vec![Action::ScrollTabs(-1)],
+        (MouseEventKind::ScrollDown, Spot::Tab(i)) if i > 0 => vec![Action::ScrollTabs(1)],
         (MouseEventKind::ScrollUp, Spot::Row(_)) => vec![Action::Scroll(-WHEEL_ROWS)],
         (MouseEventKind::ScrollDown, Spot::Row(_)) => vec![Action::Scroll(WHEEL_ROWS)],
         _ => Vec::new(),
@@ -119,5 +121,13 @@ mod tests {
         s.update(Action::ToggleHelp);
         assert_eq!(actions(&s, None, CLICK, false, AT), [Action::ToggleHelp]);
         assert!(actions(&s, None, MouseEventKind::ScrollUp, false, AT).is_empty());
+    }
+
+    #[test]
+    fn the_wheel_over_the_menu_tabs_scrolls_them() {
+        let s = state();
+        let at = (2, 2);
+        assert_eq!(actions(&s, Some(Spot::Tab(3)), MouseEventKind::ScrollDown, false, at), [Action::ScrollTabs(1)]);
+        assert_eq!(actions(&s, Some(Spot::Tab(3)), MouseEventKind::ScrollUp, false, at), [Action::ScrollTabs(-1)]);
     }
 }

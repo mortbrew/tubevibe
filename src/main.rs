@@ -60,16 +60,31 @@ const SIZE_DELAY: Duration = Duration::from_millis(800);
 
 /// Started from a launcher (`kitty -e tubevibe`), the window closes as soon as
 /// the app exits: keep a startup error on screen until Enter.
-fn wait_on_error(error: &dyn std::fmt::Display) {
+fn wait_on_error(error: &config::ConfigError) {
     use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() {
         return;
     }
-    eprintln!("tubevibe: {error}\n");
-    eprintln!("Corregí el archivo o actualizá tubevibe (una versión vieja no conoce las opciones nuevas).");
-    eprintln!("Fix the file or update tubevibe (an old version doesn't know newer options).\n");
-    eprint!("Enter: salir / quit ");
+    // The file could not be read, so neither could its language: the system's.
+    let lang = Lang::from_locale(&system_locale());
+    eprintln!("tubevibe: {}\n", error.message(lang));
+    eprintln!(
+        "{}\n",
+        lang.pick(
+            "Corregí el archivo o actualizá tubevibe (una versión vieja no conoce las opciones nuevas).",
+            "Fix the file or update tubevibe (an old version doesn't know newer options).",
+        )
+    );
+    eprint!("{} ", lang.pick("Enter: salir", "Enter: Quit"));
     let _ = std::io::stdin().read_line(&mut String::new());
+}
+
+/// The system's locale (`es_AR.UTF-8`…), empty when unset.
+fn system_locale() -> String {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+        .unwrap_or_default()
 }
 
 /// YouTube in your terminal.
@@ -95,18 +110,14 @@ fn main() -> anyhow::Result<()> {
     }
     let config_path = cli.config.or_else(Config::default_path);
     let (mut config, config_warnings) = match &config_path {
-        Some(path) => Config::load_with_warnings(path).inspect_err(|e| wait_on_error(e))?,
+        Some(path) => Config::load_with_warnings(path).inspect_err(wait_on_error)?,
         None => (Config::default(), Vec::new()),
     };
     for warning in &config_warnings {
         dbg(format!("config.toml: {warning}"));
     }
     // Until a language is chosen, follow the system's.
-    config.ui.lang.get_or_insert_with(|| {
-        let locale =
-            ["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
-        Lang::from_locale(&locale.unwrap_or_default())
-    });
+    config.ui.lang.get_or_insert_with(|| Lang::from_locale(&system_locale()));
     // An imported cookies file named by its old path: the copy in the new folder.
     if let Some(moved) = store::moved_path(Path::new(&config.session.cookies_file), &copied).filter(|p| p.exists()) {
         config.session.cookies_file = moved.display().to_string();
@@ -181,6 +192,8 @@ struct Runtime {
     clear_at: Option<Instant>,
     /// The terminal window was put in fullscreen by us.
     window_fullscreen: bool,
+    /// Window mode: whether each mpv window was in fullscreen, last we looked.
+    mpv_fullscreen: HashMap<TabId, bool>,
     /// When the list being loaded was requested, for the loading indicator.
     loading_since: Option<Instant>,
     /// The YouTube video of each player, to remember where it stopped.
@@ -270,6 +283,7 @@ impl Runtime {
             resized_at: None,
             clear_at: None,
             window_fullscreen: false,
+            mpv_fullscreen: HashMap::new(),
             loading_since: None,
             videos: HashMap::new(),
             downloads: HashMap::new(),
@@ -432,7 +446,7 @@ impl Runtime {
             if event::poll(wait).context("reading terminal events")? {
                 match event::read()? {
                     Event::Key(key) => {
-                        dbg(format!("key {:?} {:?}", key.code, key.kind));
+                        dbg(format!("key {:?} {:?} {:?}", key.code, key.modifiers, key.kind));
                         pending.extend(keymap::map(key, self.state.key_context()))
                     }
                     // Another program in front: an overlay would float over it.
@@ -468,6 +482,16 @@ impl Runtime {
                 }
             }
             pending.extend(self.rx.try_iter());
+            // mpv's window went in or out of fullscreen (also by its own f / Esc).
+            if self.mode() == Mode::Window {
+                self.mpv_fullscreen.retain(|id, _| self.players.contains_key(id));
+                for (id, p) in &self.players {
+                    let on = p.info().fullscreen;
+                    if self.mpv_fullscreen.insert(*id, on).unwrap_or(false) != on {
+                        pending.push(Action::MpvFullscreen(*id, on));
+                    }
+                }
+            }
             self.state.clock = now();
             pending.extend(self.segments_to_skip());
             self.poll_subs();
@@ -843,7 +867,7 @@ impl Runtime {
                     }
                 };
                 if let Err(e) = result {
-                    self.send(Action::Status(e.to_string()));
+                    self.send(Action::Status(e.message(self.state.lang())));
                 }
             }
             Effect::ImportCookies(path) => {
@@ -1164,7 +1188,7 @@ impl Runtime {
         let (result, warnings) = match status {
             Ok(_) => match Config::load_with_warnings(&path) {
                 Ok((config, warnings)) => (Ok(config), warnings),
-                Err(e) => (Err(e.to_string()), Vec::new()),
+                Err(e) => (Err(e.message(self.state.lang())), Vec::new()),
             },
             Err(e) => (Err(format!("{} {program}: {e}", self.tr("no se pudo abrir", "could not open"))), Vec::new()),
         };

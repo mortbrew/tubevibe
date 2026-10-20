@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::app::{
-    Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, Prompt, Section, Setting, State, Tab,
+    Confirm, ContextMenu, Focus, Group, LOCAL_LATER, ListKind, Listing, MenuRow, Prompt, Section, Setting, State, Tab,
     YOUTUBE_LATER, language_label,
 };
 use crate::config::{BorderStyle, IconSet, donations};
@@ -51,24 +51,23 @@ const LINE: Color = TOKYO_NIGHT.line;
 const BLUE: Color = TOKYO_NIGHT.blue;
 const CYAN: Color = TOKYO_NIGHT.cyan;
 const MAGENTA: Color = TOKYO_NIGHT.magenta;
+/// The menu row of what the main area shows, when the cursor is elsewhere.
+const SHOWN: Color = MAGENTA;
 const GREEN: Color = TOKYO_NIGHT.green;
-const ORANGE: Color = TOKYO_NIGHT.orange;
 const YELLOW: Color = TOKYO_NIGHT.yellow;
 const RED: Color = TOKYO_NIGHT.red;
 const TEAL: Color = TOKYO_NIGHT.teal;
 const PURPLE: Color = TOKYO_NIGHT.purple;
 
 /// One colour per menu entry, in `Section::ALL` order.
-const SECTION_COLORS: [Color; 18] = [
-    BLUE, RED, YELLOW, TEAL, GREEN, ORANGE, GREEN, TEAL, ORANGE, CYAN, MAGENTA, YELLOW, PURPLE, MAGENTA, CYAN, BLUE,
-    PURPLE, MUTED,
-];
+/// The menu's cursor row, sections and tabs alike: the theme's accent.
+const SELECTED: Color = crate::theme::ACCENT_DRAWN;
 
 pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 34],
+    pub settings: [&'static str; 37],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -91,6 +90,9 @@ pub struct Icons {
     pub update: &'static str,
     /// The update is downloading.
     pub downloading: &'static str,
+    /// More tabs above / below the menu's visible ones.
+    pub more_above: &'static str,
+    pub more_below: &'static str,
     /// The update failed.
     pub failed: &'static str,
     /// A file moved to the trash; also anything removed or deleted.
@@ -117,6 +119,12 @@ pub struct Icons {
     pub donate: &'static str,
     /// YouTube's AI summary: its heading in the preview and the video tab.
     pub summary: &'static str,
+    /// A row marked with Space (My Videos, My Music, Downloads). One cell.
+    pub marked: &'static str,
+    /// The login in use, in the list of browsers.
+    pub current: &'static str,
+    /// System Check: an optional tool that is not installed.
+    pub optional: &'static str,
 }
 
 impl Icons {
@@ -134,8 +142,9 @@ const EMOJI: Icons = Icons {
         "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📑", "🎨", "📷", "🐭",
-        "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📏", "🔭", "💭", "📑",
+        "🎨", "📷", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
+        "📝",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -155,6 +164,8 @@ const EMOJI: Icons = Icons {
     up_to_date: "✅",
     update: "⬆",
     downloading: "⬇",
+    more_above: "🔼",
+    more_below: "🔽",
     failed: "❌",
     trash: "🗑",
     notify: "🔔",
@@ -168,6 +179,9 @@ const EMOJI: Icons = Icons {
     waiting: "⏳",
     donate: "☕",
     summary: "✦",
+    marked: "✖",
+    current: "●",
+    optional: "➖",
 };
 
 const NERD: Icons = Icons {
@@ -206,6 +220,10 @@ const NERD: Icons = Icons {
         "\u{f0ac}",
         "\u{f118}",
         "\u{f00ce}",
+        // nf-fa-bars, nf-fa-eye, nf-fa-comments: the menu, preview and comments widths.
+        "\u{f0c9}",
+        "\u{f06e}",
+        "\u{f086}",
         "\u{f2d2}",
         "\u{f1fc}",
         "\u{f03e}",
@@ -245,6 +263,9 @@ const NERD: Icons = Icons {
     up_to_date: "\u{f058}",
     update: "\u{f0aa}",
     downloading: "\u{f0ab}",
+    // nf-fa-angle_up, angle_down.
+    more_above: "\u{f106}",
+    more_below: "\u{f107}",
     failed: "\u{f057}",
     trash: "\u{f1f8}",
     // nf-fa-bell, bell_slash, nf-md-play_pause, nf-fa-forward, stop,
@@ -261,13 +282,17 @@ const NERD: Icons = Icons {
     donate: "\u{f0f4}",
     // nf-md-creation: sparkles.
     summary: "\u{f0674}",
+    // nf-fa-times, circle, minus_circle.
+    marked: "\u{f00d}",
+    current: "\u{f111}",
+    optional: "\u{f056}",
 };
 
 const UNICODE: Icons = Icons {
     sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "❐", "◐", "▨", "➚", "◆", "✦", "≈", "✸",
-        "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "➚", "◆",
+        "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -286,6 +311,8 @@ const UNICODE: Icons = Icons {
     up_to_date: "✔",
     update: "↑",
     downloading: "↓",
+    more_above: "▴",
+    more_below: "▾",
     failed: "✘",
     trash: "✕",
     // Text symbols only: none of these turns into a colour emoji.
@@ -300,6 +327,9 @@ const UNICODE: Icons = Icons {
     waiting: "◌",
     donate: "♥",
     summary: "✦",
+    marked: "✗",
+    current: "●",
+    optional: "·",
 };
 
 pub fn icons(set: IconSet) -> &'static Icons {
@@ -353,11 +383,21 @@ pub struct Areas {
 }
 
 pub fn areas(area: Rect, sidebar: bool) -> Areas {
+    areas_with(area, if sidebar { SIDEBAR_WIDTH } else { 0 })
+}
+
+/// The screen's areas with the menu as wide as `state` says (Menu Width).
+pub fn screen_areas(area: Rect, state: &State) -> Areas {
+    areas_with(area, if state.sidebar { state.config.ui.menu_width } else { 0 })
+}
+
+/// `menu` columns of menu (0: none), never more than half the screen.
+fn areas_with(area: Rect, menu: u16) -> Areas {
     let [body, status, hints] =
         Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).areas(area);
-    let width = if sidebar { SIDEBAR_WIDTH } else { 0 };
+    let width = menu.min(area.width / 2);
     let [side, content] = Layout::horizontal([Constraint::Length(width), Constraint::Fill(1)]).areas(body);
-    Areas { sidebar: sidebar.then_some(side), content, status, hints }
+    Areas { sidebar: (menu > 0).then_some(side), content, status, hints }
 }
 
 /// What is under the mouse pointer.
@@ -390,7 +430,7 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     if state.fullscreen {
         return Some(Spot::Video);
     }
-    let areas = areas(screen, state.sidebar);
+    let areas = screen_areas(screen, state);
     if let Some(side) = areas.sidebar.filter(|a| a.contains(at)) {
         let inner = Block::bordered().inner(side);
         let line = usize::from(y.checked_sub(inner.y)?);
@@ -409,7 +449,8 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
         if state.details_shown(tab) {
             // The video is elsewhere (or not shown): here are its details and the related list.
             state.related_shown()?;
-            let list = Block::bordered().inner(tab_layout(tab, Block::bordered().inner(areas.content)).related);
+            let list = Block::bordered()
+                .inner(tab_layout(tab, Block::bordered().inner(areas.content), state.config.ui.comments_width).related);
             return list_row(list, tab.related, tab.related_videos().len(), at);
         }
         let inner = Block::bordered().inner(areas.content);
@@ -421,7 +462,7 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     let listing = state.listing()?;
     let (_, rest) = split_prompt(state, areas.content);
     let list = match listing.items {
-        Items::Videos(_) | Items::Channels(_) => split_preview(rest).0,
+        Items::Videos(_) | Items::Channels(_) => split_preview(rest, state.config.ui.preview_width).0,
         Items::About | Items::System => return None,
         _ => rest,
     };
@@ -446,7 +487,7 @@ pub fn video_area(state: &State, area: Rect) -> Option<Rect> {
         return None;
     }
     state.active_tab().filter(|t| !t.playback.audio_only)?;
-    let cells = if state.fullscreen { area } else { Block::bordered().inner(areas(area, state.sidebar).content) };
+    let cells = if state.fullscreen { area } else { Block::bordered().inner(screen_areas(area, state).content) };
     under_context_menu(state, area, cells)
 }
 
@@ -498,7 +539,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
         }
         return;
     }
-    let areas = areas(frame.area(), state.sidebar);
+    let areas = screen_areas(frame.area(), state);
     if let Some(side) = areas.sidebar {
         draw_sidebar(frame, state, icons, side);
     }
@@ -552,7 +593,8 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
             } else {
                 Paragraph::new(lang.pick("Se reproduce en una ventana de mpv", "Playing in an mpv window")).fg(MUTED)
             };
-            let mut block = panel(title, BLUE);
+            // Lit while it has the keys; dim while Up Next has them.
+            let mut block = focus_panel(title, state.key_context().in_tab && !state.key_context().related);
             if let Some(info) = &view.playing {
                 block = block.title_top(Line::from(playing_label(info, icons)).fg(CYAN).right_aligned());
                 if let Some(progress) = progress_line(info, &tab.segments, areas.content.width) {
@@ -582,6 +624,8 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
 struct WatchLayout {
     thumbnail: Rect,
     details: Rect,
+    /// The AI summary, under the thumbnail and details, the left column's width.
+    summary: Rect,
     related: Rect,
     /// Beside "Up next", when there is room.
     comments: Option<Rect>,
@@ -589,47 +633,65 @@ struct WatchLayout {
 
 /// Columns of the thumbnail on a video tab.
 const WATCH_THUMBNAIL_WIDTH: u16 = 36;
+/// Columns the details and "Up next" keep beside the comments.
+const WATCH_LEFT_MIN_WIDTH: u16 = 40;
 /// Narrower than this, a video tab shows no comments.
 const COMMENTS_MIN_WIDTH: u16 = 100;
+
+/// The tab, its inside, and the rows its details and AI summary took.
+type DrawnCard = (TabId, Rect, (u16, u16));
 
 thread_local! {
     /// Rows the details card of a video tab took when last drawn, with the
     /// area it was drawn in: it grows to hold the AI summary, so a click on
     /// "Up next" must find the rows where they were drawn.
-    static CARD_ROWS: std::cell::Cell<Option<(TabId, Rect, u16)>> = const { std::cell::Cell::new(None) };
+    static CARD_ROWS: std::cell::Cell<Option<DrawnCard>> = const { std::cell::Cell::new(None) };
 }
 
-fn watch_layout(inner: Rect) -> WatchLayout {
-    watch_layout_with(inner, 0)
+fn watch_layout(inner: Rect, comments: u16) -> WatchLayout {
+    watch_layout_with(inner, comments, (0, 0))
 }
 
 /// The layout of `tab` as last drawn in `inner`.
-fn tab_layout(tab: &Tab, inner: Rect) -> WatchLayout {
+fn tab_layout(tab: &Tab, inner: Rect, comments: u16) -> WatchLayout {
     let drawn = CARD_ROWS.with(std::cell::Cell::get).filter(|(id, area, _)| *id == tab.id && *area == inner);
-    watch_layout_with(inner, drawn.map_or(0, |(_, _, rows)| rows))
+    watch_layout_with(inner, comments, drawn.map_or((0, 0), |(_, _, rows)| rows))
 }
 
-/// `card_rows`: what the details need, when more than the thumbnail's height.
-fn watch_layout_with(inner: Rect, card_rows: u16) -> WatchLayout {
-    let width = WATCH_THUMBNAIL_WIDTH.min(inner.width / 3);
+/// `detail_rows` / `summary_rows`: what the details (beside the thumbnail,
+/// when more than its height) and the AI summary under them need.
+/// Wide enough, the comments take the right side from top to bottom; the
+/// left column has the thumbnail and details, then the AI summary across it,
+/// then "Up next" right below.
+/// `width`: Comments Width, in columns; the left column keeps
+/// [`WATCH_LEFT_MIN_WIDTH`] columns whatever it says.
+fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16, u16)) -> WatchLayout {
+    let (left, comments) = if inner.width >= COMMENTS_MIN_WIDTH {
+        let width = width.min(inner.width - WATCH_LEFT_MIN_WIDTH);
+        let [left, comments] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)]).areas(inner);
+        (left, Some(comments))
+    } else {
+        (inner, None)
+    };
+    // Two fifths of the left column, at most 36 columns.
+    let width = WATCH_THUMBNAIL_WIDTH.min(left.width * 2 / 5);
     let rows = (u32::from(width) * 9 / 32) as u16;
-    let card_rows = rows.max(7).max(card_rows);
-    let [card, _, below] =
-        Layout::vertical([Constraint::Length(card_rows), Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
+    let card_rows = rows.max(detail_rows);
+    let [card, summary, _, related] = Layout::vertical([
+        Constraint::Length(card_rows),
+        Constraint::Length(summary_rows),
+        Constraint::Length(1),
+        Constraint::Fill(1),
+    ])
+    .areas(left);
     let [thumbnail, _, details] =
         Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
-    let (related, comments) = if below.width >= COMMENTS_MIN_WIDTH {
-        // "Up next" a little wider: its rows carry date, channel, title and length.
-        let [related, comments] = Layout::horizontal([Constraint::Fill(11), Constraint::Fill(9)]).areas(below);
-        (related, Some(comments))
-    } else {
-        (below, None)
-    };
-    WatchLayout { thumbnail: Rect { height: rows.min(card.height), ..thumbnail }, details, related, comments }
+    WatchLayout { thumbnail: Rect { height: rows.min(card.height), ..thumbnail }, details, summary, related, comments }
 }
 
-/// Rows of the details card kept for "Up next" at least, however long the summary.
-const UP_NEXT_MIN_ROWS: u16 = 6;
+/// Rows "Up next" keeps at least (its border and five videos), however long
+/// the summary: past that the summary is cut with "…".
+const UP_NEXT_MIN_ROWS: u16 = 7;
 
 /// `text` broken into lines of at most `width` columns: its own line breaks
 /// kept, words kept whole when they fit, longer ones cut.
@@ -676,7 +738,7 @@ fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang, icon: 
         None => lang.pick(" · no disponible para este video", " · not available for this video"),
     };
     let heading = Line::from(vec![
-        Span::styled(format!("{icon} {}", lang.pick("Resumen IA", "AI summary")), Style::new().fg(BLUE).bold()),
+        Span::styled(format!("{icon} {}", lang.pick("Resumen IA", "AI Summary")), Style::new().fg(BLUE).bold()),
         Span::styled(note, MUTED),
     ]);
     let Some(text) = text else { return vec![Line::from(""), heading] };
@@ -699,13 +761,16 @@ fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang, icon: 
 fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab: &Tab, inner: Rect) {
     let lang = state.lang();
     let Some(video) = &tab.playback.video else { return };
-    let mut layout = watch_layout(inner);
+    let comments_width = state.config.ui.comments_width;
+    let mut layout = watch_layout(inner, comments_width);
     let details = if view.thumbnails {
         let middle = Rect { y: layout.thumbnail.y + layout.thumbnail.height / 2, height: 1, ..layout.thumbnail };
         frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
         layout.details
     } else {
-        Rect { x: inner.x, width: inner.width, ..layout.details }
+        // No thumbnail: the details take the left column's whole width.
+        let left = layout.related;
+        Rect { x: left.x, width: left.width, ..layout.details }
     };
     let watch = tab.watch.as_ref();
     let mut channel = vec![Span::styled(video.channel.as_str(), MAGENTA)];
@@ -741,7 +806,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         let note = format!(
             "{} {}",
             icons.audio,
-            lang.pick("Solo audio · a vuelve al video", "Sound only · a brings the video back")
+            lang.pick("Solo audio · a vuelve al video", "Audio Only · a brings the video back")
         );
         lines.push(Line::from(note).fg(TEAL));
     }
@@ -760,30 +825,34 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     if let Some(elapsed) = view.opening {
         lines.push(Line::from(loading_text(lang.pick("el video", "the video"), elapsed, lang)).fg(YELLOW));
     }
-    // The AI summary right under the last detail; the card grows to hold it.
-    let mut card_rows = 0;
-    if let Some(summary) = state.tab_summary_lookup(tab) {
-        let used = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width);
-        let most = inner.height.saturating_sub(UP_NEXT_MIN_ROWS + 1);
-        let room = usize::from(most).saturating_sub(used);
-        lines.extend(summary_lines(summary, details.width, room, lang, icons.summary));
-        card_rows =
-            (Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true }).line_count(details.width)
-                as u16)
-                .min(most);
-    }
-    CARD_ROWS.with(|c| c.set(Some((tab.id, inner, card_rows))));
-    layout = watch_layout_with(inner, card_rows);
+    // The details card grows to hold them all, up to what leaves "Up next" its rows.
+    let paragraph = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true });
+    let most_card = inner.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
+    let detail_rows = (paragraph.line_count(details.width) as u16).min(most_card);
+    layout = watch_layout_with(inner, comments_width, (detail_rows, 0));
     let details = Rect { y: layout.details.y, height: layout.details.height, ..details };
-    frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), details);
+    frame.render_widget(paragraph, details);
+    // The AI summary across the left column, all of it, as long as "Up next"
+    // keeps its rows (then cut with "…").
+    let mut summary_rows = 0;
+    if let Some(summary) = state.tab_summary_lookup(tab) {
+        let width = layout.related.width;
+        let most = inner.height.saturating_sub(layout.details.height + 1 + UP_NEXT_MIN_ROWS);
+        let lines = summary_lines(summary, width, usize::from(most), lang, icons.summary);
+        let wrapped = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true });
+        summary_rows = (wrapped.line_count(width) as u16).min(most);
+        layout = watch_layout_with(inner, comments_width, (detail_rows, summary_rows));
+        frame.render_widget(wrapped, layout.summary);
+    }
+    CARD_ROWS.with(|c| c.set(Some((tab.id, inner, (detail_rows, summary_rows)))));
 
     let related = tab.related_videos();
-    let focused = tab.on_related && !related.is_empty();
+    let focused = state.key_context().related;
     let title = match watch {
-        None => format!(" {} ", lang.pick("Buscando videos relacionados…", "Looking for related videos…")),
-        Some(_) if related.is_empty() => format!(" {} ", lang.pick("Sin videos relacionados", "No related videos")),
-        Some(_) if focused => format!(" {} · {} ", lang.pick("A continuación", "Up next"), related.len()),
-        Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up next"), related.len()),
+        None => format!(" {} ", lang.pick("Buscando videos relacionados…", "Looking for Related Videos…")),
+        Some(_) if related.is_empty() => format!(" {} ", lang.pick("Sin videos relacionados", "No Related Videos")),
+        Some(_) if focused => format!(" {} · {} ", lang.pick("A continuación", "Up Next"), related.len()),
+        Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up Next"), related.len()),
     };
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
     let list = List::new(related.iter().map(|v| video_row(state, icons, view, v)))
@@ -801,10 +870,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
 fn draw_comments(frame: &mut Frame, tab: &Tab, icons: &Icons, lang: Lang, area: Rect) {
     let title = match &tab.comments {
         None if tab.watch.is_none() || tab.watch.as_ref().is_some_and(|w| w.comments_token.is_some()) => {
-            format!(" {} ", lang.pick("Buscando comentarios…", "Looking for comments…"))
+            format!(" {} ", lang.pick("Buscando comentarios…", "Looking for Comments…"))
         }
-        None => format!(" {} ", lang.pick("Comentarios desactivados", "Comments are off")),
-        Some(c) if c.is_empty() => format!(" {} ", lang.pick("Sin comentarios", "No comments")),
+        None => format!(" {} ", lang.pick("Comentarios desactivados", "Comments Are Off")),
+        Some(c) if c.is_empty() => format!(" {} ", lang.pick("Sin comentarios", "No Comments")),
         Some(c) => format!(
             " {} {}/{} · PgUp PgDn ",
             lang.pick("Comentarios", "Comments"),
@@ -958,8 +1027,9 @@ fn focus_panel<'a>(title: impl Into<Line<'a>>, focused: bool) -> Block<'a> {
 }
 
 /// Whether the keys go to the menu: the browsing view, with the menu in focus.
+/// Over the browsing view or a video tab still shown.
 fn menu_focused(state: &State) -> bool {
-    state.active == 0 && state.focus == Focus::Menu
+    state.focus == Focus::Menu && state.sidebar
 }
 
 /// The menu's lines, each with what a click on it does, for a menu whose
@@ -973,9 +1043,11 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     for (i, section) in Section::ALL.iter().enumerate() {
         let pinned = section.group() == Group::App;
         if group != Some(section.group()) && !pinned {
+            // A blank row above every group but the first, right under the logo.
+            if group.is_some() {
+                top.push((ListItem::new(""), None));
+            }
             group = Some(section.group());
-            // A blank row above every group, the first too (under the title).
-            top.push((ListItem::new(""), None));
             top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()), None));
         }
         let mut label = section.label(lang).to_owned();
@@ -992,12 +1064,14 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         if *section == Section::AcercaDe && state.update.is_some() {
             label.push_str(&format!(" {}", icons.update));
         }
-        let selected = i == state.menu;
-        let focused = selected && menu_focused(state);
-        let color = SECTION_COLORS[i];
-        let mut style = Style::new().fg(if selected { color } else { FG });
+        let focused = state.menu_row() == MenuRow::Section(i) && menu_focused(state);
+        let shown = state.shown_row() == Some(MenuRow::Section(i));
+        let color = SELECTED;
+        let mut style = Style::new().fg(FG);
         if focused {
-            style = style.bg(HIGHLIGHT).add_modifier(Modifier::BOLD);
+            style = style.fg(color).bg(HIGHLIGHT).add_modifier(Modifier::BOLD);
+        } else if shown {
+            style = style.fg(SHOWN);
         }
         let line = Line::from(vec![
             Span::styled(if focused { "▌" } else { " " }, color),
@@ -1007,31 +1081,109 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         let row = (ListItem::new(line).style(style), Some(Spot::Section(i)));
         if pinned { bottom.push(row) } else { top.push(row) }
     }
-    if !state.tabs.is_empty() {
-        top.push((ListItem::new(""), None));
-        top.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
-        for (i, tab) in state.tabs.iter().enumerate() {
-            let active = state.active == i + 1;
-            let style = if active { Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold() } else { Style::new().fg(FG) };
-            let line =
-                format!("{}{} {} {}", if active { "▌" } else { " " }, i + 1, tab_icon(icons, tab), tab.playback.title);
-            top.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
-        }
+    let mut tabs: Vec<(ListItem, Option<Spot>)> = Vec::new();
+    for (i, tab) in state.tabs.iter().enumerate() {
+        // The cursor's row has the focus highlight; the tab shown, the "shown" mark.
+        let active = state.menu_row() == MenuRow::Tab(i) && menu_focused(state);
+        let shown = state.shown_row() == Some(MenuRow::Tab(i));
+        let style = if active {
+            Style::new().fg(SELECTED).bg(HIGHLIGHT).bold()
+        } else if shown {
+            Style::new().fg(SHOWN)
+        } else {
+            Style::new().fg(FG)
+        };
+        let line = format!("{}{} {}", if active { "▌" } else { " " }, tab_icon(icons, tab), tab.playback.title);
+        tabs.push((ListItem::new(line).style(style), Some(Spot::Tab(i + 1))));
     }
     // A blank row, then the rule: inset two columns on each side.
-    let rule =
-        format!("{SEPARATOR_INSET}{}", "─".repeat(usize::from(inner.width).saturating_sub(2 * SEPARATOR_INSET.len())));
+    let rule = || {
+        let width = usize::from(inner.width).saturating_sub(2 * SEPARATOR_INSET.len());
+        (ListItem::new(Line::from(format!("{SEPARATOR_INSET}{}", "─".repeat(width))).fg(MUTED)), None)
+    };
     let room = usize::from(inner.height);
-    let gap = room.saturating_sub(top.len() + 1 + bottom.len()).max(1);
+    // Above the tabs: a blank row and the TABS title. Below: a blank row, the rule, Settings…
+    let (tabs_head, tail) = (if tabs.is_empty() { 0 } else { 2 }, 2 + bottom.len());
+    let tab_rows = room.saturating_sub(top.len() + tabs_head + tail);
+    if room >= top.len() + tabs_head + tail + usize::from(!tabs.is_empty()) {
+        // The top and the bottom stay put; the tabs take what is left and scroll.
+        let mut items = top;
+        let mut more_below = false;
+        if !tabs.is_empty() {
+            let total = tabs.len();
+            let title = lang.pick(" PESTAÑAS", " TABS");
+            let shown = tab_rows.min(total);
+            let offset = tab_offset(state, total, shown);
+            let chevron = |icon: &str| format!("{}{icon}", " ".repeat(Span::raw(title).width() + 1));
+            let mut head = Line::from(title.to_owned()).fg(MUTED).bold();
+            if offset > 0 {
+                head = Line::from(vec![Span::raw(title.to_owned()), Span::raw(format!(" {}", icons.more_above))])
+                    .fg(MUTED)
+                    .bold();
+            }
+            items.push((ListItem::new(""), None));
+            items.push((ListItem::new(head), None));
+            items.extend(tabs.into_iter().skip(offset).take(shown));
+            // More below: the chevron takes the blank row above the rule.
+            more_below = offset + shown < total;
+            if more_below {
+                items.push((ListItem::new(Line::from(chevron(icons.more_below)).fg(MUTED).bold()), None));
+            }
+        }
+        let gap = room.saturating_sub(items.len() + 1 + bottom.len()).max(usize::from(!more_below));
+        items.extend((0..gap).map(|_| (ListItem::new(""), None)));
+        items.push(rule());
+        items.extend(bottom);
+        return items;
+    }
+    // Too short for even one tab row: one list, scrolled so the cursor's row
+    // shows (or, without the menu's keys, the tab shown).
     let mut items = top;
-    items.extend((0..gap).map(|_| (ListItem::new(""), None)));
-    items.push((ListItem::new(Line::from(rule).fg(MUTED)), None));
+    if !tabs.is_empty() {
+        items.push((ListItem::new(""), None));
+        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
+        items.extend(tabs);
+    }
+    items.push((ListItem::new(""), None));
+    items.push(rule());
     items.extend(bottom);
-    // Too short for all of it: scrolled so the chosen section shows.
-    let chosen = items.iter().position(|(_, spot)| *spot == Some(Spot::Section(state.menu))).unwrap_or(0);
+    let row = match state.shown_row() {
+        Some(MenuRow::Tab(i)) if !menu_focused(state) => MenuRow::Tab(i),
+        _ => state.menu_row(),
+    };
+    let spot = match row {
+        MenuRow::Section(i) => Spot::Section(i),
+        MenuRow::Tab(i) => Spot::Tab(i + 1),
+    };
+    let chosen = items.iter().position(|(_, s)| *s == Some(spot)).unwrap_or(0);
     let skip = (chosen + 1).saturating_sub(room);
     items.drain(..skip);
     items
+}
+
+/// The first of `total` tabs to show in `rows` rows. It follows the cursor's
+/// tab (with the menu's keys) or else the tab shown; after the wheel it
+/// stays where the wheel left it until that tab changes.
+fn tab_offset(state: &State, total: usize, rows: usize) -> usize {
+    let anchor = match state.menu_row() {
+        MenuRow::Tab(i) if menu_focused(state) => Some(i),
+        _ => state.active.checked_sub(1),
+    };
+    let mut scroll = state.tab_scroll.get();
+    if anchor != scroll.anchor {
+        scroll.wheeled = false;
+    }
+    if let Some(i) = anchor.filter(|_| !scroll.wheeled) {
+        if i < scroll.offset {
+            scroll.offset = i;
+        } else if i >= scroll.offset + rows {
+            scroll.offset = i + 1 - rows;
+        }
+    }
+    scroll.anchor = anchor;
+    scroll.offset = scroll.offset.min(total - rows.min(total));
+    state.tab_scroll.set(scroll);
+    scroll.offset
 }
 
 /// How far the rule above Settings stays from each side of the menu.
@@ -1073,11 +1225,13 @@ fn split_prompt(state: &State, area: Rect) -> (Option<Rect>, Rect) {
 }
 
 /// A video list and, when there is room, the preview panel beside it.
-fn split_preview(area: Rect) -> (Rect, Option<Rect>) {
-    if area.width < PREVIEW_MIN_WIDTH {
+/// `width`: Preview Width. The list keeps the columns it had beside the
+/// default preview: narrower than that, no preview.
+fn split_preview(area: Rect, width: u16) -> (Rect, Option<Rect>) {
+    if area.width < width + (PREVIEW_MIN_WIDTH - PREVIEW_WIDTH) {
         return (area, None);
     }
-    let [list, preview] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(PREVIEW_WIDTH)]).areas(area);
+    let [list, preview] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)]).areas(area);
     (list, Some(preview))
 }
 
@@ -1096,13 +1250,13 @@ pub fn thumbnail_area(state: &State, screen: Rect) -> Option<(String, Rect)> {
     }
     if let Some(tab) = state.active_tab() {
         let video = tab.playback.video.as_ref().filter(|_| state.details_shown(tab) && !state.fullscreen)?;
-        let inner = Block::bordered().inner(areas(screen, state.sidebar).content);
-        let cells = watch_layout(inner).thumbnail;
+        let inner = Block::bordered().inner(screen_areas(screen, state).content);
+        let cells = watch_layout(inner, state.config.ui.comments_width).thumbnail;
         return under_context_menu(state, screen, cells).filter(|c| c.height > 0).map(|c| (video.id.clone(), c));
     }
     let video = state.videos_from_selection(0).first()?;
-    let (_, list) = split_prompt(state, areas(screen, state.sidebar).content);
-    let (_, preview) = split_preview(list);
+    let (_, list) = split_prompt(state, screen_areas(screen, state).content);
+    let (_, preview) = split_preview(list, state.config.ui.preview_width);
     Some((video.id.clone(), under_context_menu(state, screen, thumbnail_cells(preview?))?))
 }
 
@@ -1129,20 +1283,20 @@ fn draw_inicio(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
                 Prompt::CookiesFile => Line::from(format!(
                     " {} {} ",
                     icons.setting(Setting::ImportCookies),
-                    lang.pick("Ruta del cookies.txt", "cookies.txt path")
+                    lang.pick("Ruta del cookies.txt", "cookies.txt Path")
                 )),
                 Prompt::DownloadDir => Line::from(format!(
                     " {} {} ",
                     icons.setting(Setting::DownloadDir),
-                    lang.pick("Carpeta de descargas", "Downloads folder")
+                    lang.pick("Carpeta de descargas", "Downloads Folder")
                 )),
                 Prompt::MediaDirs(kind) => {
                     let (icon, what) = match kind {
                         MediaKind::Video => {
-                            (icons.setting(Setting::VideoDirs), lang.pick("Carpetas de videos", "Video folders"))
+                            (icons.setting(Setting::VideoDirs), lang.pick("Carpetas de videos", "Video Folders"))
                         }
                         MediaKind::Music => {
-                            (icons.setting(Setting::MusicDirs), lang.pick("Carpetas de música", "Music folders"))
+                            (icons.setting(Setting::MusicDirs), lang.pick("Carpetas de música", "Music Folders"))
                         }
                     };
                     let how = lang.pick(
@@ -1154,7 +1308,7 @@ fn draw_inicio(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
                 Prompt::Topics => Line::from(format!(
                     " {} {} ",
                     icons.setting(Setting::DiscoverTopics),
-                    lang.pick("Temas de Descubrir, separados por coma", "Discover topics, comma separated")
+                    lang.pick("Temas de Descubrir, separados por coma", "Discover Topics, Comma Separated")
                 )),
             };
             frame.render_widget(Paragraph::new(state.query.as_str()).block(panel(title, CYAN)), input);
@@ -1217,7 +1371,7 @@ fn draw_cookies_help(frame: &mut Frame, area: Rect, lang: Lang) {
             YELLOW,
         ),
     ];
-    let title = lang.pick(" Importar sesión ", " Import login ");
+    let title = lang.pick(" Importar sesión ", " Import Login ");
     frame.render_widget(Paragraph::new(lines).block(panel(title, MUTED)), area);
 }
 
@@ -1242,8 +1396,8 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
         ))
         .fg(MUTED),
         Line::from(lang.pick(
-            "Ctrl+y ?  muestra todos los atajos explicados · Ctrl+y l  English",
-            "Ctrl+y ?  shows every shortcut, explained · Ctrl+y l  español",
+            "Ctrl+Y ?  muestra todos los atajos explicados · Ctrl+Y l  English",
+            "Ctrl+Y ?  shows every shortcut, explained · Ctrl+Y l  español",
         ))
         .fg(MUTED),
     ];
@@ -1288,12 +1442,14 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
             Items::Downloads(_) if !state.marked_download_ids().is_empty() => {
                 let marked = state.marked_download_ids().len();
                 let label = state.lang().pick("marcadas", "marked");
-                format!(" {} · {} · ✗ {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
+                let mark = icons.marked;
+                format!(" {} · {} · {mark} {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
             }
             Items::Files(files, _) if files.iter().any(|f| state.marked.contains(&f.path)) => {
                 let marked = files.iter().filter(|f| state.marked.contains(&f.path)).count();
                 let label = state.lang().pick("marcados", "marked");
-                format!(" {} · {} · ✗ {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
+                let mark = icons.marked;
+                format!(" {} · {} · {mark} {marked} {label} ", breadcrumb.join(" › "), listing.items.len())
             }
             _ => format!(" {} · {} ", breadcrumb.join(" › "), listing.items.len()),
         },
@@ -1305,7 +1461,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
         }
         Items::Channels(channels) => {
             // The description goes in the panel when there is one, other details in the row.
-            let panel = split_preview(area).1.is_some();
+            let panel = split_preview(area, state.config.ui.preview_width).1.is_some();
             channels.iter().map(|c| channel_row(state, icons, c, panel)).collect()
         }
         Items::Profiles(profiles) => profiles.iter().map(|p| profile_row(state, icons, p)).collect(),
@@ -1329,7 +1485,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
     let selected = (!listing.items.is_empty()).then_some(listing.selected);
-    let area = match (&listing.items, split_preview(area)) {
+    let area = match (&listing.items, split_preview(area, state.config.ui.preview_width)) {
         (Items::Videos(videos), (left, Some(preview))) => {
             draw_preview(frame, state, icons, view, videos.get(listing.selected), preview);
             left
@@ -1566,26 +1722,41 @@ fn size_line(state: &State, video: &Video) -> Option<Line<'static>> {
 
 fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) -> ListItem<'static> {
     const BAR: usize = 12;
+    let icons = icons(state.config.ui.icons);
     // The same mark as My Videos / My Music.
-    let mut spans = vec![Span::styled(if marked { "✗" } else { " " }, Style::new().fg(RED).bold())];
+    let mut spans = vec![Span::styled(if marked { icons.marked } else { " " }, Style::new().fg(RED).bold())];
+    // Every state's symbol takes two cells, whatever the icon set.
+    let symbol = |icon: &str| pad_cells(icon, 2);
     spans.extend(match &download.state {
         DownloadState::Running { permille, speed, eta } => {
             let done = usize::from(*permille) * BAR / 1000;
             vec![
-                Span::styled(format!(" ⇩ {:>5.1}% ", f64::from(*permille) / 10.0), Style::new().fg(YELLOW).bold()),
+                Span::styled(
+                    format!(" {}{:>5.1}% ", symbol(icons.downloading), f64::from(*permille) / 10.0),
+                    Style::new().fg(YELLOW).bold(),
+                ),
                 Span::styled("━".repeat(done), RED),
                 Span::styled("─".repeat(BAR - done), MUTED),
                 Span::styled(format!(" {speed:>10} {eta:>8}  "), MUTED),
             ]
         }
         DownloadState::Done(_) => {
-            vec![Span::styled(pad_cells(&format!(" ✓ {}", lang.pick("lista", "done")), 41), GREEN)]
+            vec![Span::styled(
+                pad_cells(&format!(" {}{}", symbol(icons.up_to_date), lang.pick("lista", "done")), 41),
+                GREEN,
+            )]
         }
         DownloadState::Failed(_) => {
-            vec![Span::styled(pad_cells(&format!(" ✗ {}", lang.pick("falló", "failed")), 41), RED)]
+            vec![Span::styled(
+                pad_cells(&format!(" {}{}", symbol(icons.failed), lang.pick("falló", "failed")), 41),
+                RED,
+            )]
         }
         DownloadState::Cancelled => {
-            vec![Span::styled(pad_cells(&format!(" ✕ {}", lang.pick("cancelada", "cancelled")), 41), MUTED)]
+            vec![Span::styled(
+                pad_cells(&format!(" {}{}", symbol(icons.stop), lang.pick("cancelada", "cancelled")), 41),
+                MUTED,
+            )]
         }
     });
     spans.push(Span::styled(download.video.title.clone(), FG));
@@ -1607,12 +1778,12 @@ fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) ->
 
 fn profile_row<'a>(state: &State, icons: &Icons, spec: &'a str) -> ListItem<'a> {
     let current = if spec == state.config.session.browser && state.config.session.cookies_file.is_empty() {
-        "● "
+        format!("{} ", icons.current)
     } else {
-        "  "
+        "  ".into()
     };
     let label = if spec.is_empty() {
-        state.lang().pick("Sin sesión", "Not logged in").to_owned()
+        state.lang().pick("Sin sesión", "Not Logged In").to_owned()
     } else {
         session::label(spec)
     };
@@ -1629,7 +1800,7 @@ fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: boo
         MediaKind::Music => icons.section(Section::MiMusica),
     };
     ListItem::new(Line::from(vec![
-        Span::styled(if marked { "✗" } else { " " }, Style::new().fg(RED).bold()),
+        Span::styled(if marked { icons.marked } else { " " }, Style::new().fg(RED).bold()),
         Span::raw(format!("{icon} ")),
         Span::styled(format!("{} ", pad(&file.folder, 28)), MAGENTA),
         Span::styled(file.name.as_str(), FG),
@@ -1684,8 +1855,8 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     let lang = state.lang();
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
-    // Global commands are two keys: Ctrl+y, let go, then the letter.
-    let all_keys = key("Ctrl+y + ?", "todos los atajos", "every shortcut");
+    // Global commands are two keys: Ctrl+Y, let go, then the letter.
+    let all_keys = key("Ctrl+Y ?", "Ayuda", "Help");
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
         key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
@@ -1709,17 +1880,17 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
             }
         };
-        vec![yes, key(lang.pick("otra tecla", "other key"), "no", "no")]
+        vec![yes, key(lang.pick("Otra tecla", "Other Key"), "no", "no")]
     } else if state.help {
-        vec![key(lang.pick("cualquier tecla", "any key"), "cerrar la ayuda", "close the help")]
+        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar la ayuda", "close the help")]
     } else if state.context.is_some() {
         vec![
             key("↑ ↓", "elegir", "choose"),
-            key(lang.pick("Enter / clic", "Enter / click"), "hacerlo", "do it"),
+            key(lang.pick("Enter / Clic", "Enter / Click"), "hacerlo", "do it"),
             key("Esc", "cerrar", "close"),
         ]
     } else if state.prefix {
-        let mut keys = vec![key("Ctrl+y +", "ahora la tecla:", "now the key:")];
+        let mut keys = vec![key("Ctrl+Y", "ahora la tecla:", "now the key:")];
         keys.extend(keymap::prefix_rows(lang));
         return keys;
     } else if let Some(prompt) = &state.prompt {
@@ -1727,6 +1898,12 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             Prompt::Videos { .. } => rows(keymap::IN_SEARCH),
             _ => vec![key("Enter", "aceptar", "accept"), key("Esc", "cancelar", "cancel")],
         }
+    } else if state.focus == Focus::Menu && state.active_tab().is_some() {
+        let mut keys = rows(keymap::IN_MENU);
+        if matches!(state.menu_row(), MenuRow::Tab(_)) {
+            keys.push(key("x", "Cerrar pestaña", "Close Tab"));
+        }
+        keys
     } else if state.key_context().related {
         vec![
             key("Enter", "ver", "play"),
@@ -1736,28 +1913,43 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             key("l", "ver después tubevibe", "tubevibe Watch Later"),
             key("c", "canal", "channel"),
             if state.active_tab().is_some_and(|t| t.ended && !t.started) {
-                key("espacio", "reproducir", "play")
+                key(keymap::space(lang), "reproducir", "play")
             } else if state.active_tab().is_some_and(|t| t.ended) {
-                key("espacio", "volver a verlo", "play it again")
+                key(keymap::space(lang), "volver a verlo", "play it again")
             } else {
-                key("espacio", "pausa", "pause")
+                key(keymap::space(lang), "pausa", "pause")
             },
         ]
     } else if state.active_tab().is_some() {
-        let mut keys = rows(keymap::IN_TAB);
-        keys.insert(1, key("Ctrl+y + x", "cerrar la pestaña", "close the tab"));
-        if state.related_shown().is_some() {
-            keys.insert(0, key("Tab", "A continuación", "Up next"));
-        }
+        let mut keys = Vec::new();
         if state.active_tab().is_some_and(|t| t.ended && !t.started) {
-            keys.insert(0, key("Enter", "reproducir", "play"));
+            keys.push(key("Enter", "reproducir", "play"));
         } else if state.active_tab().is_some_and(|t| t.ended) {
-            keys.insert(0, key("Enter", "volver a verlo", "play it again"));
+            keys.push(key("Enter", "volver a verlo", "play it again"));
         }
+        keys.push(key(keymap::space(lang), "pausa", "pause"));
+        if state.related_shown().is_some() {
+            keys.push(key("Tab", "A continuación", "Up Next"));
+        }
+        keys.push(key("Ctrl+Y x", "cerrar la pestaña", "close the tab"));
+        keys.push(key("v", "Cambiar calidad", "Quality Change"));
+        keys.push(key("b", "Cambiar códec", "Codec Change"));
+        // The rest of the tab's keys, but the ones above and Up Next's own,
+        // which the help explains.
+        let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc"];
+        keys.extend(
+            keymap::IN_TAB
+                .iter()
+                .filter(|(k, _)| !shown.contains(k))
+                .map(|(k, d)| (keymap::key_name(k, lang), d.get(lang))),
+        );
         keys.extend(rows(keymap::ON_VIDEO));
         keys
     } else if state.focus == Focus::Menu || state.listing().is_none() {
         let mut keys = rows(keymap::IN_MENU);
+        if state.focus == Focus::Menu && matches!(state.menu_row(), MenuRow::Tab(_)) {
+            keys.push(key("x", "Cerrar pestaña", "Close Tab"));
+        }
         if state.listing().is_some_and(|l| l.items == Items::About) && about_button_ready(state) {
             keys.insert(0, key("Tab", "elegir Actualizar Ahora", "select Update Now"));
         }
@@ -1774,7 +1966,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 },
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("l", "ver después tubevibe", "tubevibe Watch Later"),
-                key("a", "solo audio", "sound only"),
+                key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
                 key("d", "descargar", "download"),
@@ -1784,9 +1976,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
                 key("Enter", "ver", "play"),
-                key("Ctrl+y x", "quitar de la lista", "remove from the list"),
+                key("Ctrl+Y x", "quitar de la lista", "remove from the list"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("a", "solo audio", "sound only"),
+                key("a", "solo audio", "audio only"),
                 key("c", "canal", "channel"),
                 back,
             ],
@@ -1802,7 +1994,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 key("Enter", "ver", "play"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("l", "ver después tubevibe", "tubevibe Watch Later"),
-                key("a", "solo audio", "sound only"),
+                key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
                 key("d", "descargar", "download"),
@@ -1824,9 +2016,9 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 },
                 // Several files: mark them first, then `x` sends them all.
                 if state.marked_files().is_empty() {
-                    key(lang.pick("espacio", "space"), "marcar varios", "mark several")
+                    key(keymap::space(lang), "marcar varios", "mark several")
                 } else {
-                    key(lang.pick("espacio", "space"), "marcar / desmarcar", "mark / unmark")
+                    key(keymap::space(lang), "marcar / desmarcar", "mark / unmark")
                 },
                 if state.marked_files().is_empty() {
                     key("x", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
@@ -1836,7 +2028,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                 back,
             ],
             Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
-                key(lang.pick("espacio", "space"), "marcar / desmarcar", "mark / unmark"),
+                key(keymap::space(lang), "marcar / desmarcar", "mark / unmark"),
                 key("x", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
                 back,
             ],
@@ -1855,7 +2047,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
                     None => {}
                 }
                 if selected.is_some() {
-                    keys.push(key(lang.pick("espacio", "space"), "marcar varios", "mark several"));
+                    keys.push(key(keymap::space(lang), "marcar varios", "mark several"));
                 }
                 keys.push(back);
                 keys
@@ -1872,7 +2064,7 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
     hints
 }
 
-/// As many hints as fit in the line, whole; the last one (`Ctrl+y + ?`, every
+/// As many hints as fit in the line, whole; the last one (`Ctrl+Y ?`, every
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, &str)], area: Rect) {
     let hint = |(key, description): &(String, &str)| {
@@ -1936,7 +2128,7 @@ fn draw_help(frame: &mut Frame, lang: Lang) {
     let area = help_area(frame.area(), lang);
     frame.render_widget(Clear, area);
     let title =
-        lang.pick(" ⌨  Atajos de teclado · cualquier tecla cierra ", " ⌨  Keyboard shortcuts · any key closes ");
+        lang.pick(" ⌨  Atajos de teclado · cualquier tecla cierra ", " ⌨  Keyboard Shortcuts · Any Key Closes ");
     let block = panel(title, MAGENTA);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -2151,7 +2343,8 @@ fn draw_context_menu(frame: &mut Frame, menu: &ContextMenu, lang: Lang) {
 /// What the system has and lacks, with the command that installs it.
 fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
     let lang = state.lang();
-    let title = format!(" {} ", lang.pick("Revisión del sistema", "System check"));
+    let icons = icons(state.config.ui.icons);
+    let title = format!(" {} ", lang.pick("Revisión del sistema", "System Check"));
     let block = panel(title, BLUE);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -2164,11 +2357,11 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
     let width = checks.iter().map(|c| c.tool.program().len()).max().unwrap_or(0) + 2;
     for check in checks {
         let (mark, color, note) = match (&check.found, check.outdated) {
-            (Some(_), false) => ("✓", GREEN, String::new()),
+            (Some(_), false) => (icons.up_to_date, GREEN, String::new()),
             (Some((keyring, _)), true) if check.tool == Tool::Keyring => {
                 let missing = if keyring.starts_with("KWALLET") { "kwallet-query" } else { "secretstorage" };
                 (
-                    "!",
+                    icons.warning,
                     YELLOW,
                     format!(
                         "{}: {missing}",
@@ -2176,15 +2369,20 @@ fn draw_system(frame: &mut Frame, state: &State, area: Rect) {
                     ),
                 )
             }
-            (Some(_), true) => {
-                ("!", YELLOW, lang.pick("viejo: YouTube cambia seguido", "too old: YouTube changes often").into())
+            (Some(_), true) => (
+                icons.warning,
+                YELLOW,
+                lang.pick("viejo: YouTube cambia seguido", "too old: YouTube changes often").into(),
+            ),
+            (None, _) if check.tool.required() => {
+                (icons.failed, RED, lang.pick("falta · necesario", "missing · needed").into())
             }
-            (None, _) if check.tool.required() => ("✗", RED, lang.pick("falta · necesario", "missing · needed").into()),
-            (None, _) => ("·", MUTED, lang.pick("no está · opcional", "not installed · optional").into()),
+            (None, _) => (icons.optional, MUTED, lang.pick("no está · opcional", "not installed · optional").into()),
         };
         let version = check.found.as_ref().and_then(|(_, v)| v.clone()).unwrap_or_default();
         let mut row = vec![
-            Span::styled(format!("  {mark} "), Style::new().fg(color).bold()),
+            // Two cells for every mark, so the names line up in any icon set.
+            Span::styled(format!("  {} ", pad_cells(mark, 2)), Style::new().fg(color).bold()),
             Span::styled(pad(check.tool.program(), width), Style::new().fg(FG).bold()),
             Span::styled(pad(&version, 16), MUTED),
             Span::styled(check.tool.purpose().get(lang), FG),
@@ -2315,7 +2513,7 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
                 "Compilado desde el código: git pull && cargo build --release",
                 "Built From Source: Run git pull && cargo build --release",
             )),
-            Replace::Cargo => Some(lang.pick("Instalado con cargo install", "Installed With cargo install")),
+            Replace::Cargo => Some(lang.pick("Instalado con cargo install", "Installed with cargo install")),
             Replace::Package => Some(lang.pick(
                 "Instalado con un paquete: actualizalo con el paquete",
                 "Installed From a Package: Update It With the Package",
@@ -2666,13 +2864,14 @@ mod tests {
 
     #[test]
     fn settings_screen_shows_labels_and_values() {
-        let screen = render(&open_settings());
+        // Taller than the default screen: the list scrolls past 36 rows.
+        let screen = render_screen(&open_settings(), 130, 46).join("\n");
         for setting in Setting::ALL {
             assert!(screen.contains(setting.label(Lang::Es)), "{setting:?}\n{screen}");
         }
         assert!(screen.contains("720p"));
         assert!(screen.contains("~/Videos"));
-        assert!(screen.contains("original + subtítulos"));
+        assert!(screen.contains("Original + subtítulos"));
     }
 
     #[test]
@@ -2703,10 +2902,43 @@ mod tests {
     fn tabs_appear_in_the_menu_only() {
         let screen = render(&with_tab());
         assert!(screen.contains("PESTAÑAS"));
-        assert_eq!(screen.matches("1 ▶ title a").count(), 1, "the menu, no tab bar: {screen}");
+        assert_eq!(screen.matches("│ ▶ title a ").count(), 1, "the menu, no tab bar: {screen}");
         assert!(!screen.contains("Inicio"), "{screen}");
         // The tab's pane starts on the first row, next to the menu's title.
         assert!(screen.lines().next().unwrap().contains("▶ title a · chan a"), "{screen}");
+    }
+
+    #[test]
+    fn video_tab_bar_is_short_and_ordered() {
+        let mut s = with_tab();
+        s.update(Action::ToggleUiLang);
+        let keys: Vec<(String, &str)> = hints(&s);
+        let at = |k: &str, d: &str| keys.iter().position(|(key, desc)| key == k && *desc == d);
+        assert_eq!(
+            keys.iter().filter(|(k, _)| k == "Enter").count(),
+            keys.iter().filter(|(_, d)| d.starts_with("play")).count()
+        );
+        assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
+        assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
+        assert!(at("Space", "pause") < at("Ctrl+Y x", "close the tab"));
+        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Help"));
+        s.update(Action::ToggleUiLang);
+        let keys = hints(&s);
+        assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
+        assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
+        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Ayuda"));
+    }
+
+    #[test]
+    fn menu_cursor_lights_the_tab_it_is_on() {
+        let mut s = with_tab();
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        let screen = render(&s);
+        assert!(screen.contains("▌▶ title a"), "{screen}");
+        s.update(Action::Down);
+        let screen = render(&s);
+        assert!(!screen.contains("▌▶ title a") && screen.contains("▌⚙"), "on Settings now: {screen}");
     }
 
     #[test]
@@ -2759,15 +2991,15 @@ mod tests {
     #[test]
     fn hints_follow_the_context() {
         let mut s = state();
-        assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+y + ?"]);
+        assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+Y ?"]);
         s.update(Action::Prefix);
-        assert!(hint_keys(&s).contains(&"b".to_string()) && hint_keys(&s).contains(&"0-9".to_string()));
+        assert!(hint_keys(&s).contains(&"b".to_string()) && !hint_keys(&s).contains(&"0-9".to_string()));
         let tab = with_tab();
-        assert!(hint_keys(&tab).contains(&"espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
+        assert!(hint_keys(&tab).contains(&"Espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
         let list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(
             hint_keys(&list),
-            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+y + ?"],
+            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+Y ?"],
             "Inicio: a feed"
         );
         let mut search = state();
@@ -2780,14 +3012,14 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let mut s = state();
         s.update(Action::Prefix);
-        assert_eq!(hints(&s)[0].0, "Ctrl+y +", "says the key comes next");
+        assert_eq!(hints(&s)[0].0, "Ctrl+Y", "says the key comes next");
         let mut list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(hint(&list, "s"), Some("suscribirse"));
         list.subs.insert("UCa".into());
         assert_eq!(hint(&list, "s"), Some("desuscribirse (pide confirmar)"));
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
-        assert_eq!(hint(&files, "espacio"), Some("marcar varios"));
+        assert_eq!(hint(&files, "Espacio"), Some("marcar varios"));
         assert_eq!(hint(&files, "x"), Some("este a la papelera (pide confirmar)"));
         files.update(Action::ToggleMark);
         assert_eq!(hint(&files, "x"), Some("los marcados a la papelera (pide confirmar)"));
@@ -2801,8 +3033,8 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
         for kind in [MediaKind::Video, MediaKind::Music] {
             let s = with_items(Items::Files(vec![file("a")], kind));
-            assert_eq!(hint(&s, "espacio"), Some("marcar varios"), "{kind:?}");
-            assert!(render_sized(&s, &VIEW, 100).contains("espacio marcar varios"), "{kind:?} fits at 100 columns");
+            assert_eq!(hint(&s, "Espacio"), Some("marcar varios"), "{kind:?}");
+            assert!(render_sized(&s, &VIEW, 100).contains("Espacio marcar varios"), "{kind:?} fits at 100 columns");
         }
         let states = [
             DownloadState::Done("/v/a.mp4".into()),
@@ -2811,11 +3043,11 @@ mod tests {
         ];
         for state in states {
             let mut s = with_items(Items::Downloads(vec![Download { id: 0, video: video("a"), state }]));
-            assert_eq!(hint(&s, "espacio"), Some("marcar varios"));
+            assert_eq!(hint(&s, "Espacio"), Some("marcar varios"));
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
-            assert!(screen.contains("space mark several"), "{screen}");
-            assert!(screen.contains("every shortcut"), "whole hints only, the last one kept");
+            assert!(screen.contains("Space mark several"), "{screen}");
+            assert!(screen.contains("Ctrl+Y ? Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -2832,9 +3064,9 @@ mod tests {
         s.marked_downloads.extend([0, 2]);
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
-        assert_eq!(screen.matches("✗ ✓ done").count(), 2, "{screen}");
+        assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
         assert_eq!(hint(&s, "x"), Some("the marked ones: trash (asks first)"));
-        assert_eq!(hint(&s, "space"), Some("mark / unmark"));
+        assert_eq!(hint(&s, "Space"), Some("mark / unmark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
         assert!(render(&s).contains("Move 3 files to the trash?"));
@@ -2864,7 +3096,7 @@ mod tests {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
         assert!(screen.contains("w ver después YouTube"), "{screen}");
         assert!(screen.contains("l ver después tubevibe"), "{screen}");
-        assert!(screen.contains("Ctrl+y + ? todos los atajos"));
+        assert!(screen.contains("Ctrl+Y ? Ayuda"));
     }
 
     #[test]
@@ -2883,7 +3115,7 @@ mod tests {
         s.config.session.browser = "brave:Default".into();
         let screen = render(&s);
         assert!(screen.contains("brave · Default"), "{screen}");
-        assert!(screen.contains("original + subtítulos"));
+        assert!(screen.contains("Original + subtítulos"));
     }
 
     #[test]
@@ -2949,13 +3181,13 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "every shortcut"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "Ctrl+Y ? Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
         assert!(!screen.contains("Ver después"), "{screen}");
         s.update(Action::ToggleHelp);
-        assert!(render(&s).contains("Keyboard shortcuts"));
+        assert!(render(&s).contains("Keyboard Shortcuts"));
     }
 
     #[test]
@@ -2975,8 +3207,8 @@ mod tests {
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("Ctrl+y + ? todos los atajos"), "{line}");
-        assert!(line.contains("espacio pausa"), "{line}");
+        assert!(line.contains("Ctrl+Y ? Ayuda"), "{line}");
+        assert!(line.contains("Espacio pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
 
@@ -3077,7 +3309,7 @@ mod tests {
     }
 
     #[test]
-    fn the_menu_starts_after_a_blank_row_and_clicks_hit_every_entry() {
+    fn the_menu_starts_under_the_logo_and_clicks_hit_every_entry() {
         let screen_area = Rect::new(0, 0, 130, 40);
         for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
             let mut s = state();
@@ -3085,10 +3317,7 @@ mod tests {
             let screen = render(&s);
             let (_, title) = find(&screen, "tube");
             let (_, header) = find(&screen, " YOUTUBE");
-            assert_eq!(header, title + 2, "one blank row between the title and YOUTUBE:\n{screen}");
-            let blank = screen.lines().nth(usize::from(title + 1)).unwrap();
-            assert!(blank.chars().take(20).all(|c| c == ' ' || c == '│'), "{blank:?}");
-            assert_eq!(spot(&s, None, screen_area, 3, title + 1), None, "the blank row is not an entry");
+            assert_eq!(header, title + 1, "YOUTUBE right under the logo:\n{screen}");
             assert_eq!(spot(&s, None, screen_area, 3, header), None, "nor the header");
             let icons = icons(set);
             for (i, section) in Section::ALL.iter().enumerate() {
@@ -3193,19 +3422,19 @@ mod tests {
     #[test]
     fn a_short_menu_puts_settings_right_below_and_scrolls_to_the_choice() {
         let mut s = state();
-        // 29 rows: one row short of the whole menu, no room for a gap.
-        let screen = render_screen(&s, 130, 29);
+        // 28 rows: one row short of the whole menu, no room for a gap.
+        let screen = render_screen(&s, 130, 28);
         assert!(!screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))), "cut at the bottom");
         let downloads = row_of(&screen, Section::Descargas.label(Lang::Es));
         assert!(screen[downloads + 2].contains("──"), "blank, then the rule: {}", screen.join("\n"));
         // Up from the first section wraps to Quit, which is scrolled into view.
         s.update(Action::Up);
         assert_eq!(Section::ALL[s.menu], Section::Salir);
-        let screen = render_screen(&s, 130, 29);
+        let screen = render_screen(&s, 130, 28);
         let quit = row_of(&screen, Section::Salir.label(Lang::Es));
-        assert_eq!(quit, 25, "the menu's last row: {}", screen.join("\n"));
+        assert_eq!(quit, 24, "the menu's last row: {}", screen.join("\n"));
         let salir = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
-        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 29), 5, quit as u16), Some(Spot::Section(salir)));
+        assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 28), 5, quit as u16), Some(Spot::Section(salir)));
         // And down from it back to the top.
         s.update(Action::Down);
         assert_eq!(s.menu, 0);
@@ -3316,7 +3545,8 @@ mod tests {
         assert_eq!(spot_at(&s, find(&screen, "title 30  1:00")), Some(Spot::Row(30)));
         s.update(Action::Enter); // plays video 50 in tab 1
         let screen = render(&s);
-        assert_eq!(spot_at(&s, find(&screen, "1 ▶ title 50")), Some(Spot::Tab(1)));
+        let (x, y) = find(&screen, "│ ▶ title 50 ");
+        assert_eq!(spot_at(&s, (x + 2, y)), Some(Spot::Tab(1)));
         assert!(!screen.contains("Inicio"), "no tab bar to click");
         assert_eq!(spot_at(&s, (80, 20)), Some(Spot::Video));
         let info = Info { position: Some(0.0), duration: Some(100.0), ..Info::default() };
@@ -3345,9 +3575,9 @@ mod tests {
         assert_eq!(text(&lines(9))[2..], ["uno dos", "tres", "cuatro", "cinco", "seis"]);
         assert_eq!(text(&lines(4))[2..], ["uno dos", "tres…"]);
         assert_eq!(text(&lines(4))[0], "", "a blank line above the heading");
-        assert!(text(&lines(4))[1].starts_with("✦ AI summary"));
+        assert!(text(&lines(4))[1].starts_with("✦ AI Summary"));
         let none = summary_lines(None, 40, 9, Lang::En, "✦");
-        assert_eq!(text(&none), ["", "✦ AI summary · not available for this video"]);
+        assert_eq!(text(&none), ["", "✦ AI Summary · not available for this video"]);
         assert!(summary_lines(None, 40, 1, Lang::En, "✦").is_empty());
     }
 
@@ -3385,9 +3615,19 @@ mod tests {
         let (_, status) = find(&screen, "▶ Enter lo reproduce");
         let (x, heading) = find(&screen, "✦ Resumen IA");
         assert_eq!(heading, status + 2, "one blank line under the status line:\n{screen}");
-        assert!(blank_above(&screen, x, heading), "{screen}");
+        // Across the left column, under the thumbnail, all of it; Up next one
+        // blank row below its last line.
+        let (up_next_x, up_next) = find(&screen, "┌ A continuación");
+        assert_eq!(x, up_next_x, "the left column's width:\n{screen}");
         assert!(screen.contains("UFD Tech explores") && screen.contains("THE END."), "whole: {screen}");
-        assert!(find(&screen, "THE END.").1 < find(&screen, "A continuación").1, "Up next below it");
+        assert_eq!(find(&screen, "THE END.").1 + 2, up_next, "Up next right below it:\n{screen}");
+        // The comments run the whole height of the tab, on the right.
+        let lines: Vec<&str> = screen.lines().collect();
+        let (cx, top) = find(&screen, "┌ Comentarios");
+        assert_eq!(top, 1, "from the tab's top:\n{screen}");
+        let bottom = lines.iter().rposition(|l| l.chars().nth(usize::from(cx)) == Some('└')).unwrap();
+        assert_eq!(bottom, lines.len() - 4, "to its bottom:\n{screen}");
+        assert!(cx > up_next_x + 40, "on the right");
         // Clicks on Up next find the rows where they were drawn.
         let screen_area = Rect::new(0, 0, 130, 40);
         let (x, y) = find(&screen, "title r2  1:00");
@@ -3396,7 +3636,8 @@ mod tests {
         let (plain, plain_screen) = details_tab(None);
         let (hx, hy) = find(&plain_screen, "✦ Resumen IA · no disponible para este video");
         assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
-        assert!(blank_above(&plain_screen, hx, hy), "{plain_screen}");
+        assert_eq!(hy + 2, find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
+        assert_eq!(hx, find(&plain_screen, "┌ A continuación").0);
         let (x, y2) = find(&plain_screen, "title r2  1:00");
         assert!(y2 < y, "Up next moves up without a summary");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
@@ -3419,6 +3660,44 @@ mod tests {
         assert!(!screen.contains("✦"), "live: never asked: {screen}");
         let (x, y) = find(&screen, "title r1  1:00");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
+    }
+
+    /// The tab drawn at `width` × `height`, window mode.
+    fn tab_screen(s: &State, width: u16, height: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, s, &View { embedded: false, ..VIEW })).unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer.content.chunks(width as usize).map(|row| row.iter().map(|c| c.symbol()).collect()).collect()
+    }
+
+    #[test]
+    fn up_next_keeps_seven_rows_under_a_long_summary_at_any_height() {
+        let long = "palabra ".repeat(800);
+        let (s, _) = details_tab(Some(&long));
+        for height in [24, 30, 40, 60] {
+            let screen = tab_screen(&s, 130, height);
+            let top = row_of(&screen, "┌ A continuación");
+            // The tab's inside ends 4 rows above the screen's: border, status, hints.
+            let bottom = usize::from(height) - 4;
+            assert_eq!(bottom - top + 1, 7, "{height} rows:\n{}", screen.join("\n"));
+            assert!(screen.iter().any(|l| l.contains("palabra…")), "cut with the mark");
+            // A click on Up next, after the layout changed size.
+            let (x, y) = (screen[top + 1].find("title r1").unwrap(), top + 1);
+            let x = screen[y][..x].chars().count() as u16;
+            assert_eq!(spot(&s, None, Rect::new(0, 0, 130, height), x, y as u16), Some(Spot::Row(0)));
+        }
+    }
+
+    #[test]
+    fn a_short_summary_takes_only_its_rows_and_narrow_tabs_have_no_comments() {
+        let (s, _) = details_tab(Some("Corto."));
+        let screen = tab_screen(&s, 130, 40);
+        let summary = row_of(&screen, "Corto.");
+        assert_eq!(row_of(&screen, "┌ A continuación"), summary + 2, "{}", screen.join("\n"));
+        // Narrow: no comments, Up next and the summary take the whole width.
+        let screen = tab_screen(&s, 100, 40);
+        assert!(!screen.iter().any(|l| l.contains("Comentarios")), "{}", screen.join("\n"));
+        assert!(screen[row_of(&screen, "┌ A continuación")].trim_end().ends_with("┐│"));
     }
 
     #[test]
@@ -3466,6 +3745,55 @@ mod tests {
     }
 
     #[test]
+    fn only_the_pane_with_the_keys_is_lit_in_a_video_tab() {
+        let mut s = with_items(Items::Videos(vec![video("a")]));
+        s.video_window = true;
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        let watch = Watch {
+            views: None,
+            likes: None,
+            published: None,
+            subscribers: None,
+            related: vec![video("r1"), video("r2")],
+            rating: None,
+            comments_token: None,
+            summary: None,
+        };
+        s.update(Action::Watched(tab, Ok(watch)));
+        let content = areas(Rect::new(0, 0, 130, 40), true).content;
+        let corner = |s: &State| {
+            let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+            terminal.draw(|f| draw(f, s, &View { embedded: false, ..VIEW })).unwrap();
+            terminal.backend().buffer()[(content.right() - 1, content.y)].fg
+        };
+        assert_eq!(corner(&s), BLUE, "the video pane has the keys");
+        s.update(Action::ToggleFocus);
+        assert!(s.key_context().related);
+        assert_eq!(corner(&s), MUTED, "Up Next has them: the video pane is dim");
+        let esc = keymap::map(
+            ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Esc),
+            s.key_context(),
+        )
+        .unwrap();
+        s.update(esc);
+        assert_eq!(corner(&s), BLUE, "Esc in Up Next: back to the video, lit again");
+        assert_eq!(s.active, 1, "still on the tab");
+        // Esc again: the menu has the keys, the tab stays shown and goes dim.
+        let esc = keymap::map(
+            ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Esc),
+            s.key_context(),
+        )
+        .unwrap();
+        s.update(esc);
+        assert_eq!((s.active, s.focus), (1, Focus::Menu));
+        assert_eq!(corner(&s), MUTED, "the video pane is dim while the menu has the keys");
+        let screen = render_with(&s, &View { embedded: false, ..VIEW });
+        assert!(screen.contains("▌▶ title a"), "the cursor's tab is lit: {screen}");
+        assert!(screen.contains("A continuación · 2 · Tab"), "Up Next not lit either: {screen}");
+    }
+
+    #[test]
     fn video_tab_in_window_mode_shows_details_and_related() {
         let mut s = with_items(Items::Videos(vec![video("a")]));
         s.video_window = true;
@@ -3505,10 +3833,10 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
         assert_eq!(id, "a");
-        assert_eq!((cells.width, cells.height), (34, 34 * 9 / 32), "a third of the tab, at most 36 columns");
+        assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
         let (x, y) = find(&screen, "title r2  1:00");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        assert_eq!(hints(&s)[0].0, "Tab");
+        assert_eq!((hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()), ("Espacio", "Tab"), "Space before Tab");
         s.update(Action::ToggleFocus);
         let screen = render_with(&s, &view);
         assert!(screen.contains("A continuación · 2 "), "{screen}");
@@ -3754,14 +4082,14 @@ mod tests {
         s.update(Action::SystemChecked(Manager::Apt, vec![missing, old, fine, keyring]));
         let screen = render(&s);
         for text in [
-            "✗ mpv",
+            "✘  mpv",
             "falta · necesario",
             "sudo apt install mpv",
-            "! yt-dlp",
+            "△  yt-dlp",
             "2024.04.09",
             "pipx install yt-dlp",
-            "✓ kitty",
-            "! keyring",
+            "✔  kitty",
+            "△  keyring",
             "falta: secretstorage",
             "pipx inject yt-dlp secretstorage",
             "Comandos para: apt",
@@ -3778,5 +4106,392 @@ mod tests {
         assert_eq!(pad("abcdef", 4), "abcd");
         assert_eq!(pad_cells("🔴 en vivo", 14), "🔴 en vivo    ");
         assert_eq!(pad_cells("● en vivo", 14), "● en vivo     ");
+    }
+
+    /// The text of each sidebar row drawn in the "shown" mark (not the cursor's highlight).
+    fn shown_rows(s: &State) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+        terminal.draw(|f| draw(f, s, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let side = areas(Rect::new(0, 0, 130, 40), true).sidebar.unwrap();
+        (side.y + 1..side.bottom() - 1)
+            .filter(|&y| {
+                (side.x + 1..side.right() - 1).any(|x| {
+                    let c = &buffer[(x, y)];
+                    c.symbol().chars().any(char::is_alphanumeric) && c.fg == SHOWN && c.bg != HIGHLIGHT
+                })
+            })
+            .map(|y| {
+                (side.x + 1..side.right() - 1).map(|x| buffer[(x, y)].symbol()).collect::<String>().trim().to_owned()
+            })
+            .collect()
+    }
+
+    fn at(section: Section) -> usize {
+        Section::ALL.iter().position(|x| *x == section).unwrap()
+    }
+
+    #[test]
+    fn one_row_is_marked_shown() {
+        let en = |mut s: State| {
+            s.config.ui.lang = Some(Lang::En);
+            s
+        };
+        // A list shown, the cursor moved off it: its row keeps the mark.
+        let mut s = en(with_items(Items::Videos(vec![video("a")])));
+        let shown = s.shown_row();
+        s.focus = Focus::Menu;
+        s.menu = at(Section::Configuracion);
+        let rows = shown_rows(&s);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert!(shown.is_some());
+        // The cursor on the shown row: its focus highlight, no second mark.
+        if let Some(crate::app::MenuRow::Section(i)) = shown {
+            s.menu = i;
+            assert_eq!(shown_rows(&s), Vec::<String>::new());
+        }
+        // A tab shown, the cursor on a section: the tab's row has the mark, alone.
+        let mut s = en(with_items(Items::Videos(vec![video("a")])));
+        s.update(Action::Enter);
+        assert!(s.active > 0);
+        s.focus = Focus::Menu;
+        s.menu_tab = None;
+        s.menu = at(Section::Descargas);
+        let rows = shown_rows(&s);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert!(!rows[0].contains(Section::Descargas.label(Lang::En)), "{rows:?}");
+        // Settings shown: Settings has the mark.
+        let mut s = en(open_settings());
+        s.focus = Focus::Menu;
+        s.menu = at(Section::Descargas);
+        assert_eq!(shown_rows(&s).len(), 1);
+        assert!(shown_rows(&s)[0].contains(Section::Configuracion.label(Lang::En)), "{:?}", shown_rows(&s));
+    }
+
+    /// 35 video tabs (titles "title 0" … "title 34"), the last one shown.
+    fn with_35_tabs() -> State {
+        let mut s = with_items(Items::Videos((0..35).map(|i| video(&i.to_string())).collect()));
+        for i in 0..35 {
+            s.update(Action::GoTab(0));
+            s.focus = Focus::List;
+            s.stack[0].selected = i;
+            s.update(Action::Enter);
+        }
+        assert_eq!((s.tabs.len(), s.active), (35, 35));
+        s
+    }
+
+    fn tab_rows_shown(screen: &[String]) -> Vec<usize> {
+        (0..35).filter(|i| screen.iter().any(|l| l.contains(&format!(" title {i} ")) && l.starts_with('│'))).collect()
+    }
+
+    #[test]
+    fn thirty_five_tabs_scroll_between_a_fixed_top_and_bottom() {
+        let mut s = with_35_tabs();
+        let empty = render_screen(&state(), 130, 40);
+        let screen = render_screen(&s, 130, 40);
+        let at = |screen: &[String], text: &str| row_of(screen, text);
+        // The top and the bottom are where they are with no tabs.
+        for label in [Section::Inicio, Section::Descargas, Section::Configuracion, Section::Salir] {
+            let label = label.label(Lang::Es);
+            assert_eq!(at(&screen, label), at(&empty, label), "{label}\n{}", screen.join("\n"));
+        }
+        // No rule above the tabs, just a blank row; the title's chevron says more
+        // are above, and with the last tab in view no chevron row below it.
+        let (up, down) = (icons(s.config.ui.icons).more_above, icons(s.config.ui.icons).more_below);
+        let title = at(&screen, "PESTAÑAS");
+        assert!(screen[title - 1].trim_matches(['│', ' ']).is_empty(), "{}", screen.join("\n"));
+        assert!(screen[title].contains(up) && !screen.iter().any(|l| l.contains(down)), "{}", screen.join("\n"));
+        let last = at(&screen, "│ ▶ title 34 ");
+        assert!(screen[last + 1].trim_matches(['│', ' ']).is_empty(), "the gap above the rule");
+        // The tab shown is in view, the last rows of the tab area.
+        let rows = tab_rows_shown(&screen);
+        assert_eq!(*rows.last().unwrap(), 34, "{}", screen.join("\n"));
+        assert!(rows.len() < 35 && rows.windows(2).all(|w| w[1] == w[0] + 1), "{rows:?}");
+        let count = rows.len();
+        // Alt+. wraps to the first tab: the list follows.
+        s.update(Action::NextTab);
+        let screen = render_screen(&s, 130, 40);
+        // As many rows: the "more below" chevron takes the blank row above the rule.
+        assert_eq!(tab_rows_shown(&screen), (0..count).collect::<Vec<_>>());
+        // At the top: no chevron by the title, a down one in its own row below
+        // the last tab shown, in the title chevron's column.
+        let title = at(&screen, "PESTAÑAS");
+        assert!(!screen[title].contains(up), "{}", screen[title]);
+        let below = at(&screen, down);
+        assert_eq!(below, at(&screen, &format!("│ ▶ title {} ", count - 1)) + 1);
+        assert!(screen[below + 1].contains("──"), "the rule right under it:\n{}", screen.join("\n"));
+        let column = |line: &str, icon: &str| line[..line.find(icon).unwrap()].chars().count();
+        assert_eq!(column(&screen[below], down), "│ PESTAÑAS ".chars().count(), "{}", screen[below]);
+        // In the middle: both.
+        s.update(Action::FocusMenu);
+        for _ in 0..17 {
+            s.update(Action::Down);
+        }
+        let screen = render_screen(&s, 130, 40);
+        let title = at(&screen, "PESTAÑAS");
+        assert!(screen[title].contains(up) && screen.iter().any(|l| l.contains(down)), "{}", screen.join("\n"));
+        assert_eq!(column(&screen[title], up), column(&screen[at(&screen, down)], down));
+        s.update(Action::GoTab(1));
+        // Alt+, back to the last.
+        s.update(Action::PrevTab);
+        assert_eq!(*tab_rows_shown(&render_screen(&s, 130, 40)).last().unwrap(), 34);
+        // The menu's cursor walks the tabs up; the list keeps it in view, then
+        // down past the last tab to Settings while the tab shown stays put.
+        s.update(Action::FocusMenu);
+        for _ in 0..34 {
+            s.update(Action::Up);
+        }
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(tab_rows_shown(&screen)[0], 0);
+        assert!(screen.iter().any(|l| l.contains("▌▶ title 0 ")), "{}", screen.join("\n"));
+        // Exactly one shown mark, on tab 35 — out of view now, so none drawn.
+        assert!(shown_rows(&s).is_empty(), "{:?}", shown_rows(&s));
+        // The wheel scrolls the tabs on its own, and no further than the end.
+        for _ in 0..100 {
+            s.update(Action::ScrollTabs(1));
+        }
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(*tab_rows_shown(&screen).last().unwrap(), 34);
+        s.update(Action::ScrollTabs(-3));
+        let screen = render_screen(&s, 130, 40);
+        assert_eq!(*tab_rows_shown(&screen).last().unwrap(), 31);
+        // Settings, About and Quit are still at the bottom, clickable.
+        let quit = at(&screen, Section::Salir.label(Lang::Es));
+        assert_eq!(quit, at(&empty, Section::Salir.label(Lang::Es)));
+    }
+
+    #[test]
+    fn a_short_menu_keeps_one_tab_row_then_falls_back_to_one_scrolled_list() {
+        let mut s = with_35_tabs();
+        // The shortest height that still pins both ends has one tab row.
+        let empty = render_screen(&state(), 130, 40);
+        let quit_row = row_of(&empty, Section::Salir.label(Lang::Es));
+        let mut pinned = None;
+        for height in (10..40).rev() {
+            let screen = render_screen(&s, 130, height);
+            let rows = tab_rows_shown(&screen);
+            if rows.len() == 1 {
+                pinned = Some(height);
+                assert_eq!(rows, [34], "the tab shown");
+                // The first tab shown instead: one tab row, the down chevron right
+                // above the rule (no blank row between).
+                let mut first = s.clone();
+                first.update(Action::GoTab(1));
+                let screen = render_screen(&first, 130, height);
+                assert_eq!(tab_rows_shown(&screen), [0]);
+                let down = icons(first.config.ui.icons).more_below;
+                let below = row_of(&screen, down);
+                assert!(screen[below + 1].contains("──"), "{}", screen.join("\n"));
+                assert!(screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))));
+                assert!(screen.iter().any(|l| l.contains("YOUTUBE")), "the top stays");
+                break;
+            }
+        }
+        let pinned = pinned.expect("a height with one tab row");
+        assert!(pinned < 40 && quit_row > 0);
+        // One row shorter: one list, scrolled to the cursor (Quit after Up from the first section).
+        let screen = render_screen(&s, 130, pinned - 1);
+        assert!(tab_rows_shown(&screen).contains(&34), "the tab shown: {}", screen.join("\n"));
+        s.update(Action::FocusMenu);
+        s.menu_tab = None;
+        s.menu = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
+        let screen = render_screen(&s, 130, pinned - 1);
+        assert!(screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))), "{}", screen.join("\n"));
+    }
+
+    #[test]
+    fn tab_rows_have_no_number() {
+        let screen = render(&with_tab());
+        assert!(screen.contains("│ ▶ title a ") && !screen.contains("1 ▶ title a"), "{screen}");
+    }
+
+    #[test]
+    fn youtube_is_right_under_the_logo() {
+        let screen = render_screen(&state(), 130, 40);
+        assert!(screen[0].contains("▶ tubevibe") && screen[1].contains("│ YOUTUBE "), "{}", screen.join("\n"));
+        let tubevibe = row_of(&screen, "│ TUBEVIBE ");
+        assert!(screen[tubevibe - 1].trim_matches(['│', ' ']).is_empty(), "later groups keep their blank row");
+    }
+
+    #[test]
+    fn few_tabs_have_no_chevrons_and_no_rule_above() {
+        for set in [IconSet::Emoji, IconSet::Nerd, IconSet::Unicode] {
+            let mut s = with_tab();
+            s.config.ui.icons = set;
+            let screen = render_screen(&s, 130, 40);
+            let i = icons(set);
+            assert!(!screen.iter().any(|l| l.contains(i.more_above) || l.contains(i.more_below)), "{set:?}");
+            let title = row_of(&screen, "PESTAÑAS");
+            assert!(!screen[title - 1].contains("──"), "{}", screen.join("\n"));
+            assert_eq!(
+                screen.iter().filter(|l| l.contains("──") && l.starts_with("│ ")).count(),
+                1,
+                "only above Settings"
+            );
+        }
+    }
+
+    #[test]
+    fn x_in_the_menu_closes_the_tab_under_the_cursor() {
+        let mut s = with_35_tabs();
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(34));
+        assert!(hint_keys(&s).contains(&"x".to_string()), "x Close Tab on a tab row");
+        let x = |s: &State| {
+            keymap::map(
+                ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Char('x')),
+                s.key_context(),
+            )
+        };
+        let shown = s.tabs[34].id;
+        assert_eq!(s.update(x(&s).unwrap()), vec![Effect::Close(shown)]);
+        // The shown tab is gone: the previous one is shown, like Ctrl+Y x, and has the cursor.
+        assert_eq!((s.tabs.len(), s.active, s.menu_row()), (34, 34, MenuRow::Tab(33)));
+        // Not the shown tab: the next one gets the cursor, the shown one stays.
+        s.update(Action::Up);
+        s.update(Action::Up);
+        let closed = s.tabs[31].id;
+        assert_eq!(s.update(x(&s).unwrap()), vec![Effect::Close(closed)]);
+        assert_eq!((s.tabs.len(), s.active, s.menu_row()), (33, 33, MenuRow::Tab(31)));
+        let screen = render_screen(&s, 130, 40);
+        assert!(screen.iter().any(|l| l.contains("▌▶ title 32 ")), "{}", screen.join("\n"));
+        // Not on a tab: nothing, and no x in the bar.
+        s.menu_tab = None;
+        assert!(s.update(x(&s).unwrap()).is_empty());
+        assert_eq!(s.tabs.len(), 33);
+        assert!(!hint_keys(&s).contains(&"x".to_string()));
+        // The last tab: the cursor goes back to the sections, the browsing view shows.
+        let mut s = with_tab();
+        s.update(Action::FocusMenu);
+        s.update(x(&s).unwrap());
+        assert!(s.tabs.is_empty() && s.active == 0);
+        assert!(matches!(s.menu_row(), MenuRow::Section(_)));
+        render(&s);
+    }
+
+    #[test]
+    fn menu_width_min_and_max_and_never_more_than_half() {
+        for (width, screen_width, expect) in [(20, 130, 20u16), (40, 130, 40), (26, 130, 26), (40, 60, 30)] {
+            let mut s = state();
+            s.config.ui.menu_width = width;
+            let screen = render_screen(&s, screen_width, 40);
+            // The menu's right border, then the content's left one.
+            let top: Vec<char> = screen[0].chars().collect();
+            assert_eq!((top[usize::from(expect) - 1], top[usize::from(expect)]), ('┐', '┌'), "{width}: {}", screen[0]);
+            assert!(screen.iter().any(|l| l.contains("Suscripciones")), "{width} at {screen_width}");
+        }
+    }
+
+    #[test]
+    fn preview_width_min_and_max_keep_the_list_its_columns() {
+        let mut s = with_items(Items::Videos(vec![video("a"), video("b")]));
+        for (width, screen_width, shown) in [(30, 130, true), (46, 130, true), (70, 130, false), (70, 200, true)] {
+            s.config.ui.preview_width = width;
+            let screen = render_screen(&s, screen_width, 40);
+            let content = screen_areas(Rect::new(0, 0, screen_width, 40), &s).content;
+            let (list, preview) = split_preview(split_prompt(&s, content).1, width);
+            assert_eq!(preview.is_some(), shown, "{width} at {screen_width}");
+            if let Some(preview) = preview {
+                assert_eq!(preview.width, width);
+                assert!(list.width >= PREVIEW_MIN_WIDTH - PREVIEW_WIDTH, "the list keeps 50 columns");
+                // The preview's own border, right where the list's ends.
+                let row: Vec<char> = screen[usize::from(preview.y)].chars().collect();
+                assert_eq!(row[usize::from(preview.x)], '┌', "{}", screen.join("\n"));
+            }
+        }
+    }
+
+    #[test]
+    fn comments_width_min_and_max_and_the_100_column_threshold() {
+        let (mut s, _) = details_tab(Some("Corto."));
+        for (columns, screen_width, expect) in [
+            (30, 130, Some(30)),
+            (46, 130, Some(46)),
+            (78, 130, Some(62)),
+            (78, 200, Some(78)),
+            (78, 128, Some(60)),
+            (46, 120, None),
+        ] {
+            s.config.ui.comments_width = columns;
+            let screen = tab_screen(&s, screen_width, 40);
+            let inner = Block::bordered().inner(screen_areas(Rect::new(0, 0, screen_width, 40), &s).content);
+            let comments = watch_layout(inner, columns).comments;
+            assert_eq!(comments.map(|c| c.width), expect, "{columns} columns at {screen_width}");
+            match comments {
+                Some(c) => {
+                    let row: Vec<char> = screen[usize::from(c.y)].chars().collect();
+                    assert_eq!(row[usize::from(c.x)], '┌', "{}", screen.join("\n"));
+                    assert!(inner.width - c.width >= 40, "Up next keeps 40 columns");
+                }
+                None => assert!(!screen.iter().any(|l| l.contains("Comentarios")), "under 100 columns: none"),
+            }
+        }
+    }
+
+    #[test]
+    fn every_menu_cursor_row_is_in_the_theme_accent() {
+        let gruvbox = crate::theme::parse_colors_toml(
+            &std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/omarchy/gruvbox/colors.toml"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(gruvbox.accent, Color::Rgb(0x7d, 0xae, 0xa3), "colors.toml's accent");
+        assert_eq!(crate::theme::TOKYO_NIGHT.accent, Color::Rgb(0x7a, 0xa2, 0xf7));
+        for palette in [crate::theme::TOKYO_NIGHT, gruvbox] {
+            let mut s = with_tab();
+            s.palette = palette;
+            s.update(Action::FocusMenu);
+            let rows: Vec<MenuRow> = s.menu_rows();
+            for _ in 0..rows.len() {
+                s.update(Action::Down);
+                let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+                terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+                let buffer = terminal.backend().buffer();
+                // The cursor's "▌" and its text, in the palette's accent.
+                let (x, y) = (0..40u16)
+                    .flat_map(|y| (1..25u16).map(move |x| (x, y)))
+                    .find(|&(x, y)| buffer[(x, y)].symbol() == "▌")
+                    .unwrap_or_else(|| panic!("{:?}", s.menu_row()));
+                assert_eq!(buffer[(x, y)].fg, palette.accent, "{:?}", s.menu_row());
+                let text = (x + 1..25).find(|&c| buffer[(c, y)].symbol().chars().any(char::is_alphabetic)).unwrap();
+                assert_eq!(buffer[(text, y)].fg, palette.accent, "{:?}", s.menu_row());
+                assert_eq!(buffer[(text, y)].bg, palette.highlight);
+            }
+        }
+        // The shown mark stays pink.
+        let mut s = with_tab();
+        s.update(Action::FocusMenu);
+        s.update(Action::Down);
+        assert_eq!(shown_rows(&s).len(), 1);
+    }
+
+    #[test]
+    fn a_background_tab_joins_the_scrolled_tab_list() {
+        let mut s = with_35_tabs();
+        s.update(Action::GoTab(0));
+        s.focus = Focus::List;
+        let mut more = with_items(Items::Videos(vec![video("new")]));
+        std::mem::swap(&mut s.stack, &mut more.stack);
+        s.update(Action::OpenInBackground);
+        assert_eq!((s.tabs.len(), s.active), (36, 0));
+        let up = icons(s.config.ui.icons).more_above;
+        let down = icons(s.config.ui.icons).more_below;
+        let screen = render_screen(&s, 130, 40);
+        assert!(!screen.iter().any(|l| l.contains("▶ title new")), "out of view, below");
+        assert!(screen.iter().any(|l| l.contains(down)), "the down chevron says so:\n{}", screen.join("\n"));
+        // Walking the menu down to it scrolls it in, the chevron goes.
+        s.update(Action::FocusMenu);
+        while s.menu_row() != MenuRow::Tab(35) {
+            s.update(Action::Down);
+        }
+        let screen = render_screen(&s, 130, 40);
+        assert!(screen.iter().any(|l| l.contains("▌▶ title new")), "{}", screen.join("\n"));
+        assert!(!screen.iter().any(|l| l.contains(down)) && screen.iter().any(|l| l.contains(up)));
+        s.update(Action::Back);
+        assert!(render(&s).contains("title new  1:00"), "the list stays in front");
     }
 }

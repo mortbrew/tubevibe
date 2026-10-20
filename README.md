@@ -11,7 +11,7 @@ in their own window by default (its tab shows the video's details and what to
 watch next), or drawn **inside the app** in [kitty](https://sw.kovidgoyal.net/kitty/).
 Every video opens in its own tab.
 
-> Interface in English and Spanish (`Ctrl+y l` switches). Early but usable:
+> Interface in English and Spanish (`Ctrl+Y l` switches). Early but usable:
 > feedback welcome.
 
 ![Search results with the preview panel and the selected video's thumbnail](docs/preview.png)
@@ -21,19 +21,19 @@ Every video opens in its own tab.
 ## What it does
 
 **YouTube**
-- **Mis recomendados / My Recommendations** (your home feed, in YouTube's own
+- **My Recommendations** (your home feed, in YouTube's own
   order, without the videos already in your YouTube Watch Later),
-  **Suscripciones** (newest from your channels, live and upcoming first),
-  **Mis canales**
-- **Ver después / Watch Later** (under YOUTUBE): your real YouTube *Watch Later* playlist
+  **Subscriptions** (newest from your channels, live and upcoming first),
+  **My Channels**
+- **Watch Later** (under YOUTUBE): your real YouTube *Watch Later* playlist
   (needs a login; the old local-only list is the Watch Later under TUBEVIBE). `w` adds the
   selected video to it right away (if it is already there, it just says so);
-  inside the list `Ctrl+y` `x` removes the selected video (after asking)
-- **Mis listas**: your YouTube playlists, plus *Liked videos* and *Watch
+  inside the list `Ctrl+Y` `x` removes the selected video (after asking)
+- **My Playlists**: your YouTube playlists, plus *Liked videos* and *Watch
   Later*; `Enter` opens one, `x` deletes it from YouTube (after asking).
-  Inside one, `Ctrl+y` `x` takes the selected video out of it on YouTube
+  Inside one, `Ctrl+Y` `x` takes the selected video out of it on YouTube
   (after asking; in *Liked videos* that takes the like back)
-- **Historial**: everything you watched, newest first, with the day you
+- **History**: everything you watched, newest first, with the day you
   watched it: in tubevibe and, logged in, on YouTube too (the browser, the
   phone), more pages coming as you scroll down (`x` removes one from the list)
 - **Resume where you left off**: closing a video remembers the second; opening
@@ -41,14 +41,14 @@ Every video opens in its own tab.
   ones you barely started) start from the beginning
 - **New videos notice**: every 15 minutes your subscriptions are checked;
   new videos are announced in the status bar, counted in the menu
-  (*Suscripciones (3 nuevos)*), marked NUEVO in the list and, with
+  (*Subscriptions (3 new)*), marked NEW in the list and, with
   `notify-send`, as a desktop notification
 - **Shorts hidden** from feeds, searches and channels (a setting turns them
   back on); playlists you open (Watch Later and Liked videos too) always show
   them
 - **Your favorite channels first**: the channels you watch most (3 videos or
   more in the last 30 days, up to 10) are marked ⭐. Their videos from the last
-  week go first in *Suscripciones* (after live ones), they top *Mis canales*
+  week go first in *Subscriptions* (after live ones), they top *My Channels*
   with how many of their videos you watched, and new video notices name them
   first
 - **Search** videos in all of YouTube (about a second, more results load as
@@ -57,14 +57,14 @@ Every video opens in its own tab.
 - A **preview** of the selected video with its **thumbnail** (in kitty), its
   length and **what it weighs** to download at your quality
   (*💾 Download ≈ 84 MB (1080p)*), asked to yt-dlp once the selection rests
-  on it, and YouTube's **AI summary** of it (*✦ AI summary*) when it has one
+  on it, and YouTube's **AI summary** of it (*✦ AI Summary*) when it has one
 - With the video in its own window, its tab shows the **video's details**
   (thumbnail, subscribers, views, likes, date) and **Up next**: `Tab` moves
   into it, `Enter` opens one in a new tab. Closing the video keeps the tab
   with its details and Up next; `Enter` plays it again where you left it
 - **Look before playing** (tubevibe default, `autoplay = false`): `Enter` on a
   video opens its tab with the details and Up next but plays nothing; `Enter`
-  (or `space`) in the tab starts it, resuming where you left it. Sound only
+  (or `Space`) in the tab starts it, resuming where you left it. Sound only
   (`a`) and your own files still play at once. `autoplay = true` (Settings →
   *Enter on a video*) brings back playing straight away
 - A **progress bar** under the video (played, downloaded, rest) and its
@@ -75,13 +75,15 @@ Every video opens in its own tab.
   watch later, download, like, channel, subscribe, close the tab, delete…
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
   dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`w` adds), **tubevibe Watch Later** (`l` adds),
-  **download** with subtitles (`d`), open the **channel** (`c`)
-- **Comments**: next to *Up next* when the video plays in its own window or
+  **download** with subtitles (`d`), open the **channel** (`c`), open it in a
+  **new tab in the background** (`t`: it joins TABS in the menu, nothing plays,
+  you stay where you are)
+- **Comments**: the full height of the tab's right side, beside the details and *Up next*, when the video plays in its own window or
   as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
   scroll them
 - **AI summary**: YouTube's *AI-generated video summary*, on the videos
-  that have one, right under the details of the same tabs (and in the
-  preview of lists). Video descriptions are not shown
+  that have one, right under the details of the same tabs, across the left
+  column and all of it (and in the preview of lists). Video descriptions are not shown
 
 **TUBEVIBE** (lists the app makes itself)
 - **Según lo que vi / From What I Watched**: what YouTube puts *Up next* to the last 10 videos you
@@ -90,10 +92,10 @@ Every video opens in its own tab.
   (e.g. `rust, nba, jazz`), outside your channels and your history
 - **Descubrir canales / Discover Channels**: YouTube's home feed without your
   channels (picks from channels you don't follow yet)
-- **Ver después / Watch Later** (under TUBEVIBE): the app's own watch-later
+- **Watch Later** (under TUBEVIBE): the app's own watch-later
   list, kept only on this computer (`~/.local/share/tubevibe/later.json`),
   apart from YouTube's Watch Later. `l` adds the selected video to it (if it
-  is already there, it just says so); inside it `Ctrl+y` `x` removes the
+  is already there, it just says so); inside it `Ctrl+Y` `x` removes the
   selected video (after asking). Messages call it *tubevibe Watch Later*
   and the other one *YouTube Watch Later*.
 
@@ -105,8 +107,10 @@ Every video opens in its own tab.
 - Volume, mute, seek, **subtitles on/off**, switch **original / subtitles /
   auto-dubbed audio** and the **language** while watching (the video reloads at
   the same second)
-- **Fullscreen** (`f`): the video fills the terminal, and on X11 the terminal
-  window goes fullscreen too
+- **Fullscreen** (`f`): the video fills the terminal, and the terminal window
+  goes fullscreen too (Hyprland and X11). In window mode (the default) `f`
+  makes mpv's own window fullscreen. `f` also works from the lists while a
+  video is playing; when nothing is playing it says so instead
 - **Audio only** (`a`): play a video as sound only, like music; inside its
   tab `a` switches between audio and video at the same second
 - **Chapters**: `[` / `]` jump to the previous / next one; they are marked
@@ -116,12 +120,12 @@ Every video opens in its own tab.
   progress bar). Intros and outros are left alone
 
 **On your computer**
-- **Mis videos** and **Mi música** list the files in the folders you choose
+- **My Videos** and **My Music** list the files in the folders you choose
   (several per kind); music plays from the chosen song to the end of the list
-- **Descargas**: what you download with `d`, with live progress, speed and
+- **Downloads**: what you download with `d`, with live progress, speed and
   time left, and its size. `x` cancels one (its half-downloaded pieces are
   deleted), moves a finished one's file to the system trash and takes it off
-  the list (after asking), or takes a failed one off the list; `space`
+  the list (after asking), or takes a failed one off the list; `Space`
   marks several and `x` then does that to all of them with one question.
   `Enter` plays the file. A finished download whose file was moved or
   deleted drops off the list by itself the next time Downloads is opened.
@@ -133,7 +137,7 @@ Every video opens in its own tab.
   machines without a browser (servers, SSH)
 - A settings screen for everything; changes go to `config.toml`, keeping your
   comments. `$EDITOR` can open the file from the app
-- The bottom bar always shows the keys that work right now; `Ctrl+y ?` lists
+- The bottom bar always shows the keys that work right now; `Ctrl+Y ?` lists
   them all
 - English or Spanish, following the system language until you pick one
 - Short animations when pages and dialogs open, each one can be turned off
@@ -156,13 +160,14 @@ Colors* (`[ui] omarchy_theme`) turns it off.
 - [`mpv`](https://mpv.io) and [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) in `PATH` (on Windows they are
   also found where winget, scoop or the mpv installer leave them)
 - For embedded video: the [kitty](https://sw.kovidgoyal.net/kitty/) terminal
-- Optional: `wmctrl` (X11) for window fullscreen
+- Optional: `wmctrl` (X11) for window fullscreen (Hyprland needs nothing:
+  `hyprctl` comes with it)
 
 tubevibe checks this itself: when something needed is missing (or yt-dlp is
-too old for YouTube) it opens a **system check** that lists what is there,
+too old for YouTube) it opens a **System Check** that lists what is there,
 what is not and the command that installs it with your package manager
 (apt, pacman, dnf, zypper, Homebrew or winget). It is also in Settings →
-*Check the system*.
+*System Check*.
 
 ## Install
 
@@ -241,19 +246,30 @@ tubetui, not this fork.)
 
 ## Keys
 
-Global commands use a **`Ctrl+y` prefix** (tmux style): press `Ctrl+y`, then:
+Global commands use a **`Ctrl+Y` prefix** (tmux style): press `Ctrl+Y`, then:
 
 | Key | Action |
 |---|---|
 | `b` | show / hide the menu |
 | `m` | go to the menu |
 | `f` | fullscreen |
-| `n` `p` `0-9` | next / previous / numbered tab, as listed in the menu (`0` = back to browsing) |
 | `x` | close the tab · in either Watch Later or a playlist: remove the selected video (asks first) |
 | `/` | search videos |
 | `l` | English / español |
 | `?` | every shortcut, explained |
 | `q` | quit |
+
+Without the prefix, one hand on the left of the keyboard:
+
+| Key | Action |
+|---|---|
+| `Alt+,` | previous tab in the menu (from the first, round to the last; from browsing, the last) |
+| `Alt+.` | next tab in the menu (from the last, back to the first; from browsing, the first) |
+
+These work in any terminal as it comes: no setting to change (on macOS,
+`Option+,` and `Option+.` work too, whether or not Option is set to act as
+Alt). `Ctrl+Y`
+`1`–`9` still jumps straight to a tab.
 
 With the mouse: click selects (menu sections and tabs open), double click
 plays / opens, the wheel scrolls lists and sets the volume over the video,
@@ -261,17 +277,19 @@ a click on the video pauses (double click: fullscreen), a click on the
 progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
-In lists: `↑↓` / `jk`, `Enter`, `Esc` to go back, `Tab` menu ↔ list,
+In the menu, `↑↓` walk the sections and the open tabs (under TABS) alike; `Enter` (or `→`, except on Quit, which only `Enter` triggers) opens either. `←` from a list or a video tab comes back to the menu with the cursor on the section or tab it came from. From a video tab the video stays on screen (and keeps playing) while the menu has the keys; moving the cursor changes nothing until `Enter` / `→` opens a row (`Enter` on that same tab, or `Tab`, goes back to it). `x` on a tab row closes that tab, like `Ctrl+Y` `x` inside it; the cursor moves to the next tab (or the previous one, or back to the sections). With more tabs than fit, the tab list scrolls between the fixed sections and Settings; a chevron by the TABS title means more tabs above, one under the list more below.
+
+In lists: `↑↓` / `jk`, `Enter`, `Esc` / `Backspace` to go back, `f` fullscreen for the video that is playing, `Tab` menu ↔ list,
 `w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
 audio only. In **History** `x` removes the video; in YouTube's **Watch Later** and
-**playlists** `Ctrl+y` `x` removes it on YouTube (after asking), in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** `x` cancels
+**playlists** `Ctrl+Y` `x` removes it on YouTube (after asking), in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** `x` cancels
 the download, or moves a finished one's file to the system trash after asking
 (only that file, never a folder or link; a file that is already gone just
-leaves the list); `space` marks several downloads for one `x`. In **My Videos**
-and **My Music**: `space` marks files, `x` / `Del` moves the marked ones (or
+leaves the list); `Space` marks several downloads for one `x`. In **My Videos**
+and **My Music**: `Space` marks files, `x` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
-In a video tab that is not playing yet (or closed), `Enter` or `space` plays it.
-While watching: `space` pause, `←→` seek, `↑↓` volume, `m` mute, `j`
+In a video tab that is not playing yet (or closed), `Enter` or `Space` plays it.
+While watching: `Space` pause, `Shift+←` / `Shift+→` seek 5 s (`→` alone seeks forward too), `←` or `Esc` goes to the menu (cursor on the tab; `Esc` in Up Next first goes back to the video, and in fullscreen first leaves it), `↑↓` volume, `m` mute, `j`
 subtitles, `i` original / subtitles / dubbed, `o` language, `v` quality
 (360p–1440p), `b` codec (H.264 / VP9 / AV1 / any), `f` fullscreen, `.` `,`
 next / previous song, `[` `]` previous / next chapter, `a` audio only ⇄ video,
@@ -308,7 +326,7 @@ history and lists live in `~/.config/tubevibe`, `~/.local/share/tubevibe` and
 exist yet and tubetui's do (`~/.config/tubetui` and so on), it copies them
 over, so your settings, login, history and lists come along; the tubetui
 folders are left untouched. Every key is
-optional; everything can also be changed from the app (⚙ Configuración).
+optional; everything can also be changed from the app (⚙ Settings).
 
 ```toml
 [session]
@@ -320,18 +338,24 @@ mode = "window"          # window (default) | auto | embedded | overlay
 max_height = 720
 prefer_codec = "avc1"    # H.264 decodes in hardware almost everywhere
 language = "subtitles"   # subtitles | original | dubbed
-sub_lang = "es"          # subtitles and dubbing language
+sub_lang = "en"          # subtitles and dubbing language
 background_audio = true  # keep listening while browsing
 sponsorblock = true      # skip sponsors, self promotion and "subscribe!" reminders
 autoplay = false         # Enter opens the video's tab; Enter again plays (true: play at once)
 
-[media]
+[media]                  # empty: the system's own Videos and Music folders
 video_dirs = ["~/Videos"]
-music_dirs = ["~/Música", "/mnt/discos"]
+music_dirs = ["~/Music", "/mnt/music"]
+
+[download]
+dir = "~/Downloads"      # empty: the system's Videos folder
 
 [ui]
 icons = "emoji"          # emoji | nerd | unicode
 border_style = "plain"   # plain | rounded | thick | double | none
+menu_width = 26          # left menu, in columns: 20–40, step 2 (at most half the screen)
+preview_width = 46       # preview right of video lists, in columns: 30–70, step 4 (the list keeps 50)
+comments_width = 46      # comments in a video tab, in columns: 30–78, step 4 (tab 100+ columns; Up next keeps 40)
 restore_tabs = true      # reopen the tabs that were open last time (kept in ~/.local/share/tubevibe/tabs.json)
 omarchy_theme = true     # use the current Omarchy theme's colours (Tokyo Night when off or not on Omarchy)
 lang = "en"              # en | es (unset: the system language)
@@ -342,7 +366,7 @@ check_updates = true     # on startup, tell me about new versions and how to ins
 hide_shorts = true       # leave Shorts out of every list
 hide_later = true        # leave my YouTube Watch Later videos out of My Recommendations
 notify_new = true        # check my subscriptions every 15 minutes and tell me about new videos
-favorites_first = true   # my most watched channels first in Suscripciones and Mis canales
+favorites_first = true   # my most watched channels first in Subscriptions and My Channels
 
 [effects]                # animations
 startup = true
@@ -355,7 +379,7 @@ dialogs = true
 Idle it uses about 25 MB and no CPU. Videos in their own window play with
 hardware decoding (8 % CPU on a 2012 laptop); embedded video is scaled on the
 CPU, so 480p is the sweet spot there. See the [benchmark](docs/benchmark.md)
-against ytfzf and youtube-tui.
+against ytfzf and youtube-tui (measured on tubetui, which tubevibe is based on).
 
 ## Troubleshooting
 
@@ -369,14 +393,11 @@ redraw and action is logged with its timing.
 
 ## Support
 
-The **About** page (Acerca de) lists donation addresses; they live in
+The **About** page lists donation addresses; they live in
 [`donate.toml`](donate.toml).
 
 > **These addresses belong to polblancoo, the original tubetui developer:
 > donations go to him, not to the tubevibe fork maintainer (mortbrew).**
->
-> *Estas direcciones son de polblancoo, el desarrollador original de tubetui:
-> las donaciones van para él, no para el mantenedor del fork tubevibe (mortbrew).*
 
 ## Disclaimer
 

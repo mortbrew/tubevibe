@@ -145,11 +145,46 @@ impl Language {
     }
 }
 
+/// A size setting: its allowed values (`min..=max` by `step`) and default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Size {
+    pub key: &'static str,
+    pub min: u16,
+    pub max: u16,
+    pub step: u16,
+    pub default: u16,
+}
+
+impl Size {
+    /// The next value Enter picks: one step up, from the largest back to the smallest.
+    pub fn next(self, value: u16) -> u16 {
+        let up = value.saturating_add(self.step);
+        if value >= self.max || up > self.max { self.min } else { up.max(self.min) }
+    }
+
+    pub fn contains(self, value: u16) -> bool {
+        (self.min..=self.max).contains(&value)
+    }
+}
+
+/// Columns; 26 is the layout of earlier versions.
+pub const MENU_WIDTH: Size = Size { key: "menu_width", min: 20, max: 40, step: 2, default: 26 };
+/// Columns; 46 is the layout of earlier versions.
+pub const PREVIEW_WIDTH: Size = Size { key: "preview_width", min: 30, max: 70, step: 4, default: 46 };
+/// Columns; 46 is what the earlier 45 % gave in a 130-column terminal. A
+/// percent saved by the first try (30–60) reads as about as many columns.
+pub const COMMENTS_WIDTH: Size = Size { key: "comments_width", min: 30, max: 78, step: 4, default: 46 };
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct UiConfig {
     pub sidebar: bool,
-    pub max_tabs: usize,
+    /// Columns of the left menu ([`MENU_WIDTH`]).
+    pub menu_width: u16,
+    /// Columns of the preview panel right of video and channel lists ([`PREVIEW_WIDTH`]).
+    pub preview_width: u16,
+    /// Columns of the comments in a video tab ([`COMMENTS_WIDTH`]).
+    pub comments_width: u16,
     pub icons: IconSet,
     /// Interface language; unset follows the system locale.
     pub lang: Option<Lang>,
@@ -267,6 +302,15 @@ impl IconSet {
         }
     }
 
+    /// As the settings screen shows it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Emoji => "Emoji",
+            Self::Nerd => "Nerd Font",
+            Self::Unicode => "Unicode",
+        }
+    }
+
     /// Value as written in `config.toml`.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -279,15 +323,15 @@ impl IconSet {
 
 /// Subtitle / dubbing languages offered by the settings screen (any code works in the file).
 pub const LANGUAGES: [(&str, Text); 9] = [
-    ("es", Text::new("español", "Spanish")),
-    ("en", Text::new("inglés", "English")),
-    ("pt", Text::new("portugués", "Portuguese")),
-    ("fr", Text::new("francés", "French")),
-    ("it", Text::new("italiano", "Italian")),
-    ("de", Text::new("alemán", "German")),
-    ("ja", Text::new("japonés", "Japanese")),
-    ("ko", Text::new("coreano", "Korean")),
-    ("ru", Text::new("ruso", "Russian")),
+    ("es", Text::new("Español", "Spanish")),
+    ("en", Text::new("Inglés", "English")),
+    ("pt", Text::new("Portugués", "Portuguese")),
+    ("fr", Text::new("Francés", "French")),
+    ("it", Text::new("Italiano", "Italian")),
+    ("de", Text::new("Alemán", "German")),
+    ("ja", Text::new("Japonés", "Japanese")),
+    ("ko", Text::new("Coreano", "Korean")),
+    ("ru", Text::new("Ruso", "Russian")),
 ];
 
 pub fn next_language(code: &str) -> &'static str {
@@ -385,7 +429,9 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             sidebar: true,
-            max_tabs: 9,
+            menu_width: MENU_WIDTH.default,
+            preview_width: PREVIEW_WIDTH.default,
+            comments_width: COMMENTS_WIDTH.default,
             icons: IconSet::Emoji,
             lang: None,
             thumbnails: true,
@@ -418,6 +464,24 @@ pub enum ConfigError {
     Parse { path: PathBuf, source: toml::de::Error },
     #[error("cannot update {path}: {reason}")]
     Write { path: PathBuf, reason: String },
+}
+
+impl ConfigError {
+    /// What the status bar says, in `lang` (the details come from the system
+    /// or the TOML reader, in English).
+    pub fn message(&self, lang: Lang) -> String {
+        match self {
+            Self::Read { path, source } => {
+                format!("{} {}: {source}", lang.pick("No se pudo leer", "Couldn't read"), path.display())
+            }
+            Self::Parse { path, source } => {
+                format!("{} {}: {source}", lang.pick("Configuración inválida en", "Invalid config in"), path.display())
+            }
+            Self::Write { path, reason } => {
+                format!("{} {}: {reason}", lang.pick("No se pudo guardar", "Couldn't save"), path.display())
+            }
+        }
+    }
 }
 
 /// Something in `config.toml` that was skipped instead of stopping the app.
@@ -465,6 +529,9 @@ impl std::fmt::Display for ConfigWarning {
     }
 }
 
+/// Real keys of older versions, now gone (`ui.max_tabs`: tabs are unlimited).
+const RETIRED: &[&str] = &["ui.max_tabs"];
+
 /// One `[section]`: each key is tried on its own, so an unknown or broken
 /// one is skipped (and reported) while the rest still apply.
 fn section<T: serde::de::DeserializeOwned + Default>(
@@ -479,6 +546,10 @@ fn section<T: serde::de::DeserializeOwned + Default>(
     let mut good = toml::Table::new();
     for (key, value) in table {
         let path = format!("{name}.{key}");
+        // Settings older versions had and this one dropped: ignored without a word.
+        if RETIRED.contains(&path.as_str()) {
+            continue;
+        }
         let one = toml::Table::from_iter([(key.clone(), value.clone())]);
         let mut unknown = false;
         let tried: Result<T, toml::de::Error> = serde_ignored::deserialize(toml::Value::Table(one), |_| unknown = true);
@@ -517,6 +588,20 @@ impl Config {
                 "media" => c.media = section(&name, value, w),
                 "effects" => c.effects = section(&name, value, w),
                 _ => w.push(ConfigWarning::Unknown(name)),
+            }
+        }
+        // Sizes out of range: said, and back to the default.
+        for (size, value) in [
+            (MENU_WIDTH, &mut c.ui.menu_width),
+            (PREVIEW_WIDTH, &mut c.ui.preview_width),
+            (COMMENTS_WIDTH, &mut c.ui.comments_width),
+        ] {
+            if !size.contains(*value) {
+                warnings.push(ConfigWarning::BadValue {
+                    key: format!("ui.{}", size.key),
+                    error: format!("{} is not between {} and {}", value, size.min, size.max),
+                });
+                *value = size.default;
             }
         }
         Ok((c, warnings))
@@ -580,6 +665,17 @@ pub(crate) fn temp_dir(name: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn errors_and_icon_names_follow_the_language() {
+        let error = ConfigError::Write { path: "/c/config.toml".into(), reason: "denied".into() };
+        assert_eq!(error.message(Lang::En), "Couldn't save /c/config.toml: denied");
+        assert_eq!(error.message(Lang::Es), "No se pudo guardar /c/config.toml: denied");
+        assert_eq!(
+            [IconSet::Emoji.label(), IconSet::Nerd.label(), IconSet::Unicode.label()],
+            ["Emoji", "Nerd Font", "Unicode"]
+        );
+    }
+
     use super::*;
 
     #[test]
@@ -594,7 +690,6 @@ mod tests {
         assert_eq!(c.player.language, Language::Subtitles);
         assert_eq!(c.player.sub_lang, "es");
         assert!(c.ui.sidebar);
-        assert_eq!(c.ui.max_tabs, 9);
         assert_eq!(c.ui.icons, IconSet::Emoji);
         assert_eq!(c.ui.lang, None, "follows the system until chosen");
         assert_eq!(c.effects, EffectsConfig { startup: true, pages: true, dialogs: true });
@@ -660,7 +755,7 @@ mod tests {
         assert_eq!(next_language("es"), "en");
         assert_eq!(next_language("ru"), "es");
         assert_eq!(next_language("xx"), "es");
-        assert_eq!(language_name("pt", Lang::Es), "portugués (pt)");
+        assert_eq!(language_name("pt", Lang::Es), "Portugués (pt)");
         assert_eq!(language_name("pt", Lang::En), "Portuguese (pt)");
         assert_eq!(language_name("eu", Lang::En), "eu");
     }
@@ -836,5 +931,34 @@ mod tests {
         let c = Config::from_toml(&text).unwrap();
         assert_eq!(c.player.max_height, 480);
         assert_eq!(c.player.language, Language::Dubbed);
+    }
+
+    #[test]
+    fn an_old_max_tabs_line_is_ignored_quietly() {
+        let (config, warnings) = Config::parse("[ui]\nmax_tabs = 3\nsidebar = false\n").unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!config.ui.sidebar, "the rest still applies");
+    }
+
+    #[test]
+    fn sizes_load_tolerantly() {
+        let (c, w) = Config::parse("[ui]\nmenu_width = 30\npreview_width = 70\ncomments_width = 78\n").unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (30, 70, 78));
+        // The first try's percent: read as columns, no warning.
+        let (c, w) = Config::parse("[ui]\ncomments_width = 45\n").unwrap();
+        assert!(w.is_empty() && c.ui.comments_width == 45, "{w:?}");
+        let (c, w) =
+            Config::parse("[ui]\nmenu_width = 5\npreview_width = \"wide\"\ncomments_width = 200\nmouse = false\n")
+                .unwrap();
+        assert_eq!(w.len(), 3, "{w:?}");
+        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (26, 46, 46));
+        assert!(!c.ui.mouse, "the rest still applies");
+        let d = UiConfig::default();
+        assert_eq!((d.menu_width, d.preview_width, d.comments_width), (26, 46, 46), "the old layout");
+        assert_eq!(MENU_WIDTH.next(40), 20);
+        assert_eq!(MENU_WIDTH.next(26), 28);
+        assert_eq!(COMMENTS_WIDTH.next(78), 30);
+        assert_eq!(COMMENTS_WIDTH.next(45), 49, "an old percent steps on");
     }
 }

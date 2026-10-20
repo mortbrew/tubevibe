@@ -94,7 +94,7 @@ impl Animations {
         if ui::video_area(state, screen).is_some() {
             return;
         }
-        let areas = ui::areas(screen, state.sidebar);
+        let areas = ui::screen_areas(screen, state);
         let timer = |ms| (ms, Interpolation::QuadOut);
         // The theme's background, where text fades in from, and its accent.
         let (background, accent): (Color, Color) = (state.palette.background, state.palette.accent);

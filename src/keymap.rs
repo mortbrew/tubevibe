@@ -1,4 +1,4 @@
-//! Keys → actions. Global commands live behind the `Ctrl+y` prefix
+//! Keys → actions. Global commands live behind the `Ctrl+Y` prefix
 //! (tmux style: the prefix waits for exactly one more key); plain keys go to
 //! whatever has focus, so the video tab can use space and arrows freely.
 //! The help screen is generated from the same tables.
@@ -12,7 +12,7 @@ use crate::youtube::Rating;
 /// The slice of state that decides how a key is read.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct KeyContext {
-    /// `Ctrl+y` was pressed and the next key is a command.
+    /// `Ctrl+Y` was pressed and the next key is a command.
     pub prefix: bool,
     pub help: bool,
     /// A yes/no question is open.
@@ -27,18 +27,18 @@ pub struct KeyContext {
     pub context_menu: bool,
     /// The opening logo is shown: any key skips it.
     pub splash: bool,
+    /// The left menu has the keys (browsing view, no search box).
+    pub menu: bool,
 }
 
 pub const SEEK_SECONDS: i32 = 5;
 pub const VOLUME_STEP: i32 = 5;
 
-/// `Ctrl+y` commands. Digits (`0`–`9`, go to tab) are handled apart.
+/// `Ctrl+Y` commands.
 pub const PREFIX: &[(char, Action, Text)] = &[
     ('b', Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('m', Action::FocusMenu, Text::new("ir al menú", "go to the menu")),
     ('f', Action::ToggleFullscreen, Text::new("pantalla completa", "fullscreen")),
-    ('n', Action::NextTab, Text::new("pestaña siguiente", "next tab")),
-    ('p', Action::PrevTab, Text::new("pestaña anterior", "previous tab")),
     (
         'x',
         Action::CloseTab,
@@ -64,12 +64,12 @@ pub const ON_VIDEO: &[(&str, Text)] = &[
     ("g", Text::new("me gusta (otra vez: lo quita)", "like (again: take it back)")),
     ("G", Text::new("no me gusta (otra vez: lo quita)", "dislike (again: take it back)")),
     ("d", Text::new("descargar (con subtítulos)", "download (with subtitles)")),
-    ("a", Text::new("escuchar solo el audio / volver al video", "sound only / back to the video")),
+    ("a", Text::new("escuchar solo el audio / volver al video", "audio only / back to the video")),
     ("c", Text::new("ver los videos del canal", "the channel's videos")),
 ];
 
 pub const IN_MENU: &[(&str, Text)] = &[
-    ("↑ ↓", Text::new("elegir sección", "choose a section")),
+    ("↑ ↓", Text::new("elegir sección o pestaña", "choose a section or tab")),
     ("Enter", Text::new("abrir", "open")),
     ("Tab", Text::new("ir a la lista", "go to the list")),
     ("/", Text::new("buscar videos", "search videos")),
@@ -77,12 +77,13 @@ pub const IN_MENU: &[(&str, Text)] = &[
 
 pub const IN_LISTS: &[(&str, Text)] = &[
     ("↑ ↓  j k", Text::new("moverse", "move")),
-    ("Enter", Text::new("abrir video · abrir canal · cambiar opción", "open video · open channel · change option")),
-    ("Esc  ←  h", Text::new("volver", "back")),
+    ("Enter", Text::new("abrir video · abrir canal · cambiar opción", "open video / channel · change option")),
+    ("Esc  ←  h", Text::new("volver (también Retroceso)", "back (Backspace too)")),
     ("Tab", Text::new("ir al menú", "go to the menu")),
     ("/", Text::new("buscar (dentro de un canal: en ese canal)", "search (inside a channel: in that channel)")),
     ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched videos (My Recommendations…)")),
-    ("espacio", Text::new("marcar varios (videos, música, descargas)", "mark several (videos, music, downloads)")),
+    ("Espacio", Text::new("marcar varios (videos, música, descargas)", "mark several (videos, music, downloads)")),
+    ("f", Text::new("pantalla completa del video que se reproduce", "fullscreen the video playing")),
     (
         "x  Supr",
         Text::new("a la papelera (pide s) · Historial: quitarlo", "to the trash (asks y) · History: remove it"),
@@ -90,15 +91,12 @@ pub const IN_LISTS: &[(&str, Text)] = &[
 ];
 
 pub const WITH_MOUSE: &[(&str, Text)] = &[
-    ("clic", Text::new("elegir · en el menú y las pestañas: abrir", "select · menu and tabs: open")),
-    (
-        "doble clic",
-        Text::new("abrir video · abrir canal · cambiar opción", "open video · open channel · change option"),
-    ),
-    ("rueda", Text::new("moverse en la lista · en el video: volumen", "move in the list · on the video: volume")),
-    ("clic video", Text::new("pausa (doble clic: pantalla completa)", "pause (double click: fullscreen)")),
-    ("clic der.", Text::new("opciones de lo que está debajo", "options for what is under it")),
-    ("clic barra", Text::new("saltar a ese momento del video", "jump to that point of the video")),
+    ("Clic", Text::new("elegir · en el menú y las pestañas: abrir", "select · menu and tabs: open")),
+    ("Doble clic", Text::new("abrir video · abrir canal · cambiar opción", "open video / channel · change option")),
+    ("Rueda", Text::new("moverse en la lista · en el video: volumen", "move in the list · on the video: volume")),
+    ("Clic video", Text::new("pausa (doble clic: pantalla completa)", "pause (double click: fullscreen)")),
+    ("Clic der.", Text::new("opciones de lo que está debajo", "options for what is under it")),
+    ("Clic barra", Text::new("saltar a ese momento del video", "jump to that point of the video")),
     ("Shift", Text::new("mantenela para seleccionar y copiar texto", "hold it to select and copy text")),
 ];
 
@@ -109,49 +107,73 @@ pub const IN_SEARCH: &[(&str, Text)] = &[
 ];
 
 pub const IN_TAB: &[(&str, Text)] = &[
-    ("espacio", Text::new("pausa", "pause")),
+    ("Espacio", Text::new("pausa", "pause")),
+    ("Enter", Text::new("reproducir · en A continuación: ese video", "play · in Up Next: the selected video")),
     ("v", Text::new("calidad: 360p → 480p → 720p → 1080p …", "quality: 360p → 480p → 720p → 1080p …")),
     ("b", Text::new("compresión: H.264 → VP9 → AV1 → cualquiera", "codec: H.264 → VP9 → AV1 → any")),
     ("f  Esc", Text::new("pantalla completa / salir", "fullscreen / leave")),
-    ("← →", Text::new("retroceder / avanzar 5 s", "back / forward 5 s")),
+    ("←  Esc", Text::new("ir al menú", "go to the menu")),
+    ("Shift+← →", Text::new("retroceder / avanzar 5 s (o solo →)", "back / forward 5 s (or → alone)")),
     ("[ ]", Text::new("capítulo anterior / siguiente", "previous / next chapter")),
     ("↑ ↓  m", Text::new("subir / bajar volumen · silenciar", "volume up / down · mute")),
     ("j", Text::new("subtítulos sí / no", "subtitles on / off")),
     ("i", Text::new("modo: subtítulos → original → doblado", "mode: subtitles → original → dubbed")),
     ("o", Text::new("otro idioma (es → en → pt …)", "another language (es → en → pt …)")),
     (". ,", Text::new("música: siguiente / anterior", "music: next / previous")),
-    ("Tab", Text::new("videos relacionados (en ventana)", "related videos (in a window)")),
+    ("Tab", Text::new("ir a A continuación (en modo ventana)", "go to Up Next (window mode)")),
+    ("j k", Text::new("moverse en A continuación", "move in Up Next")),
+    ("Esc", Text::new("en A continuación: volver al video", "in Up Next: back to the video")),
     ("PgUp PgDn", Text::new("recorrer los comentarios (en ventana)", "scroll the comments (in a window)")),
 ];
 
 /// `(keys, description)` rows of a table, in `lang`.
 pub fn rows(table: &[(&str, Text)], lang: Lang) -> Vec<(String, &'static str)> {
-    table.iter().map(|(k, d)| (space_key(k, lang), d.get(lang))).collect()
+    table.iter().map(|(k, d)| (key_name(k, lang), d.get(lang))).collect()
 }
 
-/// The space bar is named in the interface language.
-fn space_key(keys: &str, lang: Lang) -> String {
-    if keys == "espacio" { lang.pick("espacio", "space").into() } else { keys.into() }
+/// Keys and mouse actions with a name of their own, in Spanish and English.
+const KEY_NAMES: &[(&str, &str)] = &[
+    ("Espacio", "Space"),
+    ("x  Supr", "x  Del"),
+    ("Clic", "Click"),
+    ("Doble clic", "Double Click"),
+    ("Rueda", "Wheel"),
+    ("Clic video", "Click Video"),
+    ("Clic der.", "Right Click"),
+    ("Clic barra", "Click Bar"),
+];
+
+/// The space bar's name, in `lang`.
+pub fn space(lang: Lang) -> &'static str {
+    lang.pick("Espacio", "Space")
 }
 
-/// `Ctrl+y` commands plus the digits, in `lang`.
+/// A key's name in the interface language (the tables name them in Spanish).
+pub fn key_name(keys: &str, lang: Lang) -> String {
+    match KEY_NAMES.iter().find(|(es, _)| *es == keys) {
+        Some((es, en)) => lang.pick(*es, *en).into(),
+        None => keys.into(),
+    }
+}
+
+/// `Ctrl+Y` commands, in `lang`.
 pub fn prefix_rows(lang: Lang) -> Vec<(String, &'static str)> {
-    let mut commands: Vec<_> = PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect();
-    commands.insert(
-        6,
-        (
-            "0-9".into(),
-            lang.pick(
-                "ir a la pestaña del menú (0 = volver a navegar)",
-                "go to a tab in the menu (0 = back to browsing)",
-            ),
-        ),
-    );
-    commands
+    PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect()
+}
+
+/// What macOS types for Option+, and Option+. (US and most layouts).
+fn mac_option_tab(c: char) -> Option<Action> {
+    match c {
+        '≤' => Some(Action::PrevTab),
+        '≥' => Some(Action::NextTab),
+        _ => None,
+    }
 }
 
 pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
-    if key.kind == KeyEventKind::Release {
+    // Only presses: releases (Windows, or a terminal that reports them) and
+    // repeats as their own kind never count twice.
+    if key.kind != KeyEventKind::Press {
         return None;
     }
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
@@ -176,6 +198,26 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
             _ => Action::Back,
         });
     }
+    // Alt+, / Alt+.: previous / next tab, one hand, from anywhere (lists, the
+    // search box, a video tab). Every terminal sends them as plain Esc + key,
+    // so nothing has to be set up, and no terminal, nor Omarchy, binds them
+    // by default. Ctrl+Alt (AltGr on some layouts) is left alone.
+    if key.modifiers.contains(KeyModifiers::ALT) && !ctrl {
+        match key.code {
+            KeyCode::Char(',' | '<') => return Some(Action::PrevTab),
+            KeyCode::Char('.' | '>') => return Some(Action::NextTab),
+            _ => {}
+        }
+    }
+    // macOS terminals type Option+, and Option+. as ≤ and ≥ unless told to
+    // treat Option as Alt: those count too, so no setting is needed there.
+    if cfg!(target_os = "macos")
+        && !ctrl
+        && let KeyCode::Char(c) = key.code
+        && let Some(action) = mac_option_tab(c)
+    {
+        return Some(action);
+    }
     if ctrl {
         return (key.code == KeyCode::Char('y')).then_some(Action::Prefix);
     }
@@ -185,8 +227,26 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     if ctx.typing {
         return typing(key.code);
     }
+    // The menu has the keys (over the browsing view or a video tab still
+    // shown): moving, opening (→ too, but Quit), back, Tab, / and f; x
+    // closes the tab under the cursor.
+    if ctx.menu {
+        return match key.code {
+            KeyCode::Right => Some(Action::MenuOpen),
+            KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
+            KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
+            KeyCode::Enter => Some(Action::Enter),
+            KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => Some(Action::Back),
+            KeyCode::Tab => Some(Action::ToggleFocus),
+            KeyCode::Char('/') => Some(Action::FocusSearch),
+            KeyCode::Char('f') => Some(Action::ToggleFullscreen),
+            KeyCode::Char('x') => Some(Action::MenuCloseTab),
+            _ => None,
+        };
+    }
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
+        KeyCode::Char('t') => return Some(Action::OpenInBackground),
         KeyCode::Char('l') => return Some(Action::SaveForLater),
         KeyCode::Char('s') => return Some(Action::ToggleSubscription),
         KeyCode::Char('g') => return Some(Action::Rate(Rating::Like)),
@@ -195,6 +255,16 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         KeyCode::Char('a') => return Some(Action::Listen),
         KeyCode::Char('c') => return Some(Action::OpenChannel),
         _ => {}
+    }
+    // In a video tab ← goes to the menu, as from the first list; Shift+← →
+    // seek (→ alone too).
+    if ctx.in_tab {
+        match key.code {
+            KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => return Some(Action::Seek(-SEEK_SECONDS)),
+            KeyCode::Right => return Some(Action::Seek(SEEK_SECONDS)),
+            KeyCode::Left => return Some(Action::FocusMenu),
+            _ => {}
+        }
     }
     match (ctx.in_tab, ctx.related) {
         (true, true) => related(key.code).or_else(|| player(key.code)),
@@ -205,7 +275,6 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
 
 fn prefixed(code: KeyCode) -> Action {
     match code {
-        KeyCode::Char(c @ '0'..='9') => Action::GoTab(c as usize - '0' as usize),
         KeyCode::Char(c) => {
             PREFIX.iter().find(|(key, ..)| *key == c).map_or(Action::CancelPrefix, |(_, action, _)| action.clone())
         }
@@ -227,8 +296,6 @@ fn typing(code: KeyCode) -> Option<Action> {
 fn player(code: KeyCode) -> Option<Action> {
     match code {
         KeyCode::Char(' ') => Some(Action::TogglePause),
-        KeyCode::Left => Some(Action::Seek(-SEEK_SECONDS)),
-        KeyCode::Right => Some(Action::Seek(SEEK_SECONDS)),
         KeyCode::Up => Some(Action::Volume(VOLUME_STEP)),
         KeyCode::Down => Some(Action::Volume(-VOLUME_STEP)),
         KeyCode::Char('m') => Some(Action::ToggleMute),
@@ -267,6 +334,8 @@ fn lists(code: KeyCode) -> Option<Action> {
         KeyCode::Char(' ') => Some(Action::ToggleMark),
         KeyCode::Char('x') | KeyCode::Delete => Some(Action::Trash),
         KeyCode::Char('v') => Some(Action::ToggleWatched),
+        // The video playing (in the tab shown last) fills the screen.
+        KeyCode::Char('f') => Some(Action::ToggleFullscreen),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
         KeyCode::Enter => Some(Action::Enter),
@@ -280,14 +349,35 @@ fn lists(code: KeyCode) -> Option<Action> {
 /// Sections of the help screen: title and `(keys, description)` rows.
 pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
     vec![
-        (lang.pick("Comandos: Ctrl+y y después una tecla", "Commands: Ctrl+y, then a key"), prefix_rows(lang)),
-        (lang.pick("Menú", "Menu"), rows(IN_MENU, lang)),
+        (lang.pick("Comandos: Ctrl+Y y después una tecla", "Commands: Ctrl+Y, Then a Key"), prefix_rows(lang)),
+        (lang.pick("Menú", "Menu"), {
+            let mut menu = rows(IN_MENU, lang);
+            // → opens too (not Quit); the bar keeps just Enter.
+            menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
+            menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
+            menu
+        }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),
-        (lang.pick("Sobre un video (lista o pestaña)", "On a video (list or tab)"), rows(ON_VIDEO, lang)),
-        (lang.pick("Pestaña de video", "Video tab"), rows(IN_TAB, lang)),
-        (lang.pick("Cuadro de búsqueda", "Search box"), rows(IN_SEARCH, lang)),
+        (lang.pick("Sobre un video (lista o pestaña)", "On a Video (List or Tab)"), {
+            // t only in the help: the bar has no room for it.
+            let mut on_video = rows(ON_VIDEO, lang);
+            on_video.push((
+                "t".into(),
+                lang.pick("abrir en una pestaña nueva, sin ir a ella", "open in a new tab in the background"),
+            ));
+            on_video
+        }),
+        (lang.pick("Pestaña de video", "Video Tab"), rows(IN_TAB, lang)),
+        (lang.pick("Cuadro de búsqueda", "Search Box"), rows(IN_SEARCH, lang)),
         ("Mouse", rows(WITH_MOUSE, lang)),
-        (lang.pick("Siempre", "Always"), vec![("Ctrl+c".into(), lang.pick("salir", "quit"))]),
+        (
+            lang.pick("Siempre", "Always"),
+            vec![
+                ("Alt+,".into(), lang.pick("pestaña anterior del menú", "previous tab in the menu")),
+                ("Alt+.".into(), lang.pick("pestaña siguiente del menú", "next tab in the menu")),
+                ("Ctrl+C".into(), lang.pick("salir", "quit")),
+            ],
+        ),
     ]
 }
 
@@ -317,7 +407,22 @@ mod tests {
         related: false,
         context_menu: false,
         splash: false,
+        menu: false,
     };
+    const MENU: KeyContext = KeyContext { menu: true, ..LISTS };
+
+    #[test]
+    fn right_opens_the_menu_row_l_does_not() {
+        assert_eq!(map(key(KeyCode::Right), MENU), Some(Action::MenuOpen));
+        assert_eq!(map(char('l'), MENU), None, "l does nothing in the menu");
+        assert_eq!(map(char(' '), MENU), None, "nor the player keys over a tab");
+        assert_eq!(map(key(KeyCode::Tab), MENU), Some(Action::ToggleFocus), "Tab still switches panes");
+        assert_eq!(map(key(KeyCode::Left), MENU), Some(Action::Back));
+        // Outside the menu they keep their meaning.
+        assert_eq!(map(char('l'), LISTS), Some(Action::SaveForLater));
+        assert_eq!(map(key(KeyCode::Right), LISTS), None);
+        assert_eq!(map(char('l'), KeyContext { typing: true, ..MENU }), Some(Action::Input('l')));
+    }
     const TYPING: KeyContext = KeyContext { typing: true, ..LISTS };
     const TAB: KeyContext = KeyContext { in_tab: true, ..LISTS };
     const PREFIXED: KeyContext = KeyContext { prefix: true, ..LISTS };
@@ -337,8 +442,9 @@ mod tests {
         for (c, action, _) in PREFIX {
             assert_eq!(map(char(*c), PREFIXED).as_ref(), Some(action), "{c}");
         }
-        assert_eq!(map(char('0'), PREFIXED), Some(Action::GoTab(0)));
-        assert_eq!(map(char('3'), PREFIXED), Some(Action::GoTab(3)));
+        for digit in '0'..='9' {
+            assert_eq!(map(char(digit), PREFIXED), Some(Action::CancelPrefix), "Ctrl+Y {digit} is gone");
+        }
         assert_eq!(map(char('?'), PREFIXED), Some(Action::ToggleHelp));
     }
 
@@ -413,8 +519,13 @@ mod tests {
     #[test]
     fn player_controls_in_tab() {
         assert_eq!(map(char(' '), TAB), Some(Action::TogglePause));
-        assert_eq!(map(key(KeyCode::Left), TAB), Some(Action::Seek(-SEEK_SECONDS)));
+        assert_eq!(map(key(KeyCode::Left), TAB), Some(Action::FocusMenu));
+        assert_eq!(map(key(KeyCode::Left), KeyContext { related: true, ..TAB }), Some(Action::FocusMenu));
+        let shift = |code| KeyEvent::new(code, KeyModifiers::SHIFT);
+        assert_eq!(map(shift(KeyCode::Left), TAB), Some(Action::Seek(-SEEK_SECONDS)));
+        assert_eq!(map(shift(KeyCode::Right), TAB), Some(Action::Seek(SEEK_SECONDS)));
         assert_eq!(map(key(KeyCode::Right), TAB), Some(Action::Seek(SEEK_SECONDS)));
+        assert_eq!(map(key(KeyCode::Left), LISTS), Some(Action::Back), "lists unchanged");
         assert_eq!(map(key(KeyCode::Up), TAB), Some(Action::Volume(VOLUME_STEP)));
         assert_eq!(map(key(KeyCode::Down), TAB), Some(Action::Volume(-VOLUME_STEP)));
         assert_eq!(map(char('m'), TAB), Some(Action::ToggleMute));
@@ -458,7 +569,54 @@ mod tests {
             for (c, ..) in PREFIX {
                 assert!(commands.iter().any(|(k, _)| *k == c.to_string()), "{c} missing from help");
             }
-            assert!(commands.iter().any(|(k, _)| k == "0-9"));
+            assert!(!commands.iter().any(|(k, _)| k == "0-9"), "no tab digits any more");
+        }
+    }
+
+    #[test]
+    fn alt_comma_and_period_switch_tabs() {
+        let alt = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
+        for ctx in [LISTS, TYPING, TAB, KeyContext { related: true, ..TAB }, PREFIXED] {
+            assert_eq!(map(alt(','), ctx), Some(Action::PrevTab), "{ctx:?}");
+            assert_eq!(map(alt('.'), ctx), Some(Action::NextTab), "{ctx:?}");
+            // With Shift held by mistake (US layout: < and >).
+            assert_eq!(
+                map(KeyEvent::new(KeyCode::Char('<'), KeyModifiers::ALT | KeyModifiers::SHIFT), ctx),
+                Some(Action::PrevTab)
+            );
+            assert_eq!(
+                map(KeyEvent::new(KeyCode::Char('>'), KeyModifiers::ALT | KeyModifiers::SHIFT), ctx),
+                Some(Action::NextTab)
+            );
+        }
+        assert_eq!((mac_option_tab('≤'), mac_option_tab('≥')), (Some(Action::PrevTab), Some(Action::NextTab)));
+        assert_eq!(mac_option_tab('x'), None);
+        // Plain , and . still change songs in a video tab, and type in the box.
+        assert_eq!(map(char('.'), TAB), Some(Action::NextTrack));
+        assert_eq!(map(char(','), TAB), Some(Action::PrevTrack));
+        assert_eq!(map(char('.'), TYPING), Some(Action::Input('.')));
+        // Ctrl+Alt (AltGr) is not a tab key.
+        let altgr = KeyEvent::new(KeyCode::Char('.'), KeyModifiers::ALT | KeyModifiers::CONTROL);
+        assert_ne!(map(altgr, LISTS), Some(Action::NextTab));
+        // Ctrl+Tab is gone: Tab with Ctrl is just ignored, plain Tab as always.
+        assert_eq!(map(KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL), LISTS), None);
+        assert_eq!(map(key(KeyCode::Tab), LISTS), Some(Action::ToggleFocus));
+        assert_eq!(map(key(KeyCode::Tab), TAB), Some(Action::ToggleFocus));
+        assert_eq!(map(key(KeyCode::Tab), TYPING), Some(Action::CycleScope));
+        // No more Ctrl+Y n / p.
+        assert_eq!(map(char('n'), PREFIXED), Some(Action::CancelPrefix));
+        assert_eq!(map(char('p'), PREFIXED), Some(Action::CancelPrefix));
+        // Repeats and releases count for nothing.
+        for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+            assert_eq!(map(KeyEvent { kind, ..alt('.') }, LISTS), None);
+        }
+        // Both in the full help, in both languages.
+        for lang in [Lang::Es, Lang::En] {
+            let help = help(lang);
+            let keys: Vec<_> = help.iter().flat_map(|(_, rows)| rows.iter().map(|(k, _)| k.as_str())).collect();
+            assert!(keys.contains(&"Alt+,") && keys.contains(&"Alt+."), "{keys:?}");
+            assert!(!keys.iter().any(|k| k.contains("Ctrl+Tab")));
+            assert!(!help[0].1.iter().any(|(k, _)| k == "n" || k == "p"));
         }
     }
 
@@ -466,7 +624,13 @@ mod tests {
     fn help_is_translated() {
         assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "q").unwrap().1, "quit");
         assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "q").unwrap().1, "salir");
-        assert_eq!(rows(IN_TAB, Lang::En)[0].0, "space");
+        assert_eq!(rows(IN_TAB, Lang::En)[0].0, "Space");
+        assert_eq!(rows(IN_TAB, Lang::Es)[0].0, "Espacio");
+        assert!(rows(IN_LISTS, Lang::En).iter().any(|(k, _)| k == "x  Del"));
+        assert!(rows(IN_LISTS, Lang::En).iter().any(|(_, d)| d.contains("Backspace")));
+        let mouse: Vec<_> = rows(WITH_MOUSE, Lang::En).into_iter().map(|(k, _)| k).collect();
+        assert_eq!(mouse, ["Click", "Double Click", "Wheel", "Click Video", "Right Click", "Click Bar", "Shift"]);
+        assert_eq!(rows(WITH_MOUSE, Lang::Es)[1].0, "Doble clic");
         assert_eq!(map(char('l'), PREFIXED), Some(Action::ToggleUiLang));
     }
 }

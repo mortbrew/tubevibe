@@ -70,6 +70,10 @@ pub const TOKYO_NIGHT: Palette = Palette {
     purple: rgb(0x9d7cd8),
 };
 
+/// What the interface draws the accent with: next to Tokyo Night's blue,
+/// which is its accent too, so [`recolor`] can tell them apart.
+pub const ACCENT_DRAWN: Color = Color::Rgb(0x7a, 0xa2, 0xf6);
+
 impl Default for Palette {
     fn default() -> Self {
         TOKYO_NIGHT
@@ -78,9 +82,10 @@ impl Default for Palette {
 
 impl Palette {
     /// `(drawn with, shown as)` for every colour of the interface.
-    fn swaps(&self) -> [(Color, Color); 14] {
+    fn swaps(&self) -> [(Color, Color); 15] {
         let t = TOKYO_NIGHT;
         [
+            (ACCENT_DRAWN, self.accent),
             (t.background, self.background),
             (t.fg, self.fg),
             (t.muted, self.muted),
@@ -102,9 +107,7 @@ impl Palette {
 /// Shows a frame drawn in Tokyo Night in `palette` instead. Colours that are
 /// not part of the palette (YouTube red, white, the terminal's own) stay.
 pub fn recolor(buffer: &mut Buffer, palette: &Palette) {
-    if *palette == TOKYO_NIGHT {
-        return;
-    }
+    // Tokyo Night too: the accent is drawn with a stand-in.
     let swaps = palette.swaps();
     let swap = |color: &mut Color| {
         if let Some((_, to)) = swaps.iter().find(|(from, _)| from == color) {
@@ -145,12 +148,6 @@ fn contrast(a: (u8, u8, u8), b: (u8, u8, u8)) -> f64 {
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
-/// `amount` of the way from `from` to `to`.
-fn mix(from: (u8, u8, u8), to: (u8, u8, u8), amount: f64) -> (u8, u8, u8) {
-    let step = |a: u8, b: u8| (f64::from(a) + (f64::from(b) - f64::from(a)) * amount).round() as u8;
-    (step(from.0, to.0), step(from.1, to.1), step(from.2, to.2))
-}
-
 /// The named colours a theme file gives, read into roles.
 #[derive(Default)]
 struct Named {
@@ -158,6 +155,8 @@ struct Named {
     fg: Option<(u8, u8, u8)>,
     muted: Option<(u8, u8, u8)>,
     selection: Option<(u8, u8, u8)>,
+    /// Omarchy 4's `lighter_background`.
+    lighter: Option<(u8, u8, u8)>,
     line: Option<(u8, u8, u8)>,
     accent: Option<(u8, u8, u8)>,
     /// black red green yellow blue magenta cyan white.
@@ -187,11 +186,20 @@ impl Named {
         let blue = pick(BLUE)?;
         let magenta = pick(MAGENTA)?;
         let cyan = pick(CYAN)?;
+        // Only colours the theme has, never a blend: the first that fits.
+        let first = |candidates: &[Option<(u8, u8, u8)>], fits: &dyn Fn(&(u8, u8, u8)) -> bool| {
+            candidates.iter().flatten().copied().find(|c| fits(c))
+        };
+        let blacks = [self.bright[0], self.normal[0]];
         let readable = |c: &(u8, u8, u8)| contrast(*c, background) >= 2.0;
-        let muted = self.muted.filter(readable).unwrap_or_else(|| mix(fg, background, 0.45));
-        let near = |c: &(u8, u8, u8)| contrast(*c, background) < 2.0 && contrast(*c, fg) >= 3.0;
-        let highlight = self.selection.filter(near).unwrap_or_else(|| mix(background, fg, 0.14));
-        let line = self.line.filter(|c| *c != background).unwrap_or_else(|| mix(background, fg, 0.25));
+        // Secondary text: the theme's dim text, its muted, a readable black, else the text.
+        let muted = first(&[self.muted, self.line, blacks[0], blacks[1]], &readable).unwrap_or(fg);
+        let near = |c: &(u8, u8, u8)| *c != background && contrast(*c, background) < 2.0 && contrast(*c, fg) >= 3.0;
+        // The selected row: the selection, the lighter background, a black near the background.
+        let highlight = first(&[self.selection, self.lighter, blacks[0], blacks[1]], &near)
+            .or(first(&[self.lighter, blacks[0], blacks[1]], &|c| *c != background))
+            .unwrap_or(background);
+        let line = first(&[self.line, blacks[0], blacks[1]], &|c| *c != background).unwrap_or(muted);
         Some(Palette {
             background: color(background),
             fg: color(fg),
@@ -203,7 +211,7 @@ impl Named {
             cyan: color(cyan),
             magenta: color(bright(MAGENTA).unwrap_or(magenta)),
             green: color(green),
-            orange: color(self.orange.unwrap_or_else(|| mix(red, yellow, 0.5))),
+            orange: color(self.orange.unwrap_or(yellow)),
             yellow: color(yellow),
             red: color(red),
             teal: color(bright(CYAN).unwrap_or(cyan)),
@@ -225,6 +233,7 @@ pub fn parse_colors_toml(text: &str) -> Option<Palette> {
         fg: get("bright_foreground").or(get("foreground")),
         muted: get("dark_foreground"),
         selection: get("selection").or(get("selection_background")),
+        lighter: get("lighter_background"),
         line: get("muted"),
         accent: get("accent"),
         orange: get("orange"),
@@ -468,5 +477,57 @@ mod tests {
         watcher.reset();
         assert_eq!(watcher.poll(), Some(TOKYO_NIGHT), "reset answers again");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    const FIXTURES: [(&str, &str); 7] = [
+        ("gruvbox", "colors.toml"),
+        ("gruvbox-v3", "colors.toml"),
+        ("gruvbox-v2", "alacritty.toml"),
+        ("catppuccin-latte", "colors.toml"),
+        ("catppuccin-latte-v2", "alacritty.toml"),
+        ("rose-pine", "colors.toml"),
+        ("tokyo-night", "colors.toml"),
+    ];
+
+    fn load(theme: &str, file: &str) -> Palette {
+        let text = fixture(theme, file);
+        if file == "alacritty.toml" { parse_alacritty(&text) } else { parse_colors_toml(&text) }.unwrap()
+    }
+
+    #[test]
+    fn every_colour_is_one_the_theme_file_has() {
+        for (theme, file) in FIXTURES {
+            let text = fixture(theme, file).to_lowercase();
+            let p = load(theme, file);
+            for (_, c) in p.swaps() {
+                let Color::Rgb(r, g, b) = c else { panic!() };
+                let hex = format!("{r:02x}{g:02x}{b:02x}");
+                assert!(text.contains(&hex), "{theme}: {hex} is not in {file} (a blend?)");
+            }
+        }
+        // No orange: the theme's yellow, not red and yellow mixed.
+        let v3 = load("gruvbox-v3", "colors.toml");
+        assert_eq!(v3.orange, v3.yellow);
+    }
+
+    #[test]
+    fn the_accent_reads_on_the_selected_row() {
+        let c = |x: Color| match x {
+            Color::Rgb(r, g, b) => (r, g, b),
+            _ => panic!(),
+        };
+        let mut report = Vec::new();
+        for (theme, file) in FIXTURES {
+            let p = load(theme, file);
+            let ratio = contrast(c(p.accent), c(p.highlight));
+            report.push(format!("{theme}: {ratio:.2}"));
+            // Light themes are the weak ones: Rosé Pine's own accent on its own
+            // selection is 2.47, Catppuccin Latte from alacritty.toml (no accent, so
+            // blue, on its bright black) 2.27. The row is bold and marked with ▌.
+            assert!(ratio >= 2.2, "{theme}: accent on the selected row {ratio:.2}");
+        }
+        let built_in = contrast(c(TOKYO_NIGHT.accent), c(TOKYO_NIGHT.highlight));
+        assert!(built_in >= 4.5, "{built_in}");
+        println!("{}", report.join("\n"));
     }
 }

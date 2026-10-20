@@ -169,6 +169,9 @@ pub enum Setting {
     AppLang,
     Icons,
     BorderStyle,
+    MenuWidth,
+    PreviewWidth,
+    CommentsWidth,
     RestoreTabs,
     OmarchyTheme,
     Thumbnails,
@@ -192,7 +195,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 37] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -207,6 +210,9 @@ impl Setting {
         Self::AppLang,
         Self::Icons,
         Self::BorderStyle,
+        Self::MenuWidth,
+        Self::PreviewWidth,
+        Self::CommentsWidth,
         Self::RestoreTabs,
         Self::OmarchyTheme,
         Self::Thumbnails,
@@ -231,50 +237,66 @@ impl Setting {
 
     pub fn label(self, lang: Lang) -> &'static str {
         let (es, en) = match self {
-            Self::Browser => ("Sesión desde un navegador", "Log in with a browser"),
+            Self::Browser => ("Sesión desde un navegador", "Log In with a Browser"),
             Self::ImportCookies => {
-                ("Importar cookies.txt (sin navegador / SSH)", "Import cookies.txt (no browser / SSH)")
+                ("Importar cookies.txt (sin navegador / SSH)", "Import cookies.txt (No Browser / SSH)")
             }
-            Self::Refresh => ("Releer la sesión", "Read the login again"),
-            Self::Logout => ("Cerrar sesión", "Log out"),
-            Self::Language => ("Idioma del video", "Video language"),
-            Self::SubLang => ("Idioma de subtítulos y doblaje", "Subtitles and dubbing language"),
-            Self::Quality => ("Calidad máxima", "Maximum quality"),
+            Self::Refresh => ("Releer la sesión", "Read the Login Again"),
+            Self::Logout => ("Cerrar sesión", "Log Out"),
+            Self::Language => ("Idioma del video", "Video Language"),
+            Self::SubLang => ("Idioma de subtítulos y doblaje", "Subtitles and Dubbing Language"),
+            Self::Quality => ("Calidad máxima", "Maximum Quality"),
             Self::VideoMode => ("Video", "Video"),
-            Self::BackgroundAudio => ("Al salir de la pestaña del video", "When leaving the video tab"),
-            Self::SponsorBlock => ("Saltar patrocinios (SponsorBlock)", "Skip sponsors (SponsorBlock)"),
-            Self::Autoplay => ("Enter en un video", "Enter on a video"),
-            Self::AppLang => ("Idioma de la app (Ctrl+y + l)", "App language (Ctrl+y + l)"),
+            Self::BackgroundAudio => ("Al salir de la pestaña del video", "When Leaving the Video Tab"),
+            Self::SponsorBlock => ("Saltar patrocinios (SponsorBlock)", "Skip Sponsors (SponsorBlock)"),
+            Self::Autoplay => ("Enter en un video", "Enter on a Video"),
+            Self::AppLang => ("Idioma de la app (Ctrl+Y l)", "App Language (Ctrl+Y l)"),
             Self::Icons => ("Íconos", "Icons"),
             Self::BorderStyle => ("Estilo de los bordes", "Border Style"),
+            Self::MenuWidth => ("Ancho del menú", "Menu Width"),
+            Self::PreviewWidth => ("Ancho de la vista previa", "Preview Width"),
+            Self::CommentsWidth => ("Ancho de los comentarios", "Comments Width"),
             Self::RestoreTabs => ("Recuperar las pestañas al abrir", "Restore Tabs on Startup"),
             Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
-            Self::Thumbnails => ("Portadas de los videos (kitty)", "Video thumbnails (kitty)"),
-            Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to copy text: Shift)"),
-            Self::Splash => ("Logo al abrir la app", "Logo when the app opens"),
-            Self::FxStartup => ("Animación al abrir la app", "Animation when the app starts"),
-            Self::FxPages => ("Animación al cambiar de página", "Animation when the page changes"),
-            Self::FxDialogs => ("Animación de ayuda y preguntas", "Animation of help and questions"),
-            Self::VideoDirs => ("Carpetas de videos", "Video folders"),
-            Self::MusicDirs => ("Carpetas de música", "Music folders"),
-            Self::DownloadDir => ("Carpeta de descargas", "Downloads folder"),
-            Self::DiscoverTopics => ("Temas de Descubrir", "Discover topics"),
-            Self::SystemCheck => ("Revisar el sistema (mpv, yt-dlp…)", "Check the system (mpv, yt-dlp…)"),
+            Self::Thumbnails => ("Portadas de los videos (kitty)", "Video Thumbnails (kitty)"),
+            Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to Copy Text: Shift)"),
+            Self::Splash => ("Logo al abrir la app", "Logo When the App Opens"),
+            Self::FxStartup => ("Animación al abrir la app", "Animation When the App Starts"),
+            Self::FxPages => ("Animación al cambiar de página", "Animation When the Page Changes"),
+            Self::FxDialogs => ("Animación de ayuda y preguntas", "Animation of Help and Questions"),
+            Self::VideoDirs => ("Carpetas de videos", "Video Folders"),
+            Self::MusicDirs => ("Carpetas de música", "Music Folders"),
+            Self::DownloadDir => ("Carpeta de descargas", "Downloads Folder"),
+            Self::DiscoverTopics => ("Temas de Descubrir", "Discover Topics"),
+            Self::SystemCheck => ("Revisión del sistema (mpv, yt-dlp…)", "System Check (mpv, yt-dlp…)"),
             Self::HideWatched => {
-                ("Ocultar los vistos en Inicio (v los muestra)", "Hide watched videos in feeds (v shows them)")
+                ("Ocultar los vistos en Inicio (v los muestra)", "Hide Watched Videos in Feeds (v Shows Them)")
             }
             Self::HideLater => (
                 "Ocultar en Mis recomendados los de Ver después de YouTube",
-                "Hide YouTube Watch Later videos in My Recommendations",
+                "Hide YouTube Watch Later Videos in My Recommendations",
             ),
             Self::HideShorts => ("Ocultar los Shorts", "Hide Shorts"),
-            Self::NotifyNew => ("Avisar de videos nuevos de mis canales", "Tell me about new videos from my channels"),
-            Self::FavoritesFirst => ("Primero mis canales más vistos", "My most watched channels first"),
-            Self::CheckUpdates => ("Buscar versiones nuevas al abrir", "Look for new versions on startup"),
+            Self::NotifyNew => ("Avisar de videos nuevos de mis canales", "Tell Me About New Videos from My Channels"),
+            Self::FavoritesFirst => ("Primero mis canales más vistos", "My Most Watched Channels First"),
+            Self::CheckUpdates => ("Buscar versiones nuevas al abrir", "Look for New Versions on Startup"),
             Self::EditFile => ("Editar config.toml", "Edit config.toml"),
         };
         lang.pick(es, en)
     }
+}
+
+/// How long My Recommendations, once loaded, is shown again as it was
+/// instead of being read again from YouTube.
+pub const HOME_FRESH: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// A row of the menu the cursor can be on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuRow {
+    /// An entry of `Section::ALL`.
+    Section(usize),
+    /// An open tab, by its index in `tabs`.
+    Tab(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -347,7 +369,7 @@ pub enum ListKind {
     Downloads,
     /// A channel's videos; `/` searches inside it.
     Channel(ChannelRef),
-    /// A YouTube playlist's videos (mine, saved, Liked videos): `Ctrl+y x`
+    /// A YouTube playlist's videos (mine, saved, Liked videos): `Ctrl+Y x`
     /// takes one out.
     Playlist(PlaylistRef),
     /// "Mis canales": unsubscribing takes the channel out.
@@ -478,7 +500,7 @@ pub enum Action {
     Down,
     Enter,
     Back,
-    /// Search videos from anywhere (`/`, `C-y /`).
+    /// Search videos from anywhere (`/`, `Ctrl+Y /`).
     FocusSearch,
     /// Next search scope (Tab in the search box).
     CycleScope,
@@ -515,7 +537,7 @@ pub enum Action {
     AddLater,
     /// Put the selected video in the local tubevibe Watch Later (`l`).
     SaveForLater,
-    /// `Ctrl+y x` in Watch Later or a YouTube playlist: take the selected
+    /// `Ctrl+Y x` in Watch Later or a YouTube playlist: take the selected
     /// video out of it, after asking.
     RemoveFromList,
     /// A video taken out of one of my YouTube playlists, or why not.
@@ -579,6 +601,12 @@ pub enum Action {
     PrevTab,
     /// 0 is Inicio, n is the n-th video tab.
     GoTab(usize),
+    /// The wheel over the menu's tabs: rows to scroll them by.
+    ScrollTabs(isize),
+    /// `x` in the menu: closes the tab under the cursor, like Ctrl+Y x in it.
+    MenuCloseTab,
+    /// `t`: the selected video in a new tab, left in the background.
+    OpenInBackground,
     CloseTab,
     /// The player went away on its own (window closed, video ended, failed to start).
     PlayerClosed(TabId, Option<String>),
@@ -629,6 +657,8 @@ pub enum Action {
     ToggleFocus,
     /// First start without a login: offer the browsers found.
     AskBrowser,
+    /// → in the menu: Enter on the row, but Quit (Enter only).
+    MenuOpen,
     /// What the system has (mpv, yt-dlp…), with its package manager.
     SystemChecked(Manager, Vec<Check>),
     /// Ids of watched videos: my YouTube history, or the local one at start.
@@ -682,8 +712,11 @@ pub enum Action {
     MenuPick(usize),
     /// The opening logo goes away (a key, a click or its time).
     EndSplash,
-    /// The video fills the whole terminal (or screen, in window mode).
+    /// The video fills the whole terminal (or screen, in window mode). From
+    /// the lists: the video playing in the tab shown last.
     ToggleFullscreen,
+    /// mpv's own window went in or out of fullscreen (its `f` / `Esc`, or ours).
+    MpvFullscreen(TabId, bool),
     Quit,
 }
 
@@ -959,19 +992,45 @@ struct Pending {
     skip_later: bool,
 }
 
+/// The menu's tab list scroll: the first tab shown, the tab it keeps in view,
+/// and whether the wheel has let it go (until that tab changes).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TabScroll {
+    pub offset: usize,
+    pub anchor: Option<usize>,
+    pub wheeled: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub config: Config,
     pub sidebar: bool,
     pub prefix: bool,
     pub help: bool,
-    /// The active video fills the terminal.
+    /// The active video fills the terminal (video drawn in the app: kitty or overlay).
     pub fullscreen: bool,
+    /// Window mode: the tab whose mpv window is in fullscreen. The terminal
+    /// keeps showing the app; mpv takes the screen.
+    pub mpv_fullscreen: Option<TabId>,
+    /// The video tab shown last, for `f` from the lists.
+    last_tab: Option<TabId>,
     /// The logo shown when the app opens (set by the runtime), until a key or a moment passes.
     pub splash: bool,
     pub focus: Focus,
     /// Selected entry of `Section::ALL`.
     pub menu: usize,
+    /// The menu's cursor on an open tab (its index in `tabs`) instead of on
+    /// `menu`: ↑ ↓ walk the sections and the tabs in the order they show.
+    pub menu_tab: Option<usize>,
+    /// The section whose list the browsing view shows (marked in the menu).
+    pub shown_section: Option<usize>,
+    /// How far the menu's tab list is scrolled; kept by the drawing, moved by the wheel.
+    pub tab_scroll: std::cell::Cell<TabScroll>,
+    /// The section asked for, until its list replaces the one shown.
+    pending_section: Option<usize>,
+    /// My Recommendations as last loaded (when) and left (cursor, pages):
+    /// shown again without asking YouTube for `HOME_FRESH`.
+    pub home_cache: Option<(std::time::Instant, Listing)>,
     pub prompt: Option<Prompt>,
     pub query: String,
     /// Lists on Inicio; the last one is shown.
@@ -1068,6 +1127,11 @@ impl State {
             help: false,
             fullscreen: false,
             menu: 0,
+            menu_tab: None,
+            shown_section: None,
+            tab_scroll: Default::default(),
+            pending_section: None,
+            home_cache: None,
             prompt: None,
             query: String::new(),
             stack: Vec::new(),
@@ -1104,6 +1168,8 @@ impl State {
             status: String::new(),
             quit: false,
             video_window: false,
+            mpv_fullscreen: None,
+            last_tab: None,
             pending: None,
             recheck: None,
             subs_rechecked: false,
@@ -1166,7 +1232,15 @@ impl State {
 
     /// The related list of the active tab takes the keys.
     fn on_related(&self) -> bool {
-        self.related_shown().is_some_and(|t| t.on_related)
+        self.focus != Focus::Menu && self.related_shown().is_some_and(|t| t.on_related)
+    }
+
+    /// Shows tab `n` (0: the browsing view); a tab shown takes the keys.
+    fn show_tab(&mut self, n: usize) {
+        self.active = n;
+        if n > 0 {
+            self.focus = Focus::List;
+        }
     }
 
     /// The chosen icon set.
@@ -1189,10 +1263,11 @@ impl State {
             help: self.help,
             confirm: self.confirm.is_some(),
             typing: self.prompt.is_some(),
-            in_tab: self.active_tab().is_some(),
+            in_tab: self.active_tab().is_some() && self.focus != Focus::Menu,
             related: self.on_related(),
             context_menu: self.context.is_some(),
             splash: self.splash,
+            menu: self.focus == Focus::Menu && self.prompt.is_none(),
         }
     }
 
@@ -1200,11 +1275,11 @@ impl State {
     pub fn session_label(&self) -> String {
         let session = &self.config.session;
         if !session.cookies_file.is_empty() {
-            self.tr("cookies.txt importado", "imported cookies.txt").into()
+            self.tr("cookies.txt importado", "Imported cookies.txt").into()
         } else if !session.browser.is_empty() {
             crate::session::label(&session.browser)
         } else {
-            self.tr("sin sesión", "not logged in").into()
+            self.tr("Sin sesión", "Not Logged In").into()
         }
     }
 
@@ -1224,18 +1299,18 @@ impl State {
             Setting::SubLang => language_name(&player.sub_lang, lang),
             Setting::Quality => format!("{}p", player.max_height),
             Setting::VideoMode => match player.mode {
-                PlayerMode::Auto => self.tr("automático (integrado en kitty)", "automatic (embedded in kitty)").into(),
-                PlayerMode::Embedded => self.tr("integrado", "embedded").into(),
-                PlayerMode::Window => self.tr("ventana aparte", "separate window").into(),
+                PlayerMode::Auto => self.tr("Automático (integrado en kitty)", "Automatic (Embedded in kitty)").into(),
+                PlayerMode::Embedded => self.tr("Integrado", "Embedded").into(),
+                PlayerMode::Window => self.tr("Ventana aparte", "Separate Window").into(),
                 PlayerMode::Overlay => {
-                    self.tr("superpuesto: ventana sobre la app (X11)", "overlay: a window over the app (X11)").into()
+                    self.tr("Superpuesto: ventana sobre la app (X11)", "Overlay: a Window over the App (X11)").into()
                 }
             },
             Setting::BackgroundAudio => {
                 if player.background_audio {
-                    self.tr("sigue sonando", "keeps playing").into()
+                    self.tr("Sigue sonando", "Keeps Playing").into()
                 } else {
-                    self.tr("se pausa", "pauses").into()
+                    self.tr("Se pausa", "Pauses").into()
                 }
             }
             Setting::SponsorBlock => {
@@ -1243,14 +1318,17 @@ impl State {
                 self.tr(es, en).into()
             }
             Setting::Autoplay => if player.autoplay {
-                self.tr("lo abre y lo reproduce", "opens and plays it")
+                self.tr("Lo abre y lo reproduce", "Opens and Plays It")
             } else {
-                self.tr("abre la pestaña · otro Enter lo reproduce", "opens the tab · Enter again plays it")
+                self.tr("Abre la pestaña · otro Enter lo reproduce", "Opens the Tab · Enter Again Plays It")
             }
             .into(),
             Setting::AppLang => lang.name().into(),
-            Setting::Icons => self.config.ui.icons.as_str().into(),
+            Setting::Icons => self.config.ui.icons.label().into(),
             Setting::BorderStyle => self.config.ui.border_style.label(lang).into(),
+            Setting::MenuWidth => format!("{} {}", self.config.ui.menu_width, self.tr("columnas", "Columns")),
+            Setting::PreviewWidth => format!("{} {}", self.config.ui.preview_width, self.tr("columnas", "Columns")),
+            Setting::CommentsWidth => format!("{} {}", self.config.ui.comments_width, self.tr("columnas", "Columns")),
             Setting::RestoreTabs => {
                 let (es, en) = on_off(self.config.ui.restore_tabs);
                 self.tr(es, en).into()
@@ -1278,10 +1356,10 @@ impl State {
             Setting::SystemCheck => match &self.system {
                 None => String::new(),
                 Some((_, checks)) if checks.iter().any(|c| c.tool.required() && !c.ok()) => {
-                    self.tr("falta algo necesario", "something needed is missing").into()
+                    self.tr("Falta algo necesario", "Something Needed Is Missing").into()
                 }
-                Some((_, checks)) if checks.iter().all(Check::ok) => self.tr("todo instalado", "all installed").into(),
-                Some(_) => self.tr("lo necesario está", "the essentials are there").into(),
+                Some((_, checks)) if checks.iter().all(Check::ok) => self.tr("Todo instalado", "All Installed").into(),
+                Some(_) => self.tr("Lo necesario está", "The Essentials Are There").into(),
             },
             Setting::HideWatched => {
                 let (es, en) = on_off(self.config.ui.hide_watched);
@@ -1309,14 +1387,15 @@ impl State {
                 let (es, en) = on_off(on);
                 self.tr(es, en).into()
             }
-            Setting::VideoDirs => dirs_label(&self.config.media.video_dirs, "~/Videos", lang),
-            Setting::MusicDirs => dirs_label(&self.config.media.music_dirs, "~/Música", lang),
+            Setting::VideoDirs => dirs_label(&self.config.media.video_dirs, &system_folder(MediaKind::Video), lang),
+            Setting::MusicDirs => dirs_label(&self.config.media.music_dirs, &system_folder(MediaKind::Music), lang),
+            // Downloads go to the videos folder unless one is set.
             Setting::DownloadDir => match self.config.download.dir.as_str() {
-                "" => "~/Videos".into(),
+                "" => system_folder(MediaKind::Video),
                 dir => dir.into(),
             },
             Setting::DiscoverTopics => match self.config.search.topics.as_slice() {
-                [] => self.tr("ninguno", "none").into(),
+                [] => self.tr("Ninguno", "None").into(),
                 topics => topics.join(", "),
             },
         }
@@ -1327,13 +1406,60 @@ impl State {
         if let Some(effects) = self.in_context_menu(&action) {
             return effects;
         }
+        let fullscreen_before = self.active_tab().map(|t| t.id).filter(|_| self.fullscreen);
         let mut effects = self.apply(action);
         effects.extend(self.load_restored_tab());
-        // Fullscreen belongs to a video tab; leaving it ends fullscreen.
-        if self.active_tab().is_none() {
+        // Fullscreen belongs to a video tab; leaving it (Esc, another tab,
+        // closing it) ends fullscreen, and mpv and the terminal window are told.
+        if let Some(id) = fullscreen_before {
+            if self.active_tab().map(|t| t.id) != Some(id) {
+                self.fullscreen = false;
+            }
+            let off = Effect::Command(id, PlayerCommand::Fullscreen(false));
+            if !self.fullscreen && !effects.contains(&off) {
+                effects.push(off);
+            }
+        } else if self.active_tab().is_none() {
             self.fullscreen = false;
         }
+        // An mpv window whose tab is gone is not fullscreen any more.
+        if self.mpv_fullscreen.is_some_and(|id| !self.tabs.iter().any(|t| t.id == id && !t.ended)) {
+            self.mpv_fullscreen = None;
+        }
+        if let Some(tab) = self.active_tab() {
+            self.last_tab = Some(tab.id);
+        }
+        // A new login, or another language: My Recommendations is read again.
+        let title = Section::Inicio.label(self.lang());
+        if effects.iter().any(|e| matches!(e, Effect::StartSession { .. }))
+            || self.home_cache.as_ref().is_some_and(|(_, l)| l.title != title)
+        {
+            self.home_cache = None;
+        }
+        // The cursor leaves a closed tab, and the menu once the list has the keys.
+        if self.menu_tab.is_some_and(|i| i >= self.tabs.len()) || (self.active == 0 && self.focus == Focus::List) {
+            self.menu_tab = None;
+        }
         effects
+    }
+
+    /// The menu's rows in the order they show: the sections, the open tabs,
+    /// then Settings, About and Quit.
+    pub fn menu_rows(&self) -> Vec<MenuRow> {
+        let section = |i: &usize| Section::ALL[*i].group() == Group::App;
+        let all: Vec<usize> = (0..Section::ALL.len()).collect();
+        let mut rows: Vec<MenuRow> = all.iter().filter(|i| !section(i)).map(|&i| MenuRow::Section(i)).collect();
+        rows.extend((0..self.tabs.len()).map(MenuRow::Tab));
+        rows.extend(all.iter().filter(|i| section(i)).map(|&i| MenuRow::Section(i)));
+        rows
+    }
+
+    /// Where the menu's cursor is.
+    pub fn menu_row(&self) -> MenuRow {
+        match self.menu_tab {
+            Some(i) if i < self.tabs.len() => MenuRow::Tab(i),
+            _ => MenuRow::Section(self.menu),
+        }
     }
 
     fn apply(&mut self, action: Action) -> Vec<Effect> {
@@ -1345,16 +1471,29 @@ impl State {
             }
             Action::ToggleHelp => self.help = !self.help,
             Action::FocusMenu => {
-                self.active = 0;
+                // Back from a video tab: the tab stays shown, the cursor waits
+                // on it, and fullscreen (which hides the menu) ends.
+                if let Some(index) = self.active.checked_sub(1) {
+                    self.menu_tab = Some(index);
+                    self.fullscreen = false;
+                }
                 self.prompt = None;
                 self.sidebar = true;
                 self.focus = Focus::Menu;
+            }
+            Action::MenuOpen => {
+                if self.menu_row() == MenuRow::Section(Self::section_index(Section::Salir)) {
+                    return Vec::new();
+                }
+                return self.enter();
             }
             Action::AskBrowser => {
                 let session = &self.config.session;
                 if session.asked || !session.browser.is_empty() || !session.cookies_file.is_empty() {
                     return Vec::new();
                 }
+                // The login is a setting: ← from the picker lands on Settings.
+                self.menu_from(Section::Configuracion);
                 let title =
                     self.tr("¿De qué navegador tomo tu sesión de YouTube?", "Which browser has your YouTube login?");
                 let id = self.request(title.into(), Filter::None, false, ListKind::Plain);
@@ -1365,10 +1504,13 @@ impl State {
                 self.active = 0;
                 self.prompt = None;
                 self.menu = i;
+                self.menu_tab = None;
                 self.focus = Focus::Menu;
                 return self.open_section(*section);
             }
             Action::Select(row) if self.related_shown().is_some() => {
+                // A click on Up Next gives it the keys, even from the menu.
+                self.focus = Focus::List;
                 if let Some(tab) = self.active_tab_mut() {
                     tab.related = row.min(tab.related_videos().len().saturating_sub(1));
                     tab.on_related = true;
@@ -1381,6 +1523,7 @@ impl State {
                 return self.more_if_near_the_end();
             }
             Action::Scroll(rows) if self.related_shown().is_some() => {
+                self.focus = Focus::List;
                 if let Some(tab) = self.active_tab_mut() {
                     tab.on_related = true;
                 }
@@ -1391,6 +1534,10 @@ impl State {
                     self.focus = Focus::List;
                     return self.move_selection(rows);
                 }
+            }
+            // Tab from the menu over a video tab: back to the tab.
+            Action::ToggleFocus if self.active_tab().is_some() && self.focus == Focus::Menu => {
+                self.focus = Focus::List;
             }
             Action::ToggleFocus if self.active_tab().is_some() => {
                 if self.related_shown().is_some()
@@ -1409,13 +1556,32 @@ impl State {
             Action::ContextMenu { x, y, row } => self.open_context_menu(x, y, row),
             Action::MenuPick(_) => {}
             Action::EndSplash => self.splash = false,
-            Action::ToggleFullscreen => {
-                self.fullscreen = !self.fullscreen && self.active_tab().is_some();
-                return self.command(PlayerCommand::Fullscreen(self.fullscreen));
+            Action::ToggleFullscreen => return self.toggle_fullscreen(),
+            Action::MpvFullscreen(id, on) => {
+                if on && self.video_window {
+                    self.mpv_fullscreen = Some(id);
+                } else if self.mpv_fullscreen == Some(id) {
+                    self.mpv_fullscreen = None;
+                }
             }
             Action::Up => return self.move_selection(-1),
             Action::Down => return self.move_selection(1),
             Action::Enter => return self.enter(),
+            // Esc also takes mpv's window out of fullscreen.
+            Action::Back if self.prompt.is_none() && !self.fullscreen && self.mpv_fullscreen.is_some() => {
+                let id = self.mpv_fullscreen.take().expect("checked");
+                return vec![Effect::Command(id, PlayerCommand::Fullscreen(false))];
+            }
+            // Esc on a video tab (Up Next's own Esc goes back to the video
+            // first): to the menu, its cursor on the tab, like Esc from a list.
+            Action::Back
+                if self.active_tab().is_some()
+                    && self.focus != Focus::Menu
+                    && self.prompt.is_none()
+                    && !self.fullscreen =>
+            {
+                return self.apply(Action::FocusMenu);
+            }
             Action::Back => self.back(),
             Action::FocusSearch => self.search_videos(),
             Action::CycleScope => self.cycle_scope(),
@@ -1487,12 +1653,13 @@ impl State {
                 }
             }
             Action::AddLater => return self.add_to_later(),
+            Action::OpenInBackground => self.open_in_background(),
             Action::SaveForLater => return self.save_for_later(),
             Action::Trash if self.active == 0 && self.saved_list_video().is_some() => {
                 self.status = self
                     .tr(
-                        "Ctrl+y x lo quita de esta lista (pide confirmar)",
-                        "Ctrl+y x removes it from this list (asks first)",
+                        "Ctrl+Y x lo quita de esta lista (pide confirmar)",
+                        "Ctrl+Y x removes it from this list (asks first)",
                     )
                     .into();
             }
@@ -1609,12 +1776,12 @@ impl State {
                 self.self_update = Progress::Failed(error);
             }
             Action::ToggleMark => return self.toggle_mark(),
-            // Plain `x` no longer takes videos out of YouTube lists: `Ctrl+y x` does.
+            // Plain `x` no longer takes videos out of YouTube lists: `Ctrl+Y x` does.
             Action::Trash if self.active == 0 && self.youtube_list_video().is_some() => {
                 self.status = self
                     .tr(
-                        "Ctrl+y x lo quita de esta lista (pide confirmar)",
-                        "Ctrl+y x removes it from this list (asks first)",
+                        "Ctrl+Y x lo quita de esta lista (pide confirmar)",
+                        "Ctrl+Y x removes it from this list (asks first)",
                     )
                     .into();
             }
@@ -1663,10 +1830,31 @@ impl State {
             Action::OpenChannel => return self.open_channel(),
             Action::Listen => return self.listen(),
             Action::Status(text) => self.status = text,
-            Action::NextTab => self.active = (self.active + 1) % (self.tabs.len() + 1),
-            Action::PrevTab => self.active = self.active.checked_sub(1).unwrap_or(self.tabs.len()),
-            Action::GoTab(n) if n <= self.tabs.len() => self.active = n,
+            // Alt+. / Alt+,: through the tabs only, wrapping around;
+            // from the browsing view to the first / last. No tabs: nothing.
+            Action::NextTab if !self.tabs.is_empty() => {
+                self.show_tab(if self.active >= self.tabs.len() { 1 } else { self.active + 1 });
+            }
+            Action::PrevTab if !self.tabs.is_empty() => {
+                self.show_tab(if self.active <= 1 { self.tabs.len() } else { self.active - 1 });
+            }
+            Action::NextTab | Action::PrevTab => {}
+            Action::GoTab(n) if n <= self.tabs.len() => self.show_tab(n),
             Action::GoTab(_) => {}
+            Action::ScrollTabs(rows) => {
+                let mut scroll = self.tab_scroll.get();
+                scroll.offset = scroll.offset.saturating_add_signed(rows);
+                scroll.wheeled = true;
+                self.tab_scroll.set(scroll);
+            }
+            Action::MenuCloseTab => {
+                let MenuRow::Tab(i) = self.menu_row() else { return Vec::new() };
+                let id = self.tabs[i].id;
+                self.remove_tab(id);
+                // The cursor: the next tab, else the previous, else the sections.
+                self.menu_tab = (!self.tabs.is_empty()).then(|| i.min(self.tabs.len() - 1));
+                return vec![Effect::Close(id)];
+            }
             Action::CloseTab => {
                 if let Some(id) = self.active_tab().map(|t| t.id) {
                     self.remove_tab(id);
@@ -1776,7 +1964,7 @@ impl State {
                 let lang = self.lang();
                 self.status = format!(
                     "{}: {height}p ({})",
-                    lang.pick("Calidad máxima", "Maximum quality"),
+                    lang.pick("Calidad máxima", "Maximum Quality"),
                     lang.pick("recargando el video…", "reloading the video…")
                 );
                 let mut effects = vec![Effect::SaveSetting {
@@ -1846,9 +2034,6 @@ impl State {
             return;
         }
         for t in saved.tabs {
-            if self.tabs.len() >= self.config.ui.max_tabs {
-                break;
-            }
             if t.queue.is_empty() || self.tabs.iter().any(|open| open.playback.queue.first() == t.queue.first()) {
                 continue;
             }
@@ -1891,11 +2076,20 @@ impl State {
         }
         match self.focus {
             // One step past an end goes round to the other end; jumps stop there.
-            Focus::Menu if delta.abs() == 1 => {
-                let len = Section::ALL.len() as isize;
-                self.menu = (self.menu as isize + delta).rem_euclid(len) as usize;
+            Focus::Menu => {
+                let rows = self.menu_rows();
+                let at = rows.iter().position(|r| *r == self.menu_row()).unwrap_or(0);
+                // One step past an end goes round to the other end; jumps stop there.
+                let to = if delta.abs() == 1 {
+                    (at as isize + delta).rem_euclid(rows.len() as isize) as usize
+                } else {
+                    step(at, rows.len())
+                };
+                match rows[to] {
+                    MenuRow::Section(i) => (self.menu, self.menu_tab) = (i, None),
+                    MenuRow::Tab(i) => self.menu_tab = Some(i),
+                }
             }
-            Focus::Menu => self.menu = step(self.menu, Section::ALL.len()),
             Focus::List => {
                 if let Some(l) = self.stack.last_mut() {
                     l.selected = step(l.selected, l.items.len());
@@ -1930,11 +2124,18 @@ impl State {
             let video = self.active_tab().and_then(|t| t.related_videos().get(t.related)).cloned();
             return video.map(|v| self.open_video(v)).unwrap_or_default();
         }
+        // The menu has the keys, even over a video tab still shown: Enter
+        // opens its row (the same tab: back to it).
+        if self.focus == Focus::Menu {
+            if let MenuRow::Tab(i) = self.menu_row() {
+                self.show_tab(i + 1);
+                return Vec::new();
+            }
+            self.active = 0;
+            return self.open_section(Section::ALL[self.menu]);
+        }
         if self.active_tab().is_some() {
             return self.replay();
-        }
-        if self.focus == Focus::Menu {
-            return self.open_section(Section::ALL[self.menu]);
         }
         let Some(listing) = self.stack.last() else { return Vec::new() };
         let selected = listing.selected;
@@ -2010,7 +2211,39 @@ impl State {
         }
     }
 
+    fn section_index(section: Section) -> usize {
+        Section::ALL.iter().position(|s| *s == section).expect("in ALL")
+    }
+
+    /// The menu's cursor on `section`, the one the list shown came from, so
+    /// ← (or Esc) from the list goes back to it.
+    fn menu_from(&mut self, section: Section) {
+        self.menu = Self::section_index(section);
+        self.menu_tab = None;
+        self.pending_section = Some(self.menu);
+    }
+
+    /// The menu row of what the main area shows: the tab, or the section
+    /// of the browsing view's list (none before any list).
+    pub fn shown_row(&self) -> Option<MenuRow> {
+        match self.active.checked_sub(1) {
+            Some(i) if i < self.tabs.len() => Some(MenuRow::Tab(i)),
+            _ => self.shown_section.filter(|_| !self.stack.is_empty()).map(MenuRow::Section),
+        }
+    }
+
     fn open_section(&mut self, section: Section) -> Vec<Effect> {
+        let effects = self.open_section_now(section);
+        // Neither shown nor loading (a hint, no login): the list stays as it was.
+        if self.pending.is_none() && effects.is_empty() {
+            self.pending_section = None;
+        }
+        effects
+    }
+
+    fn open_section_now(&mut self, section: Section) -> Vec<Effect> {
+        self.keep_home();
+        self.menu_from(section);
         let title = section.label(self.lang()).to_owned();
         match section {
             // YouTube's home feed, only my channels; "Descubrir canales" has the rest.
@@ -2018,6 +2251,15 @@ impl State {
                 let hint = self
                     .tr("Sin sesión: elegí un navegador en Configuración", "Not logged in: pick a browser in Settings");
                 self.status = hint.into();
+                Vec::new()
+            }
+            Section::Inicio if self.home_cache.as_ref().is_some_and(|(at, _)| at.elapsed() < HOME_FRESH) => {
+                let (_, listing) = self.home_cache.clone().expect("checked");
+                // Whatever was loading is not wanted any more.
+                (self.pending, self.loading) = (None, None);
+                self.status = format!("{} · {}", listing.title, listing.items.len());
+                self.show(listing);
+                self.refilter();
                 Vec::new()
             }
             Section::Inicio => {
@@ -2126,6 +2368,10 @@ impl State {
     }
 
     fn show(&mut self, listing: Listing) {
+        self.keep_home();
+        if let Some(i) = self.pending_section.take() {
+            self.shown_section = Some(i);
+        }
         self.stack = vec![listing];
         self.focus = Focus::List;
     }
@@ -2193,6 +2439,17 @@ impl State {
             Setting::RestoreTabs => {
                 self.config.ui.restore_tabs = !self.config.ui.restore_tabs;
                 save("ui", "restore_tabs", SettingValue::Bool(self.config.ui.restore_tabs))
+            }
+            Setting::MenuWidth | Setting::PreviewWidth | Setting::CommentsWidth => {
+                use crate::config::{COMMENTS_WIDTH, MENU_WIDTH, PREVIEW_WIDTH};
+                let ui = &mut self.config.ui;
+                let (size, value) = match setting {
+                    Setting::MenuWidth => (MENU_WIDTH, &mut ui.menu_width),
+                    Setting::PreviewWidth => (PREVIEW_WIDTH, &mut ui.preview_width),
+                    _ => (COMMENTS_WIDTH, &mut ui.comments_width),
+                };
+                *value = size.next(*value);
+                save("ui", size.key, SettingValue::Number((*value).into()))
             }
             Setting::BorderStyle => {
                 self.config.ui.border_style = self.config.ui.border_style.next();
@@ -2368,6 +2625,12 @@ impl State {
             return Vec::new();
         }
         self.prompt = None;
+        // A search's results replace the list: the menu points at the search.
+        match prompt {
+            Prompt::Videos { scope: Scope::All | Scope::Mine, .. } => self.menu_from(Section::BuscarVideos),
+            Prompt::Channels => self.menu_from(Section::BuscarCanales),
+            _ => {}
+        }
         match prompt {
             Prompt::Videos { scope: Scope::All, .. } => {
                 let id = self.request(query.clone(), Filter::None, false, ListKind::Plain);
@@ -2608,20 +2871,42 @@ impl State {
                 self.status = format!("{} · {} · {}", listing.title, listing.items.len(), notes.join(" · "));
             }
         }
+        let home = pending.skip_later && !pending.push;
         if pending.push {
             self.stack.push(listing);
             self.focus = Focus::List;
         } else {
             self.show(listing);
         }
+        // Only a load that worked is kept (errors returned above).
+        if home && let Some(root) = self.stack.first() {
+            self.home_cache = Some((std::time::Instant::now(), root.clone()));
+        }
         Vec::new()
     }
 
+    /// Leaving My Recommendations: the cached copy keeps where I was in it
+    /// (selection, pages loaded); its load time stays.
+    fn keep_home(&mut self) {
+        if let (Some((_, cached)), Some(root)) = (&mut self.home_cache, self.stack.first())
+            && root.skip_later
+        {
+            *cached = Listing { more: None, ..root.clone() };
+        }
+    }
+
     fn show_system(&mut self) {
-        let title = self.tr("Revisión del sistema", "System check").to_owned();
+        let title = self.tr("Revisión del sistema", "System Check").to_owned();
         if self.stack.last().is_none_or(|l| l.items != Items::System) {
+            if self.stack.is_empty() {
+                // Opened by itself at startup: it belongs to Settings.
+                self.menu_from(Section::Configuracion);
+            }
             self.active = 0;
             self.stack.push(Listing::new(title, Items::System, ListKind::Plain));
+            if let Some(i) = self.pending_section.take() {
+                self.shown_section = Some(i);
+            }
             self.focus = Focus::List;
         }
     }
@@ -2641,11 +2926,11 @@ impl State {
                 lacking.join(", ")
             );
             self.show_system();
-        } else if !on_screen && extras > 0 && !self.status.starts_with('⚠') {
+        } else if !on_screen && extras > 0 && !self.status.starts_with(self.icons().warning) {
             // (a config warning already showing matters more)
             let note = self.tr(
-                "opcionales sin instalar · Configuración → Revisar el sistema",
-                "optional tools not installed · Settings → Check the system",
+                "opcionales sin instalar · Configuración → Revisión del sistema",
+                "optional tools not installed · Settings → System Check",
             );
             self.status = format!("{extras} {note}");
         } else if on_screen {
@@ -2710,7 +2995,12 @@ impl State {
             if self.stack.len() > 1 {
                 self.stack.pop();
             } else if self.sidebar {
+                // Back to the menu on the section shown, wherever the cursor was.
                 self.focus = Focus::Menu;
+                // (or the one loading to replace it).
+                if let Some(i) = self.pending_section.or(self.shown_section) {
+                    (self.menu, self.menu_tab) = (i, None);
+                }
             }
         }
     }
@@ -2751,6 +3041,9 @@ impl State {
 
     /// The video the user is pointing at: the open tab, or the selected list row.
     fn selected_video(&self) -> Option<&Video> {
+        if self.focus == Focus::Menu {
+            return None; // the menu's rows are no videos
+        }
         if let Some(tab) = self.active_tab() {
             if self.on_related() {
                 return tab.related_videos().get(tab.related);
@@ -2856,18 +3149,19 @@ impl State {
     /// What the right-click menu offers for the selection (or the tab's video).
     fn context_items(&self) -> Vec<MenuItem> {
         let item = |es, en, key, action| MenuItem { label: self.tr(es, en), key, action };
+        let space = crate::keymap::space(self.lang());
         let mut items = Vec::new();
         if let Some(tab) = self.active_tab() {
             if self.on_related() {
                 items.push(item("Ver", "Play", "Enter", Action::Enter));
-                items.push(item("Solo audio", "Sound only", "a", Action::Listen));
+                items.push(item("Solo audio", "Audio Only", "a", Action::Listen));
                 items.extend(self.video_items());
                 return items;
             }
             if tab.ended {
-                items.push(item("Volver a verlo", "Play it again", "Enter", Action::Enter));
+                items.push(item("Volver a verlo", "Play It Again", "Enter", Action::Enter));
             } else {
-                items.push(item("Pausa / seguir", "Pause / resume", "espacio", Action::TogglePause));
+                items.push(item("Pausa / seguir", "Pause / Resume", space, Action::TogglePause));
                 if !tab.playback.audio_only {
                     items.push(item("Pantalla completa", "Fullscreen", "f", Action::ToggleFullscreen));
                 }
@@ -2876,13 +3170,13 @@ impl State {
             }
             if tab.playback.video.is_some() {
                 items.push(if tab.playback.audio_only {
-                    item("Volver al video", "Back to the video", "a", Action::Listen)
+                    item("Volver al video", "Back to the Video", "a", Action::Listen)
                 } else {
-                    item("Solo audio", "Sound only", "a", Action::Listen)
+                    item("Solo audio", "Audio Only", "a", Action::Listen)
                 });
                 items.extend(self.video_items());
             }
-            items.push(item("Cerrar la pestaña", "Close the tab", "Ctrl+y x", Action::CloseTab));
+            items.push(item("Cerrar la pestaña", "Close the Tab", "Ctrl+Y x", Action::CloseTab));
             return items;
         }
         let Some(listing) = self.listing().filter(|_| self.focus == Focus::List) else { return items };
@@ -2890,44 +3184,44 @@ impl State {
         match &listing.items {
             Items::Videos(videos) if videos.get(selected).is_some() => {
                 if listing.kind == ListKind::History {
-                    items.push(item("Ver (sigue donde quedó)", "Play (resumes)", "Enter", Action::Enter));
+                    items.push(item("Ver (sigue donde quedó)", "Play (Resumes)", "Enter", Action::Enter));
                 } else {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
                 }
-                items.push(item("Solo audio", "Sound only", "a", Action::Listen));
+                items.push(item("Solo audio", "Audio Only", "a", Action::Listen));
                 items.extend(self.video_items());
                 if listing.kind == ListKind::History {
-                    items.push(item("Quitar del historial", "Remove from history", "x", Action::Trash));
+                    items.push(item("Quitar del historial", "Remove from History", "x", Action::Trash));
                 }
                 if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_) | ListKind::Saved) {
                     items.push(item(
                         "Quitar de esta lista (pide confirmar)",
-                        "Remove from this list (asks first)",
-                        "Ctrl+y x",
+                        "Remove from This List (Asks First)",
+                        "Ctrl+Y x",
                         Action::RemoveFromList,
                     ));
                 }
             }
             Items::Channels(channels) if channels.get(selected).is_some() => {
-                items.push(item("Ver sus videos", "Its videos", "Enter", Action::Enter));
+                items.push(item("Ver sus videos", "Its Videos", "Enter", Action::Enter));
                 items.extend(self.subscribe_item());
             }
             Items::Playlists(playlists) if playlists.get(selected).is_some() => {
-                items.push(item("Ver sus videos", "Its videos", "Enter", Action::Enter));
-                items.push(item("Borrar la lista", "Delete the playlist", "x", Action::Trash));
+                items.push(item("Ver sus videos", "Its Videos", "Enter", Action::Enter));
+                items.push(item("Borrar la lista", "Delete the Playlist", "x", Action::Trash));
             }
             Items::Files(files, kind) if files.get(selected).is_some() => {
                 items.push(match kind {
-                    MediaKind::Music => item("Escuchar desde acá", "Play from here", "Enter", Action::Enter),
+                    MediaKind::Music => item("Escuchar desde acá", "Play from Here", "Enter", Action::Enter),
                     MediaKind::Video => item("Ver", "Play", "Enter", Action::Enter),
                 });
-                items.push(item("Marcar / desmarcar", "Mark / unmark", "espacio", Action::ToggleMark));
-                items.push(item("A la papelera", "To the trash", "x", Action::Trash));
+                items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
+                items.push(item("A la papelera", "To the Trash", "x", Action::Trash));
             }
             Items::Downloads(downloads) => match downloads.get(selected).map(|d| &d.state) {
                 Some(DownloadState::Done(_)) => {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
-                    items.push(item("Marcar / desmarcar", "Mark / Unmark", "espacio", Action::ToggleMark));
+                    items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
                     items.push(item(
                         "A la papelera (pide confirmar)",
                         "Move to Trash (Asks First)",
@@ -2936,13 +3230,13 @@ impl State {
                     ));
                 }
                 Some(_) => {
-                    items.push(item("Marcar / desmarcar", "Mark / Unmark", "espacio", Action::ToggleMark));
+                    items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
                     items.push(item("Cancelar / quitar", "Cancel / Remove", "x", Action::Trash));
                 }
                 None => {}
             },
             Items::Profiles(profiles) if profiles.get(selected).is_some() => {
-                items.push(item("Usar esta sesión", "Use this login", "Enter", Action::Enter));
+                items.push(item("Usar esta sesión", "Use This Login", "Enter", Action::Enter));
             }
             Items::Settings => items.push(item("Cambiar", "Change", "Enter", Action::Enter)),
             _ => {}
@@ -2970,13 +3264,13 @@ impl State {
             },
             item("Descargar", "Download", "d", Action::Download),
             if self.ratings.get(&video.id) == Some(&Rating::Like) {
-                item("Quitar el me gusta", "Remove the like", "g", Action::Rate(Rating::Like))
+                item("Quitar el me gusta", "Remove the Like", "g", Action::Rate(Rating::Like))
             } else {
                 item("Me gusta", "Like", "g", Action::Rate(Rating::Like))
             },
         ];
         if self.selected_channel().is_some_and(|(_, _, url)| url.is_some()) {
-            items.push(item("Ir al canal", "Go to the channel", "c", Action::OpenChannel));
+            items.push(item("Ir al canal", "Go to the Channel", "c", Action::OpenChannel));
         }
         items.extend(self.subscribe_item());
         items
@@ -2986,7 +3280,7 @@ impl State {
     fn subscribe_item(&self) -> Option<MenuItem> {
         let (id, ..) = self.selected_channel()?;
         let (es, en) = if self.subs.contains(&id) {
-            ("Desuscribirse (pide confirmar)", "Unsubscribe (asks first)")
+            ("Desuscribirse (pide confirmar)", "Unsubscribe (Asks First)")
         } else {
             ("Suscribirse", "Subscribe")
         };
@@ -2999,6 +3293,24 @@ impl State {
 
     /// `l`: a video not in my YouTube Watch Later goes in; one that is there
     /// comes out after asking. When the loaded list can't tell, YouTube is asked.
+    /// `t`: a tab for the selected video, added under TABS (and so to
+    /// tabs.json) like a restored one: nothing plays, nothing is fetched
+    /// until it is shown, and the keys and the screen stay where they are.
+    fn open_in_background(&mut self) {
+        let Some(video) = self.selected_video().cloned() else { return };
+        let playback = Playback::youtube(video);
+        if self.tabs.iter().any(|t| t.playback.queue.first() == playback.queue.first()) {
+            self.status = format!("{}: {}", self.tr("Ya está en una pestaña", "Already Open in a Tab"), playback.title);
+            return;
+        }
+        let id = TabId(self.next_tab);
+        self.next_tab += 1;
+        self.status = format!("{}: {}", self.tr("Abierto en una pestaña nueva", "Opened in a New Tab"), playback.title);
+        let mut tab = Tab::new(id, playback);
+        (tab.ended, tab.started, tab.restored) = (true, false, true);
+        self.tabs.push(tab);
+    }
+
     fn add_to_later(&mut self) -> Vec<Effect> {
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
         if !self.logged_in() {
@@ -3086,7 +3398,7 @@ impl State {
         }
     }
 
-    /// `Ctrl+y x` in Watch Later or a playlist: take the selected video out, after asking.
+    /// `Ctrl+Y x` in Watch Later or a playlist: take the selected video out, after asking.
     fn ask_remove_from_list(&mut self) {
         if !self.logged_in() {
             self.status = self
@@ -3475,7 +3787,7 @@ impl State {
                 format!(
                     "{} {}",
                     self.icons().audio,
-                    self.tr("Solo audio · a vuelve al video", "Sound only · a brings the video back")
+                    self.tr("Solo audio · a vuelve al video", "Audio Only · a brings the video back")
                 )
             } else {
                 self.tr("Volviendo al video…", "Bringing the video back…").into()
@@ -3515,15 +3827,7 @@ impl State {
 
     fn open_tab(&mut self, mut playback: Playback, now: bool) -> Vec<Effect> {
         if let Some(i) = self.tabs.iter().position(|t| t.playback.queue.first() == playback.queue.first()) {
-            self.active = i + 1;
-            return Vec::new();
-        }
-        if self.tabs.len() >= self.config.ui.max_tabs {
-            let (max, close) = (
-                self.tr("Máximo de", "At most"),
-                self.tr("pestañas: cerrá una con Ctrl+y + x", "tabs: close one with Ctrl+y + x"),
-            );
-            self.status = format!("{max} {} {close}", self.config.ui.max_tabs);
+            self.show_tab(i + 1);
             return Vec::new();
         }
         let id = TabId(self.next_tab);
@@ -3554,7 +3858,7 @@ impl State {
         tab.ended = !now;
         tab.started = now;
         self.tabs.push(tab);
-        self.active = self.tabs.len();
+        self.show_tab(self.tabs.len());
         let mut effects = if now { vec![Effect::Open(id, playback.clone())] } else { Vec::new() };
         if let Some(video) = &playback.video {
             effects.push(Effect::Watch { tab: id, video: video.id.clone() });
@@ -4060,6 +4364,72 @@ impl State {
         vec![Effect::SaveSetting { table: "ui", key: "lang", value: SettingValue::Text(lang.as_str().into()) }]
     }
 
+    /// `f`: the video playing fills the screen, or stops filling it. In a
+    /// video tab, its video; in the lists, the one in the tab shown last. With
+    /// the video drawn in the app (kitty, overlay) the terminal shows only the
+    /// video; in window mode mpv's window goes fullscreen and the app stays
+    /// as it is. Nothing playing: a hint, never a blank screen.
+    fn toggle_fullscreen(&mut self) -> Vec<Effect> {
+        if self.fullscreen {
+            // `update` tells mpv and the terminal window.
+            self.fullscreen = false;
+            return Vec::new();
+        }
+        if let Some(id) = self.mpv_fullscreen.take() {
+            return vec![Effect::Command(id, PlayerCommand::Fullscreen(false))];
+        }
+        let in_tab = self.active_tab().map(|t| t.id);
+        let Some(tab) = in_tab.or(self.last_tab).and_then(|id| self.tabs.iter().find(|t| t.id == id)) else {
+            self.status = self
+                .tr(
+                    "Nada se está reproduciendo · abrí un video y después f",
+                    "Nothing is playing · open a video, then f",
+                )
+                .into();
+            return Vec::new();
+        };
+        if tab.ended {
+            self.status = if in_tab.is_some() {
+                self.tr(
+                    "El video no se está reproduciendo · Enter lo reproduce, después f",
+                    "The video isn't playing · Enter plays it, then f",
+                )
+            } else {
+                self.tr(
+                    "Nada se está reproduciendo · abrí un video y después f",
+                    "Nothing is playing · open a video, then f",
+                )
+            }
+            .into();
+            return Vec::new();
+        }
+        if tab.playback.audio_only {
+            self.status = self
+                .tr("Solo audio: no hay imagen · a vuelve al video", "Audio Only: no picture · a brings the video back")
+                .into();
+            return Vec::new();
+        }
+        let id = tab.id;
+        if self.video_window {
+            self.mpv_fullscreen = Some(id);
+            self.status = self
+                .tr(
+                    "Pantalla completa en la ventana de mpv · f o Esc ahí para salir",
+                    "Fullscreen in the mpv window · f or Esc there to leave",
+                )
+                .into();
+        } else {
+            // In the lists: back to the video's tab, which fills the terminal.
+            if let Some(index) = self.tabs.iter().position(|t| t.id == id) {
+                self.show_tab(index + 1);
+            }
+            // Fullscreen hides the menu: the video takes the keys.
+            self.focus = Focus::List;
+            self.fullscreen = true;
+        }
+        vec![Effect::Command(id, PlayerCommand::Fullscreen(true))]
+    }
+
     fn command(&self, command: PlayerCommand) -> Vec<Effect> {
         self.active_tab().map(|t| Effect::Command(t.id, command)).into_iter().collect()
     }
@@ -4087,6 +4457,27 @@ fn filter_feed(listing: &mut Listing, watched: &HashSet<String>, show: bool, lat
     listing.items = Items::Videos(videos);
 }
 
+/// The system's own folder for `kind` (XDG user dirs: `~/Videos`,
+/// `~/Music`, or their names in the system's language), with `~` for home.
+pub fn system_folder(kind: MediaKind) -> String {
+    let fallback = match kind {
+        MediaKind::Video => "~/Videos",
+        MediaKind::Music => "~/Music",
+    };
+    let Some(user) = directories::UserDirs::new() else { return fallback.into() };
+    let dir = match kind {
+        MediaKind::Video => user.video_dir(),
+        MediaKind::Music => user.audio_dir(),
+    };
+    match dir {
+        Some(dir) => match dir.strip_prefix(user.home_dir()) {
+            Ok(rest) => format!("~/{}", rest.display()),
+            Err(_) => dir.display().to_string(),
+        },
+        None => fallback.into(),
+    }
+}
+
 fn dirs_label(dirs: &[String], default: &str, lang: Lang) -> String {
     if dirs.is_empty() { format!("{default} ({})", lang.pick("del sistema", "system")) } else { dirs.join(", ") }
 }
@@ -4101,16 +4492,16 @@ fn effect_flag(effects: &mut EffectsConfig, setting: Setting) -> Option<(&'stati
     }
 }
 
-/// "sí"/"no" in both languages.
+/// "Sí"/"No", "On"/"Off".
 fn on_off(on: bool) -> (&'static str, &'static str) {
-    if on { ("sí", "on") } else { ("no", "off") }
+    if on { ("Sí", "On") } else { ("No", "Off") }
 }
 
 pub fn language_label(language: Language, lang: Lang) -> &'static str {
     let (es, en) = match language {
-        Language::Subtitles => ("original + subtítulos", "original + subtitles"),
-        Language::Original => ("original, sin subtítulos", "original, no subtitles"),
-        Language::Dubbed => ("audio doblado", "dubbed audio"),
+        Language::Subtitles => ("Original + subtítulos", "Original + Subtitles"),
+        Language::Original => ("Original, sin subtítulos", "Original, No Subtitles"),
+        Language::Dubbed => ("Audio doblado", "Dubbed Audio"),
     };
     lang.pick(es, en)
 }
@@ -4771,8 +5162,8 @@ mod tests {
         assert_eq!(change(&mut s, Setting::AppLang), vec![saved("ui", "lang", text("en"))]);
         assert_eq!(change(&mut s, Setting::FxPages), vec![saved("effects", "pages", SettingValue::Bool(false))]);
         assert!(!s.config.effects.pages && s.config.effects.startup && s.config.effects.dialogs);
-        assert_eq!(s.setting_value(Setting::FxPages), "off");
-        assert_eq!(s.setting_value(Setting::FxDialogs), "on");
+        assert_eq!(s.setting_value(Setting::FxPages), "Off");
+        assert_eq!(s.setting_value(Setting::FxDialogs), "On");
     }
 
     #[test]
@@ -4866,8 +5257,8 @@ mod tests {
     fn load_error_is_reported_and_keeps_the_list() {
         let mut s = with_videos(&["a"]);
         let id = load_id(&open(&mut s, Section::Suscripciones));
-        s.update(Action::Loaded(id, Err("sin sesión".into())));
-        assert_eq!(s.status, "sin sesión");
+        s.update(Action::Loaded(id, Err("Sin sesión".into())));
+        assert_eq!(s.status, "Sin sesión");
         assert_eq!(s.listing().unwrap().title, "Suscripciones");
     }
 
@@ -4909,6 +5300,58 @@ mod tests {
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
         assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a"), video("b")]));
         assert_eq!(s.listing().unwrap().title, "Mis recomendados");
+    }
+
+    #[test]
+    fn my_recommendations_are_kept_for_a_minute() {
+        let fetches =
+            |e: &[Effect]| e.iter().filter(|e| matches!(e, Effect::Load { source: Source::Recommended, .. })).count();
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::Inicio));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b"), video("c")]))));
+        s.stack[0].selected = 2;
+        let subs = load_id(&open(&mut s, Section::Suscripciones));
+        s.update(Action::Loaded(subs, Ok(Items::Videos(vec![video("x")]))));
+        // Back within 60 s: the same list, where I left it, nothing asked.
+        let effects = open(&mut s, Section::Inicio);
+        assert_eq!(fetches(&effects), 0, "{effects:?}");
+        assert!(effects.is_empty(), "no history or Watch Later reads either: {effects:?}");
+        assert_eq!(s.listing().unwrap().title, "Mis recomendados");
+        assert_eq!(s.listing().unwrap().selected, 2, "cursor kept");
+        assert!(s.pending.is_none());
+        // After 60 s it is read again, as before.
+        let old = std::time::Instant::now().checked_sub(HOME_FRESH + std::time::Duration::from_secs(1)).unwrap();
+        s.home_cache.as_mut().unwrap().0 = old;
+        assert_eq!(fetches(&open(&mut s, Section::Inicio)), 1);
+    }
+
+    #[test]
+    fn a_failed_recommendations_load_is_not_kept() {
+        let fetches =
+            |e: &[Effect]| e.iter().filter(|e| matches!(e, Effect::Load { source: Source::Recommended, .. })).count();
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::Inicio));
+        s.update(Action::Loaded(id, Err("HTTP 500".into())));
+        assert!(s.home_cache.is_none());
+        assert_eq!(fetches(&open(&mut s, Section::Inicio)), 1, "tried again at once");
+        // Subscriptions (same feed code) still reads every time.
+        let id = load_id(&open(&mut s, Section::Suscripciones));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("x")]))));
+        assert!(
+            open(&mut s, Section::Suscripciones)
+                .iter()
+                .any(|e| matches!(e, Effect::Load { source: Source::Subscriptions, .. }))
+        );
+        // A new login or another language drops the copy.
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::Inicio));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a")]))));
+        assert!(s.home_cache.is_some());
+        s.update(Action::ToggleUiLang);
+        assert!(s.home_cache.is_none());
     }
 
     #[test]
@@ -5085,16 +5528,15 @@ mod tests {
     }
 
     #[test]
-    fn restoring_tabs_respects_the_limit_the_setting_and_bad_files() {
+    fn restoring_tabs_keeps_them_all_respects_the_setting_and_bad_files() {
         let mut s = state();
-        for id in ["a", "b", "c"] {
-            s.play(Playback::youtube(video(id)));
+        for i in 0..35 {
+            s.play(Playback::youtube(video(&format!("v{i}"))));
         }
         let saved = s.saved_tabs();
-        let mut few = state();
-        few.config.ui.max_tabs = 2;
-        few.update(Action::TabsRestored(Ok(saved.clone())));
-        assert_eq!(few.tabs.len(), 2, "no more than max_tabs");
+        let mut many = state();
+        many.update(Action::TabsRestored(Ok(saved.clone())));
+        assert_eq!(many.tabs.len(), 35, "no limit");
         let mut off = state();
         off.config.ui.restore_tabs = false;
         off.update(Action::TabsRestored(Ok(saved)));
@@ -5275,21 +5717,19 @@ mod tests {
         let mut s = idle_state();
         assert_eq!(change(&mut s, Setting::Autoplay), [saved("player", "autoplay", SettingValue::Bool(true))]);
         assert!(s.config.player.autoplay);
-        assert_eq!(s.setting_value(Setting::Autoplay), "lo abre y lo reproduce");
+        assert_eq!(s.setting_value(Setting::Autoplay), "Lo abre y lo reproduce");
     }
 
     #[test]
-    fn max_tabs_is_enforced() {
-        let config = Config { ui: UiConfig { max_tabs: 1, ..Default::default() }, ..Default::default() };
-        let mut s = State::new(config, vec![]);
-        s.config.player.autoplay = true;
-        let id = load_id(&open(&mut s, Section::Suscripciones));
-        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
-        play(&mut s, 0);
-        s.update(Action::GoTab(0));
-        s.stack[0].selected = 1;
-        assert!(s.update(Action::Enter).is_empty());
-        assert!(s.status.contains("Máximo"));
+    fn tabs_are_unlimited() {
+        let ids: Vec<String> = (0..40).map(|i| format!("v{i}")).collect();
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut s = with_videos(&ids);
+        for i in 0..40 {
+            play(&mut s, i);
+        }
+        assert_eq!((s.tabs.len(), s.active), (40, 40));
+        assert!(!s.status.contains("tabs:") && !s.status.contains("Máximo"), "{}", s.status);
     }
 
     #[test]
@@ -5298,8 +5738,21 @@ mod tests {
         play(&mut s, 0);
         let b = play(&mut s, 1);
         play(&mut s, 2);
+        // The last tab is in front: next wraps to the first, previous back.
+        assert_eq!(s.active, 3);
         s.update(Action::NextTab);
-        assert_eq!(s.active, 0);
+        assert_eq!(s.active, 1);
+        s.update(Action::PrevTab);
+        assert_eq!(s.active, 3);
+        s.update(Action::PrevTab);
+        assert_eq!(s.active, 2);
+        s.update(Action::NextTab);
+        assert_eq!(s.active, 3);
+        // From the browsing view: next goes to the first tab, previous to the last.
+        s.update(Action::GoTab(0));
+        s.update(Action::NextTab);
+        assert_eq!(s.active, 1);
+        s.update(Action::GoTab(0));
         s.update(Action::PrevTab);
         assert_eq!(s.active, 3);
         s.update(Action::GoTab(9));
@@ -5311,6 +5764,11 @@ mod tests {
         s.update(Action::CloseTab);
         assert_eq!(s.active, 0);
         assert!(s.update(Action::CloseTab).is_empty());
+        // No tabs: Alt+. and Alt+, do nothing, quietly.
+        let status = s.status.clone();
+        assert!(s.update(Action::NextTab).is_empty());
+        assert!(s.update(Action::PrevTab).is_empty());
+        assert_eq!((s.active, &s.status), (0, &status));
     }
 
     #[test]
@@ -5449,8 +5907,8 @@ mod tests {
         s.update(Action::Down);
         // Plain `x` no longer removes: it says how.
         assert!(s.update(Action::Trash).is_empty());
-        assert!(s.confirm.is_none() && s.status.contains("Ctrl+y x"), "{}", s.status);
-        assert!(s.update(Action::CloseTab).is_empty(), "Ctrl+y x");
+        assert!(s.confirm.is_none() && s.status.contains("Ctrl+Y x"), "{}", s.status);
+        assert!(s.update(Action::CloseTab).is_empty(), "Ctrl+Y x");
         assert_eq!(s.confirm, Some(Confirm::RemoveFromLater(video("b"))));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::EditLater { video: video("b"), add: false }]);
         s.update(Action::LaterEdited { video: video("b"), add: false, result: Ok(()) });
@@ -5511,11 +5969,11 @@ mod tests {
         s.update(Action::PlaylistEdited {
             playlist: "PLx".into(),
             video: video("b"),
-            result: Err("YouTube: http status: 400 · Request contains an invalid argument.".into()),
+            result: Err("YouTube: HTTP 400 · Request contains an invalid argument.".into()),
         });
         assert_eq!(
             s.status,
-            "❌ Could not remove title b from Mine: YouTube: http status: 400 · Request contains an invalid argument."
+            "❌ Could not remove title b from Mine: YouTube: HTTP 400 · Request contains an invalid argument."
         );
         s.config.ui.lang = Some(Lang::Es);
         s.update(Action::PlaylistEdited { playlist: "PLx".into(), video: video("b"), result: Ok(()) });
@@ -5525,7 +5983,7 @@ mod tests {
         // The right-click menu offers it too.
         s.update(Action::ContextMenu { x: 0, y: 0, row: true });
         let menu = &s.context.as_ref().unwrap().items;
-        assert!(menu.iter().any(|i| i.action == Action::RemoveFromList && i.key == "Ctrl+y x"));
+        assert!(menu.iter().any(|i| i.action == Action::RemoveFromList && i.key == "Ctrl+Y x"));
     }
 
     #[test]
@@ -5608,7 +6066,7 @@ mod tests {
         assert!(s.status.contains("mpv"), "{}", s.status);
         assert_eq!(s.update(Action::Enter), [Effect::CheckSystem], "Enter checks again");
         assert_eq!(s.stack.len(), 1, "not opened twice");
-        assert_eq!(s.setting_value(Setting::SystemCheck), "falta algo necesario");
+        assert_eq!(s.setting_value(Setting::SystemCheck), "Falta algo necesario");
     }
 
     #[test]
@@ -5805,7 +6263,7 @@ mod tests {
         assert_eq!(s.listing().unwrap().items.len(), Setting::ALL.len());
         assert_eq!(s.setting_value(Setting::Quality), "720p");
         assert_eq!(s.setting_value(Setting::DownloadDir), "~/Videos");
-        assert_eq!(s.setting_value(Setting::Browser), "sin sesión");
+        assert_eq!(s.setting_value(Setting::Browser), "Sin sesión");
     }
 
     #[test]
@@ -5822,6 +6280,13 @@ mod tests {
         assert_eq!(s.config.player.mode, PlayerMode::Overlay);
         assert_eq!(change(&mut s, Setting::Icons), [saved("ui", "icons", text("nerd"))]);
         assert_eq!(change(&mut s, Setting::BorderStyle), [saved("ui", "border_style", text("rounded"))]);
+        assert_eq!(change(&mut s, Setting::MenuWidth), [saved("ui", "menu_width", SettingValue::Number(28))]);
+        assert_eq!(s.setting_value(Setting::MenuWidth), "28 columnas");
+        assert_eq!(change(&mut s, Setting::PreviewWidth), [saved("ui", "preview_width", SettingValue::Number(50))]);
+        assert_eq!(change(&mut s, Setting::CommentsWidth), [saved("ui", "comments_width", SettingValue::Number(50))]);
+        s.config.ui.comments_width = 78;
+        assert_eq!(change(&mut s, Setting::CommentsWidth), [saved("ui", "comments_width", SettingValue::Number(30))]);
+        assert_eq!(s.setting_value(Setting::CommentsWidth), "30 columnas");
         assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);
@@ -5830,20 +6295,20 @@ mod tests {
     #[test]
     fn subtitle_language_cycles_and_saves() {
         let mut s = state();
-        assert_eq!(s.setting_value(Setting::SubLang), "español (es)");
+        assert_eq!(s.setting_value(Setting::SubLang), "Español (es)");
         assert_eq!(change(&mut s, Setting::SubLang), [saved("player", "sub_lang", text("en"))]);
-        assert_eq!(s.setting_value(Setting::SubLang), "inglés (en)");
+        assert_eq!(s.setting_value(Setting::SubLang), "Inglés (en)");
     }
 
     #[test]
     fn background_audio_toggles_and_saves() {
         let mut s = state();
-        assert_eq!(s.setting_value(Setting::BackgroundAudio), "sigue sonando");
+        assert_eq!(s.setting_value(Setting::BackgroundAudio), "Sigue sonando");
         assert_eq!(
             change(&mut s, Setting::BackgroundAudio),
             [saved("player", "background_audio", SettingValue::Bool(false))]
         );
-        assert_eq!(s.setting_value(Setting::BackgroundAudio), "se pausa");
+        assert_eq!(s.setting_value(Setting::BackgroundAudio), "Se pausa");
     }
 
     #[test]
@@ -6140,10 +6605,10 @@ mod tests {
         let listing = s.listing().unwrap();
         assert_eq!((listing.kind.clone(), listing.title.as_str()), (ListKind::Saved, "Ver después"));
         assert_eq!(listing.items, Items::Videos(vec![video("a"), video("b")]));
-        // Plain x only says how; Ctrl+y x asks, then takes it out and saves the file.
+        // Plain x only says how; Ctrl+Y x asks, then takes it out and saves the file.
         s.update(Action::Down);
         s.update(Action::Trash);
-        assert!(s.confirm.is_none() && s.status.contains("Ctrl+y x"), "{}", s.status);
+        assert!(s.confirm.is_none() && s.status.contains("Ctrl+Y x"), "{}", s.status);
         s.update(Action::CloseTab);
         assert_eq!(s.confirm, Some(Confirm::RemoveFromSaved(video("b"))));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::SaveSaved(vec![video("a")])]);
@@ -6230,7 +6695,7 @@ mod tests {
     #[test]
     fn media_folders_are_edited_as_a_list() {
         let mut s = state();
-        assert_eq!(s.setting_value(Setting::MusicDirs), "~/Música (del sistema)");
+        assert_eq!(s.setting_value(Setting::MusicDirs), format!("{} (del sistema)", system_folder(MediaKind::Music)));
         assert!(change(&mut s, Setting::MusicDirs).is_empty());
         assert_eq!(s.prompt, Some(Prompt::MediaDirs(MediaKind::Music)));
         type_text(&mut s, "~/Música, /mnt/discos");
@@ -6245,7 +6710,7 @@ mod tests {
         play(&mut s, 0);
         s.update(Action::ToggleSidebar);
         s.update(Action::FocusMenu);
-        assert_eq!((s.active, s.focus, s.sidebar), (0, Focus::Menu, true));
+        assert_eq!((s.active, s.focus, s.sidebar), (1, Focus::Menu, true), "the tab stays shown");
     }
 
     #[test]
@@ -6273,6 +6738,360 @@ mod tests {
         s.update(Action::ToggleFullscreen);
         s.update(Action::GoTab(0));
         assert!(!s.fullscreen, "leaving the tab ends fullscreen");
+    }
+
+    #[test]
+    fn f_from_the_lists_goes_to_the_playing_video_in_fullscreen() {
+        let mut s = with_videos(&["a"]);
+        let a = play(&mut s, 0);
+        s.update(Action::GoTab(0));
+        assert_eq!(s.update(Action::ToggleFullscreen), [Effect::Command(a, PlayerCommand::Fullscreen(true))]);
+        assert!(s.fullscreen && s.active_tab().map(|t| t.id) == Some(a), "back on the video's tab");
+        assert_eq!(s.update(Action::Back), [Effect::Command(a, PlayerCommand::Fullscreen(false))]);
+        assert!(!s.fullscreen);
+    }
+
+    #[test]
+    fn f_says_why_when_nothing_is_playing() {
+        let mut s = with_videos(&["a"]);
+        assert!(s.update(Action::ToggleFullscreen).is_empty());
+        assert!(s.status.contains("Nada se está reproduciendo"), "{}", s.status);
+        let a = play(&mut s, 0);
+        s.tabs.iter_mut().find(|t| t.id == a).unwrap().ended = true;
+        assert!(s.update(Action::ToggleFullscreen).is_empty());
+        assert!(!s.fullscreen, "no blank screen for a video that is not playing");
+        assert!(s.status.contains("Enter lo reproduce"), "{}", s.status);
+        s.update(Action::GoTab(0));
+        assert!(s.update(Action::ToggleFullscreen).is_empty());
+        assert!(!s.fullscreen && s.active == 0, "stays on the lists");
+    }
+
+    #[test]
+    fn window_mode_fullscreen_is_mpvs_and_never_blanks_the_terminal() {
+        let mut s = with_videos(&["a"]);
+        s.video_window = true;
+        let a = play(&mut s, 0);
+        s.update(Action::GoTab(0));
+        assert_eq!(s.update(Action::ToggleFullscreen), [Effect::Command(a, PlayerCommand::Fullscreen(true))]);
+        assert!(!s.fullscreen && s.active == 0, "the terminal keeps the lists");
+        assert_eq!(s.mpv_fullscreen, Some(a));
+        assert_eq!(s.update(Action::ToggleFullscreen), [Effect::Command(a, PlayerCommand::Fullscreen(false))]);
+        assert_eq!(s.mpv_fullscreen, None);
+        // mpv's own f and Esc are followed, and Esc here takes it out too.
+        s.update(Action::MpvFullscreen(a, true));
+        assert_eq!(s.mpv_fullscreen, Some(a));
+        assert_eq!(s.update(Action::Back), [Effect::Command(a, PlayerCommand::Fullscreen(false))]);
+        assert_eq!(s.mpv_fullscreen, None);
+        s.update(Action::MpvFullscreen(a, true));
+        s.update(Action::MpvFullscreen(a, false));
+        assert_eq!(s.mpv_fullscreen, None);
+    }
+
+    #[test]
+    fn leaving_a_fullscreen_tab_tells_mpv() {
+        let mut s = with_videos(&["a"]);
+        let a = play(&mut s, 0);
+        s.update(Action::ToggleFullscreen);
+        assert!(s.update(Action::GoTab(0)).contains(&Effect::Command(a, PlayerCommand::Fullscreen(false))));
+        assert!(!s.fullscreen);
+    }
+
+    #[test]
+    fn system_folders_are_the_users_own() {
+        for kind in [MediaKind::Video, MediaKind::Music] {
+            let folder = system_folder(kind);
+            assert!(folder.starts_with("~/") || folder.starts_with('/'), "{folder}");
+        }
+    }
+
+    #[test]
+    fn menu_walks_the_open_tabs() {
+        let mut s = with_videos(&["a", "b"]);
+        let a = play(&mut s, 0);
+        let b = play(&mut s, 1);
+        s.update(Action::GoTab(0));
+        s.focus = Focus::Menu;
+        let downloads = Section::ALL.iter().position(|x| *x == Section::Descargas).unwrap();
+        let settings = Section::ALL.iter().position(|x| *x == Section::Configuracion).unwrap();
+        s.menu = downloads;
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0), "after the last section, the first tab");
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Tab(1));
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Section(settings), "then Settings");
+        s.update(Action::Up);
+        assert_eq!(s.menu_row(), MenuRow::Tab(1));
+        s.update(Action::Enter);
+        assert_eq!(s.active_tab().map(|t| t.id), Some(b), "Enter opens the tab");
+        // ← (or Ctrl+Y m) back to the menu: the cursor waits on that tab.
+        s.update(Action::GoTab(1));
+        s.update(Action::FocusMenu);
+        assert_eq!((s.active, s.focus, s.menu_row()), (1, Focus::Menu, MenuRow::Tab(0)));
+        assert_eq!(s.tabs[0].id, a);
+        s.update(Action::Up);
+        assert_eq!(s.menu_row(), MenuRow::Section(downloads));
+        // No tabs: the menu goes from Downloads straight to Settings, as before.
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = downloads;
+        s.update(Action::Down);
+        assert_eq!(s.menu_row(), MenuRow::Section(settings));
+    }
+
+    #[test]
+    fn menu_context_only_while_the_menu_has_the_keys() {
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        assert!(s.key_context().menu);
+        s.focus = Focus::List;
+        assert!(!s.key_context().menu);
+        play(&mut s, 0);
+        assert!(!s.key_context().menu, "a video tab has the keys");
+        // Enter on Quit quits.
+        s.update(Action::FocusMenu);
+        s.menu_tab = None;
+        s.menu = Section::ALL.iter().position(|x| *x == Section::Salir).unwrap();
+        s.update(Action::Enter);
+        assert!(s.quit);
+    }
+
+    #[test]
+    fn left_from_any_section_lands_on_that_section() {
+        for (i, section) in Section::ALL.iter().enumerate() {
+            if *section == Section::Salir {
+                continue;
+            }
+            let mut s = with_videos(&["a"]);
+            s.config.session.browser = "brave".into();
+            s.focus = Focus::Menu;
+            s.menu = i;
+            let effects = s.update(Action::MenuOpen);
+            // A search box or a hint only: the list shown (Subscriptions) stays, and so its row.
+            let expected = if s.prompt.take().is_some() || (effects.is_empty() && s.shown_section != Some(i)) {
+                State::section_index(Section::Suscripciones)
+            } else {
+                i
+            };
+            s.focus = Focus::List;
+            s.update(Action::Back);
+            assert_eq!((s.focus, s.menu_row()), (Focus::Menu, MenuRow::Section(expected)), "{section:?}");
+        }
+    }
+
+    #[test]
+    fn right_on_quit_does_nothing_enter_quits() {
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::Salir);
+        assert!(s.update(Action::MenuOpen).is_empty());
+        assert!(!s.quit, "→ on Quit does nothing");
+        s.update(Action::Enter);
+        assert!(s.quit);
+        // → elsewhere is Enter.
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::AcercaDe);
+        s.update(Action::MenuOpen);
+        assert_eq!(s.listing().unwrap().items, Items::About);
+    }
+
+    #[test]
+    fn left_from_search_results_or_the_startup_check_lands_where_they_belong() {
+        let mut s = with_videos(&["a"]);
+        s.menu = State::section_index(Section::Suscripciones);
+        s.update(Action::FocusSearch);
+        type_text(&mut s, "rust");
+        s.update(Action::Enter);
+        s.focus = Focus::List;
+        s.update(Action::Back);
+        assert_eq!(s.menu_row(), MenuRow::Section(State::section_index(Section::BuscarVideos)));
+        use crate::doctor::Tool;
+        let mut s = state();
+        s.update(Action::SystemChecked(Manager::Apt, vec![check(Tool::Mpv, false), check(Tool::YtDlp, true)]));
+        s.update(Action::Back);
+        assert_eq!(
+            (s.focus, s.menu_row()),
+            (Focus::Menu, MenuRow::Section(State::section_index(Section::Configuracion)))
+        );
+    }
+
+    #[test]
+    fn search_results_and_the_startup_check_mark_their_section_shown() {
+        let mut s = with_videos(&["a"]);
+        s.update(Action::FocusSearch);
+        type_text(&mut s, "rust");
+        let id = match s.update(Action::Enter).as_slice() {
+            [Effect::Search { id, .. }] => *id,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(1)), "not yet: Subscriptions still shown");
+        s.update(Action::Page(id, Ok(SearchPage { videos: vec![video("r")], next: None })));
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::BuscarVideos))));
+        use crate::doctor::Tool;
+        let mut s = state();
+        s.update(Action::SystemChecked(Manager::Apt, vec![check(Tool::Mpv, false), check(Tool::YtDlp, true)]));
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::Configuracion))));
+    }
+
+    #[test]
+    fn esc_on_a_video_tab_goes_to_the_menu_on_that_tab() {
+        let mut s = with_videos(&["a", "b"]);
+        s.stack.push(Listing::new("Canal".into(), Items::Videos(vec![video("c")]), ListKind::Plain));
+        play(&mut s, 0);
+        s.update(Action::ToggleFullscreen);
+        s.update(Action::Back);
+        assert!(!s.fullscreen && s.active == 1, "first Esc only leaves fullscreen");
+        s.update(Action::Back);
+        assert_eq!((s.active, s.focus, s.menu_row()), (1, Focus::Menu, MenuRow::Tab(0)), "tab still shown");
+        assert_eq!(s.stack.len(), 2, "the list behind the tab is left alone");
+    }
+
+    #[test]
+    fn the_menu_takes_the_keys_over_a_tab_still_shown() {
+        let mut s = with_videos(&["a", "b"]);
+        let a = play(&mut s, 0);
+        let b = play(&mut s, 1);
+        s.update(Action::GoTab(1));
+        s.update(Action::FocusMenu);
+        assert_eq!((s.active, s.focus), (1, Focus::Menu));
+        let ctx = s.key_context();
+        assert!(ctx.menu && !ctx.in_tab && !ctx.related, "{ctx:?}");
+        // Moving the cursor leaves the tab shown.
+        s.update(Action::Down);
+        s.update(Action::Down);
+        assert_eq!((s.active, s.menu_row()), (1, MenuRow::Section(State::section_index(Section::Configuracion))));
+        s.update(Action::Up);
+        assert_eq!(s.menu_row(), MenuRow::Tab(1));
+        assert!(s.update(Action::Up).is_empty(), "no Volume, no Up Next");
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        // Enter on the same tab: back to it; Tab too.
+        s.update(Action::Enter);
+        assert_eq!((s.active_tab().map(|t| t.id), s.focus), (Some(a), Focus::List));
+        s.update(Action::FocusMenu);
+        s.update(Action::ToggleFocus);
+        assert_eq!((s.active, s.focus), (1, Focus::List), "Tab: back to the tab");
+        // → on another tab opens it; on a section, the browsing view.
+        s.update(Action::FocusMenu);
+        s.update(Action::Down);
+        s.update(Action::MenuOpen);
+        assert_eq!((s.active_tab().map(|t| t.id), s.focus), (Some(b), Focus::List));
+        s.update(Action::FocusMenu);
+        s.menu_tab = None;
+        s.menu = State::section_index(Section::AcercaDe);
+        s.update(Action::Enter);
+        assert_eq!((s.active, s.listing().unwrap().items.clone()), (0, Items::About));
+        // Alt+. from the menu over a tab: the next tab, which takes the keys.
+        s.update(Action::GoTab(1));
+        s.update(Action::FocusMenu);
+        s.update(Action::NextTab);
+        assert_eq!((s.active, s.focus), (2, Focus::List));
+    }
+
+    #[test]
+    fn fullscreen_and_the_menu_over_a_tab() {
+        let mut s = with_videos(&["a"]);
+        let a = play(&mut s, 0);
+        s.update(Action::ToggleFullscreen);
+        // Ctrl+Y m from fullscreen: it ends (it would hide the menu), mpv is told.
+        let effects = s.update(Action::FocusMenu);
+        assert!(!s.fullscreen && s.active == 1 && s.focus == Focus::Menu);
+        assert!(effects.contains(&Effect::Command(a, PlayerCommand::Fullscreen(false))), "{effects:?}");
+        // f from the menu: fullscreen, and the video takes the keys.
+        assert_eq!(s.update(Action::ToggleFullscreen), [Effect::Command(a, PlayerCommand::Fullscreen(true))]);
+        assert!(s.fullscreen && s.focus == Focus::List);
+    }
+
+    #[test]
+    fn every_quit_path_just_quits() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let press = |s: &mut State, key: KeyEvent| {
+            let action = crate::keymap::map(key, s.key_context()).expect("mapped");
+            s.update(action)
+        };
+        let ctrl_y_q = |s: &mut State| {
+            let mut effects = press(s, KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
+            effects.extend(press(s, KeyEvent::from(KeyCode::Char('q'))));
+            effects
+        };
+        let relaunches = |e: &[Effect]| {
+            e.iter().any(|e| matches!(e, Effect::Open(..) | Effect::Reopen(..) | Effect::SelfUpdate { .. }))
+        };
+        // The browsing view, a video tab, the menu over that tab, fullscreen.
+        let setups: [fn(&mut State); 4] = [
+            |_| {},
+            |s| {
+                play(s, 0);
+            },
+            |s| {
+                play(s, 0);
+                s.update(Action::FocusMenu);
+            },
+            |s| {
+                play(s, 0);
+                s.update(Action::ToggleFullscreen);
+            },
+        ];
+        for (i, setup) in setups.iter().enumerate() {
+            let mut s = with_videos(&["a"]);
+            setup(&mut s);
+            let effects = ctrl_y_q(&mut s);
+            assert!(s.quit && !relaunches(&effects), "case {i}: {effects:?}");
+            // What the runtime does after the loop: where each video was left.
+            let after = s.update(Action::Stopped { video: "a".into(), position: Some(5), duration: Some(60) });
+            assert!(!relaunches(&after), "case {i}: {after:?}");
+        }
+        // Ctrl+C, and Enter on Quit in the menu.
+        let mut s = with_videos(&["a"]);
+        assert!(!relaunches(&press(&mut s, KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL))) && s.quit);
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::Salir);
+        assert!(!relaunches(&press(&mut s, KeyEvent::from(KeyCode::Enter))) && s.quit);
+    }
+
+    #[test]
+    fn the_shown_row_is_what_the_main_area_shows() {
+        let mut s = with_videos(&["a"]);
+        let subs = State::section_index(Section::Suscripciones);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(subs)));
+        // The cursor moves, the mark stays.
+        s.focus = Focus::Menu;
+        s.update(Action::Down);
+        s.update(Action::Down);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(subs)));
+        // A tab shown takes it; Esc to the menu keeps it there.
+        s.focus = Focus::List;
+        let a = play(&mut s, 0);
+        s.update(Action::FocusMenu);
+        s.update(Action::Up);
+        assert_eq!((s.shown_row(), s.tabs[0].id), (Some(MenuRow::Tab(0)), a));
+        // Another section takes the mark once its list replaces the one shown.
+        s.menu_tab = None;
+        s.menu = State::section_index(Section::Descargas);
+        s.update(Action::Enter);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::Descargas))));
+        // Hint only (logged out): the list shown keeps the mark.
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        s.menu = State::section_index(Section::Inicio);
+        s.update(Action::Enter);
+        assert_eq!(s.shown_row(), Some(MenuRow::Section(subs)));
+        s.focus = Focus::List;
+        s.update(Action::Back);
+        assert_eq!(s.menu_row(), MenuRow::Section(subs), "Esc lands on what is shown");
+    }
+
+    #[test]
+    fn menu_cursor_leaves_a_closed_tab() {
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        s.update(Action::GoTab(1));
+        s.update(Action::CloseTab);
+        assert!(s.tabs.is_empty());
+        assert_eq!(s.menu_tab, None);
     }
 
     #[test]
@@ -6347,7 +7166,7 @@ mod tests {
         s.config.session.browser = "brave".into();
         let effects = change(&mut s, Setting::Logout);
         assert_eq!(effects.last(), Some(&Effect::StartSession { force: true }));
-        assert_eq!(s.session_label(), "sin sesión");
+        assert_eq!(s.session_label(), "Sin sesión");
         assert_eq!(change(&mut s, Setting::Refresh), [Effect::StartSession { force: true }]);
     }
 
@@ -6439,5 +7258,49 @@ mod tests {
         let mut s = state();
         open(&mut s, Section::Salir);
         assert!(s.quit);
+    }
+
+    #[test]
+    fn t_opens_the_video_in_a_background_tab() {
+        let mut s = with_videos(&["a", "b"]);
+        s.config.ui.lang = Some(Lang::En);
+        let t = |s: &State| {
+            crate::keymap::map(
+                ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Char('t')),
+                s.key_context(),
+            )
+        };
+        assert_eq!(t(&s), Some(Action::OpenInBackground));
+        s.stack[0].selected = 1;
+        assert!(s.update(t(&s).unwrap()).is_empty(), "nothing plays, nothing loads");
+        assert_eq!((s.tabs.len(), s.active, s.focus, s.stack[0].selected), (1, 0, Focus::List, 1), "the list stays");
+        assert_eq!(s.status, "Opened in a New Tab: title b");
+        assert!(s.tabs[0].ended && !s.tabs[0].started && s.tabs[0].restored);
+        assert_eq!(s.saved_tabs().tabs.len(), 1, "saved in tabs.json");
+        // Again: no second tab.
+        s.update(Action::OpenInBackground);
+        assert_eq!((s.tabs.len(), s.status.as_str()), (1, "Already Open in a Tab: title b"));
+        // Shown later: its details are asked for then.
+        let tab = s.tabs[0].id;
+        assert!(s.update(Action::GoTab(1)).contains(&Effect::Watch { tab, video: "b".into() }));
+        // From Up Next in a video tab: the tab shown stays.
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        let watch = Watch { related: vec![video("r1"), video("r2")], ..Watch::default() };
+        let id = s.tabs[0].id;
+        s.update(Action::Watched(id, Ok(watch)));
+        s.video_window = true;
+        s.tabs[0].on_related = true;
+        assert!(s.on_related());
+        s.update(Action::Down);
+        s.update(Action::OpenInBackground);
+        assert_eq!((s.tabs.len(), s.active, s.on_related()), (2, 1, true));
+        assert_eq!(s.tabs[1].playback.video, Some(video("r2")));
+        // In the menu, Settings or the search box: nothing (t is typed there).
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        assert_ne!(t(&s), Some(Action::OpenInBackground));
+        s.update(Action::FocusSearch);
+        assert_eq!(t(&s), Some(Action::Input('t')));
     }
 }

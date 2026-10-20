@@ -228,7 +228,7 @@ pub fn looks_logged_out(result: &Result<Items, YoutubeError>) -> bool {
         Err(YoutubeError::PrivateList(_)) => true,
         Err(e) => {
             let e = e.message(Lang::En);
-            e.contains("Login details are needed") || e.contains("status: 401")
+            e.contains("Login details are needed") || e.contains("HTTP 401")
         }
     }
 }
@@ -469,7 +469,11 @@ pub fn subscribed_channels(cookies: &Path) -> Result<HashSet<String>, YoutubeErr
 pub fn set_subscription(cookies: &Path, channel_id: &str, subscribe: bool) -> Result<bool, YoutubeError> {
     let action = if subscribe { "subscription/subscribe" } else { "subscription/unsubscribe" };
     let reply = InnerTube::new(cookies)?.call(action, json!({ "channelIds": [channel_id] }))?;
-    parse_subscription_reply(&reply).ok_or_else(|| YoutubeError::Http("la respuesta no confirma el cambio".into()))
+    parse_subscription_reply(&reply).ok_or_else(|| {
+        YoutubeError::Http(
+            language().pick("la respuesta no confirma el cambio", "YouTube didn't confirm the change").into(),
+        )
+    })
 }
 
 /// One page of search results and the token that asks for the next one.
@@ -508,7 +512,11 @@ pub fn discover(topics: &[String]) -> Result<Vec<Video>, YoutubeError> {
             .collect();
         searches
             .into_iter()
-            .map(|search| search.join().unwrap_or_else(|_| Err(YoutubeError::Http("search failed".into()))))
+            .map(|search| {
+                search.join().unwrap_or_else(|_| {
+                    Err(YoutubeError::Http(language().pick("falló la búsqueda", "the search failed").into()))
+                })
+            })
             .collect()
     });
     let now = unix_now();
@@ -548,7 +556,16 @@ pub fn parse_discover(reply: &Value, now: i64) -> Vec<(Video, u64)> {
 pub fn up_next(ids: &[String], cookies: Option<&Path>) -> Result<Vec<Video>, YoutubeError> {
     let replies: Vec<Result<Watch, YoutubeError>> = std::thread::scope(|scope| {
         let calls: Vec<_> = ids.iter().map(|id| scope.spawn(move || watch(id, cookies))).collect();
-        calls.into_iter().map(|c| c.join().unwrap_or_else(|_| Err(YoutubeError::Http("next failed".into())))).collect()
+        calls
+            .into_iter()
+            .map(|c| {
+                c.join().unwrap_or_else(|_| {
+                    Err(YoutubeError::Http(
+                        language().pick("no se pudo leer A Continuación", "couldn't read Up Next").into(),
+                    ))
+                })
+            })
+            .collect()
     });
     let mut lists = Vec::new();
     let mut failure = None;
@@ -758,8 +775,16 @@ pub const WATCH_LATER: &str = "WL";
 /// dialog of the website asks it.
 pub fn in_watch_later(cookies: &Path, video_id: &str) -> Result<bool, YoutubeError> {
     let reply = InnerTube::new(cookies)?.call("playlist/get_add_to_playlist", json!({ "videoIds": [video_id] }))?;
-    contains_video(&reply, WATCH_LATER)
-        .ok_or_else(|| YoutubeError::Http("no Watch Later in YouTube's answer (login stale?)".into()))
+    contains_video(&reply, WATCH_LATER).ok_or_else(|| {
+        YoutubeError::Http(
+            language()
+                .pick(
+                    "la respuesta no trae Ver después (¿sesión vencida?)",
+                    "no Watch Later in YouTube's answer (stale login?)",
+                )
+                .into(),
+        )
+    })
 }
 
 /// In a `playlist/get_add_to_playlist` answer: whether `playlist` has the
@@ -1240,8 +1265,8 @@ pub fn http_error(status: u16, body: &str) -> String {
         })
     });
     match reason {
-        Some(reason) => format!("http status: {status} · {reason}"),
-        None => format!("http status: {status}"),
+        Some(reason) => format!("HTTP {status} · {reason}"),
+        None => format!("HTTP {status}"),
     }
 }
 
@@ -1799,12 +1824,9 @@ mod tests {
     fn failed_answers_say_why() {
         let body =
             r#"{"error":{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT"}}"#;
-        assert_eq!(
-            http_error(400, body),
-            "http status: 400 · Request contains an invalid argument. (INVALID_ARGUMENT)"
-        );
-        assert_eq!(http_error(400, "<html>"), "http status: 400");
-        assert_eq!(http_error(500, r#"{"error":{"message":""}}"#), "http status: 500");
+        assert_eq!(http_error(400, body), "HTTP 400 · Request contains an invalid argument. (INVALID_ARGUMENT)");
+        assert_eq!(http_error(400, "<html>"), "HTTP 400");
+        assert_eq!(http_error(500, r#"{"error":{"message":""}}"#), "HTTP 500");
         assert!(looks_logged_out(&Err(YoutubeError::Http(http_error(401, body)))), "still seen as a stale login");
         assert_eq!(clip("añb", 2), "a");
     }
@@ -2067,8 +2089,8 @@ mod tests {
         assert!(!looks_logged_out(&Ok(Items::Profiles(vec!["brave".into()]))));
         let refused = YoutubeError::Http("ERROR: [youtube:subscriptions] Login details are needed".into());
         assert!(looks_logged_out(&Err(refused)));
-        assert!(looks_logged_out(&Err(YoutubeError::Http("http status: 401".into()))), "the API refuses it");
-        assert!(!looks_logged_out(&Err(YoutubeError::Http("http status: 500".into()))));
+        assert!(looks_logged_out(&Err(YoutubeError::Http("HTTP 401".into()))), "the API refuses it");
+        assert!(!looks_logged_out(&Err(YoutubeError::Http("HTTP 500".into()))));
         assert!(Source::Recommended.needs_login() && !Source::Search("x".into()).needs_login());
         assert!(Source::MyPlaylists.needs_login());
     }

@@ -152,16 +152,16 @@ earlier version of this branch did; it was taken out whole).
   there already it says *"🕒 Already in Watch Later"*: no prompt, nothing
   removed. The right-click item reads *Save to Watch Later* / *Already in
   Watch Later*.
-- **`Ctrl+y` `x` removes from YouTube lists**: in Watch Later or any
+- **`Ctrl+Y` `x` removes from YouTube lists**: in Watch Later or any
   YouTube playlist opened from *My Playlists* (mine, saved), it asks
   *"Remove <video> from <playlist>?"* and, on yes, takes the selected video
   out on YouTube; the list updates when YouTube says it is done, errors go
   to the status bar. In **Liked videos** removing is taking the like back
   (the same request as `g` on a liked video). In a video tab, or anywhere
-  else, `Ctrl+y` `x` still closes the tab. The right-click menu of those
+  else, `Ctrl+Y` `x` still closes the tab. The right-click menu of those
   lists offers *Remove from this list*.
 - **Plain `x` no longer removes** videos from Watch Later or playlists (it
-  says *"Ctrl+y x removes it from this list"*). Elsewhere it is unchanged:
+  says *"Ctrl+Y x removes it from this list"*). Elsewhere it is unchanged:
   History (remove), Downloads (cancel / forget), My Videos / My Music
   (trash), My Playlists (delete the whole playlist).
 - **How a playlist removal is sent**: Watch Later as before
@@ -195,7 +195,7 @@ earlier version of this branch did; it was taken out whole).
 
 ### Fix: removing from Saved Shorts failed with "http status 400"
 
-- **What most likely happened** (not yet confirmed on a live account): `Ctrl+y` `x` in *Saved Shorts* answered
+- **What most likely happened** (not yet confirmed on a live account): `Ctrl+Y` `x` in *Saved Shorts* answered
   *"Could not remove from Saved Shorts <video>: YouTube: http status 400"*.
   The app could not find the entry's `setVideoId` on that playlist's page
   (it only looked in two shapes of row, and Shorts come in others), so it
@@ -254,7 +254,7 @@ the same recommendations you see on youtube.com or the phone app.
   `~/.local/share/tubevibe/later.json`; tubetui's copy is brought over on the first run), which the Watch Later change hid
   when the menu entry became YouTube's Watch Later. Whatever was in that
   file shows again. It is separate from YouTube's Watch Later.
-  - Inside it `Ctrl+y` `x` (or right-click → *Remove from this list*) takes
+  - Inside it `Ctrl+Y` `x` (or right-click → *Remove from this list*) takes
     the selected video out after asking; plain `x` only says how.
   - `l` adds to it (see below; `w` is now YouTube's Watch Later).
   - The menu name is one constant, `SAVED_FOR_LATER` in `src/app.rs`;
@@ -277,7 +277,7 @@ the same recommendations you see on youtube.com or the phone app.
 - **Keys**: `w` adds to YouTube's Watch Later (what `l` did, "Already in
   YouTube Watch Later" when it is there); `l` adds to tubevibe's local
   Watch Later ("Already in tubevibe Watch Later" when it is there). The
-  key hints, help screen (`Ctrl+y ?`), right-click menu and README say so.
+  key hints, help screen (`Ctrl+Y ?`), right-click menu and README say so.
 - The setting now reads *Hide YouTube Watch Later videos in My
   Recommendations* (only YouTube's list is hidden there).
 
@@ -354,7 +354,7 @@ polblancoo; this fork now carries its own name.
   the orange ▶️ emoji. It is one cell wide everywhere, with one space after
   it (`▶ tubevibe`). The Nerd Font logo is red too; the plain-Unicode set
   already used ▶.
-- **Menu**: one blank row between the title and the YOUTUBE header, like the
+- **Menu** (removed again in 0.8.6): one blank row between the title and the YOUTUBE header, like the
   ones between the other groups. Clicks still land on the right entry (the
   click map is built from the same rows); the whole menu needs 27 rows.
 - **Donations**: About, README, `donate.toml` and the old website page (`docs/index.html`) say the addresses belong to
@@ -442,6 +442,7 @@ polblancoo; this fork now carries its own name.
   names; magenta ← `bright_magenta`, purple ← `magenta`, teal ←
   `bright_cyan`; animations fade from `background` and flash `accent`.
   Missing or unreadable roles are mixed from foreground and background
+  (0.8.6: no more mixing; real theme colours instead, see that entry)
   (secondary text 45% of the way, the selected row 14%), and so are colours
   that would be too faint (secondary text under 2:1 contrast, or a selection
   that is louder than a row background, like Omarchy 3 Gruvbox's orange).
@@ -550,7 +551,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, tabs restored, Watch Later fix
+## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Alt+, / Alt+. tabs, menu walks tabs, ← to the menu, fullscreen fix, consistency pass, tabs restored, Watch Later fix
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
@@ -602,10 +603,402 @@ could not update itself either. From now on:
   is gone: open tabs show only under TABS in the left menu, and the main
   pane gets that row back. *Home* was the browsing view's own tab (upstream
   *Inicio*); the menu already is that view.
-- `Ctrl+y 1`–`9` still go to the tabs as numbered in the menu, `Ctrl+y 0`
-  back to browsing, and `Ctrl+y n`/`p` next/previous. Help and hints say
-  "as listed in the menu" instead of mentioning the tab bar. Clicks land on
-  the menu rows (nothing left to click at the top).
+- `Ctrl+Y 1`–`9` still went to the tabs as numbered in the menu and
+  `Ctrl+Y 0` back to browsing (both removed later in 0.8.6, see *Unlimited
+  tabs*). Help and hints say "in the menu" instead of
+  mentioning the tab bar. Clicks land on the menu rows (nothing left to
+  click at the top).
+
+### Alt+, and Alt+. switch tabs (`browser-tab-keys`)
+
+- **`Alt+.`** goes to the next tab in the menu and **`Alt+,`** to the
+  previous one (the `>` and `<` keys), from any pane: lists, the search
+  box, a video tab. One hand, next to each other. They wrap around: from
+  the last tab to the first and back. From the browsing view, `Alt+.` goes
+  to the first tab and `Alt+,` to the last. With no tabs open they do
+  nothing.
+- Every terminal sends `Alt+key` as `Esc` and the key without any setting,
+  and none of the usual ones (kitty, Ghostty, Alacritty, foot, WezTerm,
+  GNOME Terminal, Konsole) nor Omarchy's Hyprland binds use `Alt+,` or
+  `Alt+.` by default, so nothing has to be changed in the terminal. On
+  macOS, where Option+, and Option+. type `≤` and `≥` unless the terminal
+  treats Option as Alt, those count as the tab keys too.
+- The first try, `Ctrl+Tab` / `Ctrl+Shift+Tab`, is gone: it needed the kitty
+  keyboard protocol and kitty and Ghostty keep `Ctrl+Tab` for their own
+  tabs. tubevibe no longer turns that protocol on, and the README no longer
+  asks you to edit `kitty.conf` or the Ghostty config.
+- **`Ctrl+Y n` and `Ctrl+Y p` are gone** (help, README). `Ctrl+Y 0`–`9`
+  stayed then (removed later, see *Unlimited tabs*). The new keys are in the full help (`Ctrl+Y ?`, under *Always*) and
+  the README, not in the shortcut bar.
+
+### Fullscreen works, from the video tab and from the lists (`browser-tab-keys`)
+
+- **What went wrong:** in window mode (the default) `f` in a video tab
+  blanked the terminal to "make room" for a picture that lives in mpv's own
+  window, and when the tab had no running player (a restored tab, or a video
+  that had ended) the terminal stayed blank with nothing to show. In the
+  lists `f` did nothing at all.
+- **Window mode:** `f` now asks mpv to put its own window in fullscreen and
+  leaves the terminal as it is. On Hyprland, if mpv's window did not follow
+  (a window rule, an older mpv), tubevibe tells Hyprland directly through
+  `hyprctl`: the current Lua dispatcher (`hl.dsp.window.fullscreen`) first,
+  the classic `fullscreen` dispatcher on older versions. mpv's own `f` and
+  `Esc` are followed (tubevibe watches mpv's `fullscreen` property), and
+  `f`, `Esc` or moving to another tab in tubevibe takes mpv out again.
+- **Embedded and overlay:** the video fills the terminal as before, and the
+  terminal window itself goes fullscreen on Hyprland (found through the
+  process tree, then `hyprctl`) as well as on X11 (`wmctrl`).
+- **From the lists:** `f` goes fullscreen for the video that is playing (in
+  embedded mode it switches to that video's tab first).
+- **Never a blank screen:** with nothing to show, `f` says why in the status
+  bar instead: *Nothing is playing · open a video, then f*, *The video isn't
+  playing · Enter plays it, then f*, or *Audio Only: no picture · a brings
+  the video back*.
+
+### Consistency pass (`browser-tab-keys`)
+
+- **Key names** are written one way: `Space`, `Del`, `Backspace`, `Enter`,
+  `Esc` in English, `Espacio`, `Supr`, `Retroceso` in Spanish. No more
+  *espacio* in the English interface.
+- **One language at a time:** error messages from YouTube, the updater,
+  downloads and the config file now follow the interface language (they
+  were Spanish-only or English-only); HTTP errors read *HTTP 400 · reason*.
+  The help's mouse names follow the language (*Click*, *Double Click*,
+  *Wheel*, *Click Video*, *Right Click*, *Click Bar*).
+- **Settings in Title Case:** every setting name in English (*Downloads
+  Folder*, *Tell Me About New Videos from My Channels*…), values styled the
+  same way (*On* / *Off*, *Emoji* / *Nerd Font* / *Unicode*, *Original +
+  subtitles*…), Spanish ones capitalised (*Sí* / *No*, *Español (es)*).
+- **Pane, dialog and help titles in Title Case:** *AI Summary*, *Up Next*,
+  *No Related Videos*, *Comments Are Off*, *Keyboard Shortcuts · Any Key
+  Closes*, *System Check*…
+- **One name per thing:** *System Check* everywhere (Settings, the page,
+  messages and the README; it was also *Check the system*), *Audio Only*
+  likewise.
+- **`Ctrl+Y`** is written that way everywhere: the app, the help, the
+  README, the website and this file.
+- **Folders follow the system:** with no folders set, My Videos, My Music
+  and downloads use the system's own folders (XDG `Videos` / `Music`, in
+  the system's language) instead of a hard-coded `~/Música`, and their
+  labels follow the interface language.
+- **Help:** lists `Enter` in a video tab, `j` `k` and `Esc` in Up Next,
+  `Backspace` as back, `f` in the lists and the new tab keys.
+- **Icons:** the marks in Downloads (marked, downloading, done, failed,
+  stopped) and in the System Check (fine, warning, missing, optional) come
+  from the chosen icon set instead of fixed characters, each two cells wide
+  so the columns line up.
+- **docs/:** the old Spanish tubetui website and benchmark page are now
+  English tubevibe pages; the benchmark says its numbers were measured on
+  tubetui and both credit polblancoo.
+- **README config example** uses English and standard paths (`~/Videos`,
+  `~/Music`, `~/Downloads`, `sub_lang = "en"`) and section names in English.
+
+### The menu walks the open tabs (`browser-tab-keys`)
+
+- `↑` / `↓` in the left menu used to jump from Downloads straight to
+  Settings, skipping TABS. Now they walk every row in the order it shows:
+  the sections, then each open tab, then Settings, About and Quit (still
+  wrapping around). On a tab the cursor lights it like a focused section,
+  and `Enter` opens it. Closing the tab under the cursor puts the cursor
+  back on the sections.
+- Coming back to the menu from a video tab (`←` or `Ctrl+Y m`) leaves the
+  cursor on that tab. `Alt+,` / `Alt+.` are unchanged (`Ctrl+Y 1`–`9`
+  were later removed).
+
+### → opens the menu's row; ← comes back to where you were (`browser-tab-keys`)
+
+- In the left menu `→` now does what `Enter` does on the selected row:
+  open the section, open the tab, or open Settings / About. **Quit is the
+  exception**: only `Enter` quits, `→` on Quit does nothing. Before, `→`
+  did nothing in the menu. `l` still does nothing there (outside the menu
+  it is *save to tubevibe Watch Later*, as always). `Tab` still switches
+  panes. The help's Menu box reads *Enter → · open (Quit: Enter only)*;
+  the bar keeps just `Enter`.
+- `←` (or `Esc`) from the first list, and `←` from a video tab, put the
+  menu's cursor back on what that content came from: the section or the
+  tab. Fixed where it did not:
+  - **Search results** (`/` or `Ctrl+Y /` from any list, searching all of
+    YouTube or my channels; a channel search) replace the list, but the
+    cursor stayed on the section you searched from: it now goes to
+    *Search Videos* / *Search Channels*. A search inside a channel opens
+    on top of that channel, so `←` goes back to it first, as before.
+  - The **System Check** that opens by itself at startup, and the first-run
+    **browser picker**, left the cursor on My Recommendations: it is now on
+    Settings, where both live.
+  - Every section, Settings and About open through the same place, which
+    now sets the cursor itself, so a section opened any other way (a
+    click, a key) comes back right too.
+
+### Esc on a video tab goes to the menu; only the focused pane is lit (`browser-tab-keys`)
+
+- `Esc` in Up Next still goes back to the video's info. `Esc` there now
+  goes to the left menu with the cursor on the tab, like `Esc` from a list
+  and like `←`. (In fullscreen the first `Esc` still just leaves it.)
+  Before, `Esc` on the video's info did nothing you could see, and when the
+  list behind the tab was one level deep (a channel, a playlist) it quietly
+  took that list away, so you were back a level after leaving the tab.
+- While Up Next has the keys, the video pane's border (or, with Border
+  Style → None, its title) is dim, so only Up Next is lit; back on the
+  video's info it lights up again. It uses the same focused / dim colours
+  as the menu and lists, so it follows the Omarchy theme. The comments
+  pane never takes the keys (`PgUp` / `PgDn` scroll it from the tab) and
+  stays dim.
+
+### The video stays on screen while the menu has the keys (`browser-tab-keys`)
+
+- `Esc`, `←` or `Ctrl+Y m` on a video tab used to switch the main area
+  back to the list behind it. Now the tab stays shown (and keeps playing,
+  embedded, overlaid or in its window) while the menu takes the keys: the
+  menu's border is lit, its cursor is on the tab, and the video pane and
+  Up Next go dim.
+- `↑` / `↓` only move the cursor; the main area changes when `Enter` (or
+  `→`, not on Quit) opens a row: a section (the browsing view), another
+  tab, or the same tab, which simply gets the keys back. `Tab` also goes
+  back to the tab shown.
+- While the menu has the keys, the player keys (`Space`, `←`, volume…)
+  and the video letters (`l`, `w`, `a`, `d`…) do nothing; `/` searches and
+  `f` goes fullscreen (the video then takes the keys). Fullscreen ends when
+  the menu is called, since it would hide it. A click on Up Next gives it
+  the keys back.
+- `Alt+,` / `Alt+.` and restored tabs are unchanged; going
+  to a tab with them gives it the keys.
+
+### t opens a video in a background tab (`browser-tab-keys`)
+
+- **`t`** on a YouTube video opens it in a new tab in the background. That
+  works in the browsing lists, search results, channels, History, Watch
+  Later and playlists, and in Up Next in a video tab.
+- The tab joins TABS in the menu and is saved to tabs.json. The keys and
+  the screen stay where they are, and nothing plays.
+- The tab behaves like a restored one: nothing is fetched until it's shown
+  (Enter plays it).
+- The status says *Opened in a New Tab: <title>* (*Abierto en una pestaña
+  nueva*). If the video is already in a tab there's no second one, and the
+  status says *Already Open in a Tab: <title>* (*Ya está en una pestaña*).
+- The tab list scrolls and its chevrons update as usual: a tab added out
+  of view shows the down chevron.
+- **`t` wasn't used anywhere before**, so there's no conflict.
+  - In the menu, Settings, About, System Check, My Videos, My Music and
+    Downloads (local files, not YouTube videos) it does nothing.
+  - In a search box it's typed. In a video tab, on the video itself, the
+    video is already in a tab, so the status says so.
+- It's in the help (*On a Video*) and the README, not in the bottom bar.
+- Tests: `t_opens_the_video_in_a_background_tab` and
+  `a_background_tab_joins_the_scrolled_tab_list`.
+
+### The menu's cursor row in the theme's accent; no blended colours (`browser-tab-keys`)
+
+- **One colour for the menu's cursor row**, both the `▌` and the text:
+  sections, tabs, and Settings / About / Quit.
+  - Before this release each section had its own colour and a tab used
+    magenta. The first try in 0.8.6 used orange.
+  - It's now the theme's **`accent`**, from colors.toml with Omarchy
+    colours on (Gruvbox `#7daea3`). Built-in Tokyo Night uses its accent,
+    `#7aa2f7`.
+  - Tokyo Night's accent is the same colour as its blue, so the interface
+    draws the accent with a stand-in one step off and the recolouring
+    turns it into the real accent, built-in theme included.
+  - The pink "shown" mark is unchanged.
+- **No more blended palette colours.** Each role now falls back only to
+  colours the theme file has:
+  - **orange:** `orange`, else `yellow` (was red and yellow mixed).
+  - **secondary text:** `dark_foreground` / alacritty `dim_foreground`,
+    else `muted`, else bright or normal black, the first readable on the
+    background; else the text colour. Before, it was mixed 45% from text to
+    background.
+  - **selected row:** `selection` / `selection_background`, else
+    `lighter_background`, else bright or normal black, the first close to
+    the background yet readable under the text. Failing that, the first of
+    those that differs from the background, else the background. Before,
+    it was mixed 14% from background to text.
+  - **dialog lines:** `muted`, else bright or normal black, else secondary
+    text. Before, it was mixed 25% from background to text.
+  - **accent:** `accent`, else `blue`, as before.
+- **What changes in the fixture themes:**
+  - Omarchy 3 and 2 Gruvbox get `#3c3836` (their black) for the selected
+    row, and their text colour for secondary text, since they have no
+    readable dim colour. Their orange is now their yellow.
+  - Themes with a full Omarchy 4 colors.toml are unchanged.
+- **Accent on the selected row (contrast):**
+
+  | Theme | Contrast |
+  |---|---|
+  | Tokyo Night (built-in) | 5.3 or more |
+  | Gruvbox v3 / v2 | 4.67 |
+  | Gruvbox | 3.55 |
+  | Catppuccin Latte | 3.18 |
+  | Rosé Pine | 2.47 |
+  | Catppuccin Latte from alacritty.toml | 2.27 (no accent: blue on its bright black) |
+
+  The two light ones are weak. The row is bold and marked with `▌`.
+- Tests: `every_menu_cursor_row_is_in_the_theme_accent` (render, Tokyo
+  Night and Gruvbox, every row), `every_colour_is_one_the_theme_file_has`
+  (all seven fixtures), and `the_accent_reads_on_the_selected_row`.
+
+### Menu, Preview and Comments widths in Settings (`browser-tab-keys`)
+
+Three new rows in Settings, right after Border Style. Enter steps each one up
+and wraps from the largest back to the smallest, like the other cycling
+settings. They're saved to `[ui]` in config.toml and apply at once.
+
+| Setting (es) | Key | Unit | Range, step | Default |
+|---|---|---|---|---|
+| Menu Width (Ancho del menú) | `menu_width` | columns | 20–40, 2 | 26 |
+| Preview Width (Ancho de la vista previa) | `preview_width` | columns | 30–70, 4 | 46 |
+| Comments Width (Ancho de los comentarios) | `comments_width` | columns | 30–78, 4 | 46 |
+
+- **The defaults are the old layout**, so nothing changes for anyone who
+  doesn't touch them. Comments Width was a percent at first (30–60, default
+  45). It's now in columns, and 46 is what 45 % gave in a 130-column
+  terminal. A saved percent is read as that many columns, which is about
+  the same width at that size: no warning, and Enter steps on from it.
+- **Never vanish, never overlap:**
+  - The menu is never wider than half the screen.
+  - The preview shows only while the list beside it keeps 50 columns. That's
+    the old 96-column rule at the default 46, so a wider preview needs a
+    wider screen (70 needs 120 columns of content).
+  - The comments still need a video tab 100 columns wide inside, and Up Next
+    keeps at least 40 columns beside them.
+- **Loading is tolerant:** a value out of range or of the wrong type is
+  reported like other bad settings ("Bad value for ui.menu_width in
+  config.toml: using the default") and falls back to its
+  default. It never stops startup, and older builds skip the new keys.
+- Tests: `sizes_load_tolerantly`,
+  `menu_width_min_and_max_and_never_more_than_half`,
+  `preview_width_min_and_max_keep_the_list_its_columns`, and
+  `comments_width_min_and_max_and_the_100_column_threshold`. The settings
+  cycling test covers the new rows.
+
+### Video tab: comments full height, Up next right under the summary (`browser-tab-keys`)
+
+- **Comments take the right side of the video tab from top to bottom**
+  (when it's 100 columns wide or more, as before). The left column has the
+  thumbnail and details on top, the AI summary under them across the
+  column's whole width, and **Up next** one blank row below the summary's
+  last line.
+- **The whole summary shows, with no more rows than it needs.** The layout
+  is recomputed on every draw, so it follows the summary's arrival, a
+  resize, and new detail lines (the size, the "Enter plays it" note). A very
+  long summary or a short terminal caps it so Up next keeps 7 rows (its
+  border plus 5 videos). Past that the summary is cut with "…", as before.
+  Clicks on Up next still land on the rows as drawn.
+- The thumbnail is now two fifths of the left column, at most 36 columns
+  (22 at 130 columns), so the details beside it keep room.
+- **Embedded / overlay video:** unchanged. The picture covers the whole
+  inside of the video tab; the details, summary, Up next and comments
+  layout only shows when the video plays in its own window or hasn't
+  started.
+- **Menu:** the blank row between the logo and YOUTUBE (added in 0.8.1) is
+  gone, and YOUTUBE sits right under the logo. The other groups keep their
+  blank row.
+- Tests: `up_next_keeps_seven_rows_under_a_long_summary_at_any_height`,
+  `a_short_summary_takes_only_its_rows_and_narrow_tabs_have_no_comments`,
+  `youtube_is_right_under_the_logo`; the summary render test now checks the
+  full-height comments.
+
+### x in the menu closes a tab; chevrons above and below (`browser-tab-keys`)
+
+- **`x` on a tab row in the menu closes that tab**, the same as `Ctrl+Y x`
+  inside it: its player stops and tabs.json is saved, with no confirmation
+  (`Ctrl+Y x` has none either). The cursor goes to the next tab, else the
+  previous one, else back to the sections. If the closed tab was shown, the
+  main area shows what `Ctrl+Y x` would: the tab that took its place, or the
+  browsing view when none is left. `x` on a section row does nothing. It's
+  in the help's Menu box, and the bar shows *x Close Tab* only while the
+  cursor is on a tab.
+- **The short rule above TABS is gone**; the one above Settings stays.
+- **Scroll chevrons:** the one next to the TABS title now only means "more
+  above" (an up chevron). A row under the tab list holds a down chevron,
+  in the same column, while tabs are hidden below. Toby's screenshot showed
+  *TABS ⌄*: before, the title showed the down chevron, the up one, or both.
+  Both chevrons come from the chosen icon set. With nothing hidden there
+  are no chevrons and no reserved row. The down chevron sits on the blank
+  row just above the rule over Settings, with no blank row between them.
+  The tabs keep every row above it, so as many tabs show whether or not it's
+  there. This holds down to the shortest menu that still has a tab row.
+- Tests: `x_in_the_menu_closes_the_tab_under_the_cursor`,
+  `few_tabs_have_no_chevrons_and_no_rule_above`, and the 35-tab render test,
+  which now checks both chevrons and their column.
+
+### Unlimited tabs; the menu's tab list scrolls (`browser-tab-keys`)
+
+- **No tab limit.** The `max_tabs` setting is gone, and so is its "At most N
+  tabs" message. An old `max_tabs` line in config.toml is ignored without a
+  warning (it was a real key, not a typo). Restored tabs (tabs.json) all
+  come back.
+- **`Ctrl+Y 0`–`9` are removed**, from the keys, the help, the shortcut bar,
+  the README and the website. `Ctrl+Y 1`–`9` went to the tab with that
+  number; `Ctrl+Y 0` went back to the browsing view. Use `Alt+,` / `Alt+.`,
+  the menu (`↑ ↓`, `Enter`) or a click. The tab numbers in the menu ("1 ",
+  "2 ") only existed for those keys, so they are gone too.
+- **The menu's tab list scrolls on its own.** The sections at the top and the
+  rule with Settings / About / Quit at the bottom stay put; TABS takes the
+  rows in between. With the menu's keys it keeps the cursor's tab in view,
+  otherwise the tab shown. The TABS title shows ▲/▼-style marks (from the
+  icon set) when tabs are hidden above or below. The mouse wheel over the
+  tabs scrolls them; the list follows the cursor or the tab shown again as
+  soon as that changes.
+- A short rule above TABS was added here, then removed (see the entry above).
+- **Short terminals:** the tab list shrinks down to one row. With no room
+  even for that, the whole menu becomes one list scrolled to the cursor (or
+  the tab shown), as a short menu did before.
+- Tests: `thirty_five_tabs_scroll_between_a_fixed_top_and_bottom`,
+  `a_short_menu_keeps_one_tab_row_then_falls_back_to_one_scrolled_list`,
+  `tab_rows_have_no_number`, `tabs_are_unlimited`,
+  `restoring_tabs_keeps_them_all_respects_the_setting_and_bad_files` (35
+  tabs), `the_wheel_over_the_menu_tabs_scrolls_them`,
+  `an_old_max_tabs_line_is_ignored_quietly`.
+
+### One "shown" mark in the menu (`browser-tab-keys`)
+
+The menu row for whatever the main area is showing now always has the same
+pink "shown" mark (the theme's magenta, remapped under Omarchy) when the
+cursor isn't on it. That applies to a section and to a video tab alike. The
+cursor row keeps its own focus highlight, and exactly one row is marked.
+
+- Search results mark Search Videos or Search Channels. The startup System
+  Check and the browser picker mark Settings.
+- The mark moves only when another list actually replaces the one shown.
+  Opening a search box, or a section that only shows a hint (for example My
+  Playlists while logged out), leaves the mark where it was. In that case ←
+  lands on the marked row.
+- Before this, a shown tab had a highlighted background and the selected
+  section kept its own section colour.
+- Tests: `one_row_is_marked_shown` (render),
+  `the_shown_row_is_what_the_main_area_shows`, and
+  `search_results_and_the_startup_check_mark_their_section_shown`.
+
+### My Recommendations is kept for a minute (`browser-tab-keys`)
+
+- Opening **My Recommendations** asked YouTube for the whole home feed
+  every time, even a few seconds after the last one. Now a feed that loaded
+  is kept for 60 seconds: opening it again within that minute shows the
+  same list right away, with the cursor and the pages already loaded as
+  you left them, and nothing is fetched (not the feed, nor the history or
+  Watch Later reads that go with it). Videos watched meanwhile are still
+  hidden. After 60 seconds it is read again as before.
+- A load that failed is not kept: the next open tries again at once. A new
+  login (or *Read the Login Again*) and switching the interface language
+  drop the copy too.
+- There is no refresh key; the minute is counted from the last load that
+  worked. Only My Recommendations changed: Subscriptions, Discover
+  Channels (same feed code), Watch Later, My Playlists, My Channels and
+  History still read on every open.
+
+### Video tab: ← goes to the menu, Shift+← → seek (`browser-tab-keys`)
+
+- `←` in a video tab (and in its Up Next list) now goes to the left menu,
+  as `←` does from the first list everywhere else. It used to seek back
+  5 s; seeking is now `Shift+←` / `Shift+→` (5 s), and `→` alone still
+  seeks forward. A click on the progress bar still jumps anywhere.
+
+### Shorter video tab bar (`browser-tab-keys`)
+
+- The bottom bar of a video tab no longer repeats the help's *Enter: play ·
+  in Up Next: the selected video* row, `Space` comes before `Tab`, and
+  `v` / `b` read *Quality Change* / *Codec Change* (*Cambiar calidad* /
+  *Cambiar códec*) instead of listing every step. The bar's last item, on
+  every screen, is now `Ctrl+Y ?` *Help* (*Ayuda*).
 
 ### Open tabs come back after a restart (`menu-layout-borders`)
 
@@ -615,7 +1008,8 @@ could not update itself either. From now on:
   flag, in order, plus which tab was in front. It is rewritten whenever a
   tab opens or closes, so quitting any way (`q`, `Ctrl+C`, a closed
   terminal, a crash) leaves it current.
-- On startup they come back under TABS in the menu, up to `max_tabs`, with
+- On startup they come back under TABS in the menu, all of them (once up to
+  `max_tabs`, a limit since removed), with
   the browsing view in front. Nothing plays and nothing is fetched: a tab
   loads its details, comments and SponsorBlock segments the first time it's
   shown, and `Enter` plays it (from where the history says it was left).
