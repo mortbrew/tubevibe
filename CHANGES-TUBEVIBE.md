@@ -1135,7 +1135,7 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   layout and the width settings; stacked panes take the full width.
 
 
-## Unreleased (0.8.8)
+## 0.8.8: single-key shortcuts (no more Ctrl+Y), Restart Now, t/T tabs, wrapped dialogs and Help (2026-10-20)
 
 ### Help rows never run out of their box (`key-remap`)
 
