@@ -1135,6 +1135,20 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   layout and the width settings; stacked panes take the full width.
 
 
+## Unreleased (0.8.9)
+
+### Linux-only releases (`linux-only-releases`)
+
+- The release workflow builds only `tubevibe-x86_64-linux.tar.gz`,
+  `tubevibe-aarch64-linux.tar.gz` and `tubevibe_amd64.deb`; the macOS and
+  Windows jobs (and the Windows installer step) are gone. macOS and Windows
+  users build from source with cargo; README, the docs page and `install.sh`
+  say so (on macOS `install.sh` builds from source).
+- Self-update on a machine with no prebuilt file (macOS, Windows): About says
+  "No Prebuilt Update for This Platform: Build From Source" and shows the
+  `cargo install` command, instead of a bare "No Download for This System".
+- Test: `no_prebuilt_file_on_macos_or_windows_says_build_from_source`.
+
 ## 0.8.8: single-key shortcuts (no more Ctrl+Y), Restart Now, t/T tabs, wrapped dialogs and Help (2026-10-20)
 
 ### Help rows never run out of their box (`key-remap`)

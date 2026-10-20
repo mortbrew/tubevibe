@@ -2920,7 +2920,10 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
             Replace::ReadOnly => {
                 Some(lang.pick("La carpeta de tubevibe no se puede escribir", "tubevibe's Folder Isn't Writable"))
             }
-            Replace::NoAsset => Some(lang.pick("No hay descarga para este sistema", "No Download for This System")),
+            Replace::NoAsset => Some(lang.pick(
+                "No hay actualización compilada para este sistema: compilá desde el código",
+                "No Prebuilt Update for This Platform: Build From Source",
+            )),
             Replace::Ready(_) => None,
         } {
             lines.push(Line::from(why).fg(MUTED));

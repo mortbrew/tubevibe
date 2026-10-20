@@ -162,12 +162,12 @@ fn version(text: &str) -> Option<(u64, u64, u64)> {
     Some((parts.next()??, parts.next().flatten().unwrap_or(0), parts.next().flatten().unwrap_or(0)))
 }
 
-/// The release file for a machine, as the release workflow names it.
+/// The release file for a machine, as the release workflow names it (Linux
+/// only: macOS and Windows build from source).
 pub fn tarball(os: &str, arch: &str) -> Option<&'static str> {
     match (os, arch) {
         ("linux", "x86_64") => Some("tubevibe-x86_64-linux.tar.gz"),
         ("linux", "aarch64") => Some("tubevibe-aarch64-linux.tar.gz"),
-        ("macos", "aarch64") => Some("tubevibe-aarch64-macos.tar.gz"),
         _ => None,
     }
 }
@@ -175,7 +175,6 @@ pub fn tarball(os: &str, arch: &str) -> Option<&'static str> {
 /// The release file Update Now installs on a machine: the archive with just the program.
 pub fn asset(os: &str, arch: &str) -> Option<&'static str> {
     match (os, arch) {
-        ("windows", "x86_64") => Some("tubevibe-x86_64-windows.zip"),
         _ => tarball(os, arch),
     }
 }
@@ -249,9 +248,6 @@ pub fn update_for(current: &str, tag: &str, assets: &[String], exe: &str, os: &s
         )),
         ("linux", "x86_64") if exe.starts_with("/usr/bin/") && has("tubevibe_amd64.deb") => {
             Install::Command(format!("curl -LO {} && sudo apt install ./tubevibe_amd64.deb", url("tubevibe_amd64.deb")))
-        }
-        ("windows", "x86_64") if has("tubevibe-x86_64-windows-setup.exe") => {
-            Install::Link(url("tubevibe-x86_64-windows-setup.exe"))
         }
         _ => match tarball(os, arch).filter(|name| has(name)) {
             // Only the program out of the archive, straight over the one running.
@@ -408,9 +404,6 @@ mod tests {
             "tubevibe_amd64.deb",
             "tubevibe-x86_64-linux.tar.gz",
             "tubevibe-aarch64-linux.tar.gz",
-            "tubevibe-x86_64-windows-setup.exe",
-            "tubevibe-x86_64-windows.zip",
-            "tubevibe-aarch64-macos.tar.gz",
         ]
         .map(String::from)
         .to_vec()
@@ -452,15 +445,12 @@ mod tests {
         );
         let Install::Command(arm) = how("/home/u/.local/bin/tubevibe", "linux", "aarch64") else { panic!() };
         assert!(arm.contains("/v0.9.0/tubevibe-aarch64-linux.tar.gz | tar xz -C /home/u/.local/bin"), "{arm}");
-        let Install::Command(mac) = how("/usr/local/bin/tubevibe", "macos", "aarch64") else { panic!() };
-        assert!(mac.contains("tubevibe-aarch64-macos.tar.gz | tar xz -C /usr/local/bin"), "{mac}");
+        assert_eq!(how("/usr/local/bin/tubevibe", "macos", "aarch64"), cmd(CARGO), "no macOS build: cargo");
         assert_eq!(how("/home/u/.cargo/bin/tubevibe", "linux", "x86_64"), cmd(CARGO));
         assert_eq!(
             how(r"C:\Users\u\AppData\Local\Programs\tubevibe\tubevibe.exe", "windows", "x86_64"),
-            Install::Link(
-                "https://github.com/mortbrew/tubevibe/releases/download/v0.9.0/tubevibe-x86_64-windows-setup.exe"
-                    .into()
-            )
+            cmd(CARGO),
+            "no Windows build: cargo"
         );
         assert_eq!(how(r"C:\Users\u\.cargo\bin\tubevibe.exe", "windows", "x86_64"), cmd(CARGO));
         // Built from a checkout: build the new tag there.
@@ -482,7 +472,7 @@ mod tests {
     #[test]
     fn asset_names_match_the_release_workflow() {
         let workflow = include_str!("../.github/workflows/release.yml");
-        let names = [tarball("linux", "x86_64"), tarball("linux", "aarch64"), tarball("macos", "aarch64")];
+        let names = [tarball("linux", "x86_64"), tarball("linux", "aarch64")];
         // The Linux job builds one archive per `arch` of its matrix.
         let linux = "dist/tubevibe-${{ matrix.arch }}-linux.tar.gz";
         let built = |name: &str| {
@@ -492,13 +482,30 @@ mod tests {
                     .and_then(|n| n.strip_suffix("-linux.tar.gz"))
                     .is_some_and(|arch| workflow.contains(linux) && workflow.contains(&format!("- arch: {arch}\n")))
         };
-        for name in names.into_iter().flatten().chain(["tubevibe_amd64.deb", "tubevibe-x86_64-windows-setup.exe"]) {
+        for name in names.into_iter().flatten().chain(["tubevibe_amd64.deb"]) {
             assert!(built(name), "{name} is not built by release.yml");
         }
         assert!(!built("tubevibe-riscv64-linux.tar.gz"));
+        assert!(!workflow.contains("windows") && !workflow.contains("macos-"), "Linux only");
         let script = include_str!("../install.sh");
         for name in names.into_iter().flatten() {
             assert!(script.contains(name), "{name} is not in install.sh");
+        }
+    }
+
+    #[test]
+    fn no_prebuilt_file_on_macos_or_windows_says_build_from_source() {
+        let linux_only: Vec<String> = ["tubevibe-x86_64-linux.tar.gz", "tubevibe-aarch64-linux.tar.gz", "tubevibe_amd64.deb"]
+            .map(String::from)
+            .to_vec();
+        for (exe, os, arch) in [
+            ("/Users/u/bin/tubevibe", "macos", "aarch64"),
+            (r"C:\Users\u\AppData\Local\Programs\tubevibe\tubevibe.exe", "windows", "x86_64"),
+        ] {
+            let update = update_for("0.8.8", "v0.9.0", &linux_only, exe, os, arch).unwrap();
+            assert_eq!(update.replace, Replace::NoAsset, "{os}");
+            let Install::Command(cmd) = update.how else { panic!("{os}") };
+            assert!(cmd.starts_with("cargo install --locked --git"), "{os}: {cmd}");
         }
     }
 
@@ -522,13 +529,11 @@ mod tests {
     fn the_self_update_file_fits_the_machine() {
         assert_eq!(asset("linux", "x86_64"), Some("tubevibe-x86_64-linux.tar.gz"));
         assert_eq!(asset("linux", "aarch64"), Some("tubevibe-aarch64-linux.tar.gz"));
-        assert_eq!(asset("macos", "aarch64"), Some("tubevibe-aarch64-macos.tar.gz"));
-        assert_eq!(asset("windows", "x86_64"), Some("tubevibe-x86_64-windows.zip"));
+        assert_eq!(asset("macos", "aarch64"), None, "no macOS build");
+        assert_eq!(asset("windows", "x86_64"), None, "no Windows build");
         assert_eq!(asset("macos", "x86_64"), None, "no Intel Mac build");
         assert_eq!(asset("windows", "aarch64"), None);
         assert_eq!(asset("freebsd", "x86_64"), None);
-        let workflow = include_str!("../.github/workflows/release.yml");
-        assert!(workflow.contains("dist/tubevibe-x86_64-windows.zip"), "release.yml builds the zip");
     }
 
     #[test]
@@ -554,10 +559,10 @@ mod tests {
         let replace = |exe: &str, os: &str, arch: &str| replace_for(exe, os, arch, &assets(), "v0.9.0");
         assert_eq!(replace("/home/u/.local/bin/tubevibe", "linux", "x86_64"), ready("tubevibe-x86_64-linux.tar.gz"));
         assert_eq!(replace("/home/u/.local/bin/tubevibe", "linux", "aarch64"), ready("tubevibe-aarch64-linux.tar.gz"));
-        assert_eq!(replace("/usr/local/bin/tubevibe", "macos", "aarch64"), ready("tubevibe-aarch64-macos.tar.gz"));
+        assert_eq!(replace("/usr/local/bin/tubevibe", "macos", "aarch64"), Replace::NoAsset);
         assert_eq!(
             replace(r"C:\Users\u\AppData\Local\Programs\tubevibe\tubevibe.exe", "windows", "x86_64"),
-            ready("tubevibe-x86_64-windows.zip")
+            Replace::NoAsset
         );
         assert_eq!(
             replace("/home/u/Projects/tubevibe/target/release/tubevibe", "linux", "x86_64"),

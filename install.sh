@@ -53,11 +53,10 @@ install_cmd() { # install_cmd <package>
 }
 
 # 0. The ready-made program from the latest release, when there is one for
-#    this machine (file names as .github/workflows/release.yml makes them).
+#    this machine (Linux only; macOS builds from source below) (file names as .github/workflows/release.yml makes them).
 case "$(uname -s)-$(uname -m)" in
     Linux-x86_64 | Linux-amd64) asset=tubevibe-x86_64-linux.tar.gz ;;
     Linux-aarch64 | Linux-arm64) asset=tubevibe-aarch64-linux.tar.gz ;;
-    Darwin-arm64) asset=tubevibe-aarch64-macos.tar.gz ;;
     *) asset="" ;;
 esac
 downloaded=0

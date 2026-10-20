@@ -180,8 +180,9 @@ Every release on
 | Linux x86_64 | `tubevibe-x86_64-linux.tar.gz` |
 | Linux ARM64 | `tubevibe-aarch64-linux.tar.gz` |
 | Debian / Ubuntu / Mint (x86_64) | `tubevibe_amd64.deb` (`sudo apt install ./tubevibe_amd64.deb`) |
-| macOS (Apple Silicon) | `tubevibe-aarch64-macos.tar.gz` |
-| Windows x86_64 | `tubevibe-x86_64-windows-setup.exe` (installer, can install mpv and yt-dlp with winget) or the portable `tubevibe-x86_64-windows.zip` |
+
+Prebuilt releases are **Linux only**. On macOS or Windows, build from source
+with cargo (below); everything else works the same.
 
 On Linux x86_64, one line puts it in `~/.local/bin` (which should be in your
 `PATH`; use `aarch64` instead of `x86_64` on ARM):
@@ -190,8 +191,8 @@ On Linux x86_64, one line puts it in `~/.local/bin` (which should be in your
 mkdir -p ~/.local/bin && curl -fsSL https://github.com/mortbrew/tubevibe/releases/latest/download/tubevibe-x86_64-linux.tar.gz | tar xz -C ~/.local/bin --strip-components=1 tubevibe/tubevibe
 ```
 
-Or the installer for Linux / macOS, which picks the right file, falls back to
-building from source where there is none, and checks mpv and yt-dlp (and,
+Or the installer (Linux, and macOS where it builds from source), which picks
+the right file, falls back to building from source where there is none, and checks mpv and yt-dlp (and,
 to build, the C compiler and Rust 1.88+), printing the commands for whatever
 is missing:
 
@@ -223,14 +224,15 @@ startup* turns this off).
 **About** in the menu (the menu entry shows ⬆ when a new version is out):
 the **Update Now** button is selected (`Tab` moves between it and the menu)
 and `Enter` presses it. It downloads the new release file for your system
-(Linux x86_64 / aarch64, macOS Apple Silicon, Windows x86_64), checks that
+(Linux x86_64 / aarch64), checks that
 the new program runs, swaps it in for the running one and asks you to
 restart tubevibe. The button only works for a copy installed from a release
-file (for example the one-liner into `~/.local/bin`, or the Windows
-installer); otherwise it is greyed out and About says why: a copy built from
+file (for example the one-liner into `~/.local/bin`); otherwise it is greyed out and About says why: a copy built from
 source (`target/release/`) says to run `git pull && cargo build --release`;
 one installed with `cargo install`, the `.deb` (`/usr/bin`) or Homebrew says
-to update it the same way; and a copy in a folder you can't write to says so.
+to update it the same way; a copy in a folder you can't write to says so;
+and on macOS or Windows, with no prebuilt file, it says to build from source
+and shows the `cargo install` command.
 
 (The original tubetui has its own packages on its
 [website](https://polblancoo.github.io/tubetui/#descargas); those install

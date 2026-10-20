@@ -1,5 +1,6 @@
-# On every `v*` tag: build Linux (x86_64, aarch64), Windows (x86_64) and macOS
-# (Apple Silicon) packages and attach them to the GitHub release. It needs no
+# On every `v*` tag: build the Linux packages (x86_64 and aarch64 tarballs,
+# and an amd64 .deb) and attach them to the GitHub release. macOS and Windows
+# have no prebuilt packages: build from source with cargo. It needs no
 # secrets: the release is made with the workflow's own token. File names carry
 # no version, so links can point at
 # https://github.com/mortbrew/tubevibe/releases/latest/download/<file>.
@@ -74,51 +75,3 @@ jobs:
           fail_on_unmatched_files: true
           files: dist/tubevibe_amd64.deb
 
-  windows:
-    needs: create
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --locked
-      - name: Portable zip
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path target/release/tubevibe.exe, README.md -DestinationPath dist/tubevibe-x86_64-windows.zip
-      - name: Installer
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
-          $version = "$env:TAG".TrimStart("v")
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DExe=$PWD\target\release\tubevibe.exe" "/DOutDir=$PWD\dist" packaging\windows\tubevibe.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          fail_on_unmatched_files: true
-          files: |
-            dist/tubevibe-x86_64-windows.zip
-            dist/tubevibe-x86_64-windows-setup.exe
-
-  macos:
-    needs: create
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --locked
-      - name: Package
-        run: |
-          mkdir -p dist/tubevibe
-          cp target/release/tubevibe README.md dist/tubevibe/
-          tar -C dist -czf dist/tubevibe-aarch64-macos.tar.gz tubevibe
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          fail_on_unmatched_files: true
-          files: dist/tubevibe-aarch64-macos.tar.gz

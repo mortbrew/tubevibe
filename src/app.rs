@@ -3699,7 +3699,13 @@ impl State {
                 self.tr("No puedo escribir en la carpeta de tubevibe", "Can't write to tubevibe's folder")
             ),
             Replace::NoAsset => {
-                format!("{} · {see}", self.tr("No hay descarga para este sistema", "No download for this system"))
+                format!(
+                    "{} · {see}",
+                    self.tr(
+                        "No hay actualización compilada para este sistema: compilá desde el código",
+                        "No prebuilt update for this platform: build from source"
+                    )
+                )
             }
         };
         Vec::new()
