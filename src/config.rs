@@ -171,8 +171,9 @@ impl Size {
 pub const MENU_WIDTH: Size = Size { key: "menu_width", min: 20, max: 40, step: 2, default: 26 };
 /// Columns; 46 is the layout of earlier versions.
 pub const PREVIEW_WIDTH: Size = Size { key: "preview_width", min: 30, max: 70, step: 4, default: 46 };
-/// Percent of the video tab; 45 is the layout of earlier versions.
-pub const COMMENTS_WIDTH: Size = Size { key: "comments_width", min: 30, max: 60, step: 5, default: 45 };
+/// Columns; 46 is what the earlier 45 % gave in a 130-column terminal. A
+/// percent saved by the first try (30–60) reads as about as many columns.
+pub const COMMENTS_WIDTH: Size = Size { key: "comments_width", min: 30, max: 78, step: 4, default: 46 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
@@ -182,7 +183,7 @@ pub struct UiConfig {
     pub menu_width: u16,
     /// Columns of the preview panel right of video and channel lists ([`PREVIEW_WIDTH`]).
     pub preview_width: u16,
-    /// Percent of a video tab the comments take ([`COMMENTS_WIDTH`]).
+    /// Columns of the comments in a video tab ([`COMMENTS_WIDTH`]).
     pub comments_width: u16,
     pub icons: IconSet,
     /// Interface language; unset follows the system locale.
@@ -941,19 +942,23 @@ mod tests {
 
     #[test]
     fn sizes_load_tolerantly() {
-        let (c, w) = Config::parse("[ui]\nmenu_width = 30\npreview_width = 70\ncomments_width = 30\n").unwrap();
+        let (c, w) = Config::parse("[ui]\nmenu_width = 30\npreview_width = 70\ncomments_width = 78\n").unwrap();
         assert!(w.is_empty(), "{w:?}");
-        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (30, 70, 30));
+        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (30, 70, 78));
+        // The first try's percent: read as columns, no warning.
+        let (c, w) = Config::parse("[ui]\ncomments_width = 45\n").unwrap();
+        assert!(w.is_empty() && c.ui.comments_width == 45, "{w:?}");
         let (c, w) =
-            Config::parse("[ui]\nmenu_width = 5\npreview_width = \"wide\"\ncomments_width = 99\nmouse = false\n")
+            Config::parse("[ui]\nmenu_width = 5\npreview_width = \"wide\"\ncomments_width = 200\nmouse = false\n")
                 .unwrap();
         assert_eq!(w.len(), 3, "{w:?}");
-        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (26, 46, 45));
+        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (26, 46, 46));
         assert!(!c.ui.mouse, "the rest still applies");
         let d = UiConfig::default();
-        assert_eq!((d.menu_width, d.preview_width, d.comments_width), (26, 46, 45), "the old layout");
+        assert_eq!((d.menu_width, d.preview_width, d.comments_width), (26, 46, 46), "the old layout");
         assert_eq!(MENU_WIDTH.next(40), 20);
         assert_eq!(MENU_WIDTH.next(26), 28);
-        assert_eq!(COMMENTS_WIDTH.next(60), 30);
+        assert_eq!(COMMENTS_WIDTH.next(78), 30);
+        assert_eq!(COMMENTS_WIDTH.next(45), 49, "an old percent steps on");
     }
 }

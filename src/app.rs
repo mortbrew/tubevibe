@@ -1326,9 +1326,7 @@ impl State {
             Setting::BorderStyle => self.config.ui.border_style.label(lang).into(),
             Setting::MenuWidth => format!("{} {}", self.config.ui.menu_width, self.tr("columnas", "Columns")),
             Setting::PreviewWidth => format!("{} {}", self.config.ui.preview_width, self.tr("columnas", "Columns")),
-            Setting::CommentsWidth => {
-                format!("{} % {}", self.config.ui.comments_width, self.tr("de la pestaña", "of the Tab"))
-            }
+            Setting::CommentsWidth => format!("{} {}", self.config.ui.comments_width, self.tr("columnas", "Columns")),
             Setting::RestoreTabs => {
                 let (es, en) = on_off(self.config.ui.restore_tabs);
                 self.tr(es, en).into()
@@ -6265,9 +6263,9 @@ mod tests {
         assert_eq!(s.setting_value(Setting::MenuWidth), "28 columnas");
         assert_eq!(change(&mut s, Setting::PreviewWidth), [saved("ui", "preview_width", SettingValue::Number(50))]);
         assert_eq!(change(&mut s, Setting::CommentsWidth), [saved("ui", "comments_width", SettingValue::Number(50))]);
-        s.config.ui.comments_width = 60;
+        s.config.ui.comments_width = 78;
         assert_eq!(change(&mut s, Setting::CommentsWidth), [saved("ui", "comments_width", SettingValue::Number(30))]);
-        assert_eq!(s.setting_value(Setting::CommentsWidth), "30 % de la pestaña");
+        assert_eq!(s.setting_value(Setting::CommentsWidth), "30 columnas");
         assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);

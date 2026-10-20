@@ -61,10 +61,9 @@ const TEAL: Color = TOKYO_NIGHT.teal;
 const PURPLE: Color = TOKYO_NIGHT.purple;
 
 /// One colour per menu entry, in `Section::ALL` order.
-const SECTION_COLORS: [Color; 18] = [
-    BLUE, RED, YELLOW, TEAL, GREEN, ORANGE, GREEN, TEAL, ORANGE, CYAN, MAGENTA, YELLOW, PURPLE, MAGENTA, CYAN, BLUE,
-    PURPLE, MUTED,
-];
+/// The menu's cursor row, sections and tabs alike: the theme's orange (My
+/// Channels' colour when each section had its own).
+const SELECTED: Color = ORANGE;
 
 pub struct Icons {
     /// In `Section::ALL` order.
@@ -666,11 +665,10 @@ fn tab_layout(tab: &Tab, inner: Rect, comments: u16) -> WatchLayout {
 /// Wide enough, the comments take the right side from top to bottom; the
 /// left column has the thumbnail and details, then the AI summary across it,
 /// then "Up next" right below.
-/// `percent`: Comments Width, of the tab's inside; the left column keeps
+/// `width`: Comments Width, in columns; the left column keeps
 /// [`WATCH_LEFT_MIN_WIDTH`] columns whatever it says.
-fn watch_layout_with(inner: Rect, percent: u16, (detail_rows, summary_rows): (u16, u16)) -> WatchLayout {
+fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16, u16)) -> WatchLayout {
     let (left, comments) = if inner.width >= COMMENTS_MIN_WIDTH {
-        let width = ((u32::from(inner.width) * u32::from(percent) + 50) / 100) as u16;
         let width = width.min(inner.width - WATCH_LEFT_MIN_WIDTH);
         let [left, comments] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)]).areas(inner);
         (left, Some(comments))
@@ -1070,7 +1068,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         }
         let focused = state.menu_row() == MenuRow::Section(i) && menu_focused(state);
         let shown = state.shown_row() == Some(MenuRow::Section(i));
-        let color = SECTION_COLORS[i];
+        let color = SELECTED;
         let mut style = Style::new().fg(FG);
         if focused {
             style = style.fg(color).bg(HIGHLIGHT).add_modifier(Modifier::BOLD);
@@ -1091,7 +1089,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
         let active = state.menu_row() == MenuRow::Tab(i) && menu_focused(state);
         let shown = state.shown_row() == Some(MenuRow::Tab(i));
         let style = if active {
-            Style::new().fg(MAGENTA).bg(HIGHLIGHT).bold()
+            Style::new().fg(SELECTED).bg(HIGHLIGHT).bold()
         } else if shown {
             Style::new().fg(SHOWN)
         } else {
@@ -4404,14 +4402,19 @@ mod tests {
     #[test]
     fn comments_width_min_and_max_and_the_100_column_threshold() {
         let (mut s, _) = details_tab(Some("Corto."));
-        for (percent, screen_width, expect) in
-            [(30, 130, Some(31)), (45, 130, Some(46)), (60, 130, Some(61)), (60, 128, Some(60)), (60, 120, None)]
-        {
-            s.config.ui.comments_width = percent;
+        for (columns, screen_width, expect) in [
+            (30, 130, Some(30)),
+            (46, 130, Some(46)),
+            (78, 130, Some(62)),
+            (78, 200, Some(78)),
+            (78, 128, Some(60)),
+            (46, 120, None),
+        ] {
+            s.config.ui.comments_width = columns;
             let screen = tab_screen(&s, screen_width, 40);
             let inner = Block::bordered().inner(screen_areas(Rect::new(0, 0, screen_width, 40), &s).content);
-            let comments = watch_layout(inner, percent).comments;
-            assert_eq!(comments.map(|c| c.width), expect, "{percent}% at {screen_width}");
+            let comments = watch_layout(inner, columns).comments;
+            assert_eq!(comments.map(|c| c.width), expect, "{columns} columns at {screen_width}");
             match comments {
                 Some(c) => {
                     let row: Vec<char> = screen[usize::from(c.y)].chars().collect();
@@ -4421,5 +4424,43 @@ mod tests {
                 None => assert!(!screen.iter().any(|l| l.contains("Comentarios")), "under 100 columns: none"),
             }
         }
+    }
+
+    #[test]
+    fn every_menu_cursor_row_is_orange_like_my_channels_was() {
+        let gruvbox = crate::theme::parse_colors_toml(
+            &std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/omarchy/gruvbox/colors.toml"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(gruvbox.orange, Color::Rgb(0xe1, 0x87, 0x5c), "colors.toml's orange");
+        for palette in [crate::theme::TOKYO_NIGHT, gruvbox] {
+            let mut s = with_tab();
+            s.palette = palette;
+            s.update(Action::FocusMenu);
+            let rows: Vec<MenuRow> = s.menu_rows();
+            for _ in 0..rows.len() {
+                s.update(Action::Down);
+                let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+                terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+                let buffer = terminal.backend().buffer();
+                // The cursor's "▌" and its text, in the palette's orange.
+                let (x, y) = (0..40u16)
+                    .flat_map(|y| (1..25u16).map(move |x| (x, y)))
+                    .find(|&(x, y)| buffer[(x, y)].symbol() == "▌")
+                    .unwrap_or_else(|| panic!("{:?}", s.menu_row()));
+                assert_eq!(buffer[(x, y)].fg, palette.orange, "{:?}", s.menu_row());
+                let text = (x + 1..25).find(|&c| buffer[(c, y)].symbol().chars().any(char::is_alphabetic)).unwrap();
+                assert_eq!(buffer[(text, y)].fg, palette.orange, "{:?}", s.menu_row());
+                assert_eq!(buffer[(text, y)].bg, palette.highlight);
+            }
+        }
+        // The shown mark stays pink.
+        let mut s = with_tab();
+        s.update(Action::FocusMenu);
+        s.update(Action::Down);
+        assert_eq!(shown_rows(&s).len(), 1);
     }
 }

@@ -762,6 +762,20 @@ could not update itself either. From now on:
 - `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
 
+### One colour for the menu's cursor row (`browser-tab-keys`)
+
+- Every row under the menu's cursor now uses the same colour, for the `▌`
+  and the text: sections, tabs, and Settings / About / Quit. Before, each
+  section had its own colour and a tab used magenta.
+- The colour is the palette's **orange** slot, the one My Channels used.
+  In Tokyo Night it's `#ff9e64`. With Omarchy colours on, it's the
+  `orange` key of the theme's colors.toml (Gruvbox: `#e1875c`). Themes
+  without one (Omarchy 3 / alacritty files) get a mix of their red and
+  yellow.
+- The pink "shown" mark is unchanged.
+- Test: `every_menu_cursor_row_is_orange_like_my_channels_was`, with Tokyo
+  Night and Gruvbox, on every row.
+
 ### Menu, Preview and Comments widths in Settings (`browser-tab-keys`)
 
 Three new rows in Settings, right after Border Style. Enter steps each one up
@@ -772,10 +786,13 @@ settings. They're saved to `[ui]` in config.toml and apply at once.
 |---|---|---|---|---|
 | Menu Width (Ancho del menú) | `menu_width` | columns | 20–40, 2 | 26 |
 | Preview Width (Ancho de la vista previa) | `preview_width` | columns | 30–70, 4 | 46 |
-| Comments Width (Ancho de los comentarios) | `comments_width` | % of the video tab | 30–60, 5 | 45 |
+| Comments Width (Ancho de los comentarios) | `comments_width` | columns | 30–78, 4 | 46 |
 
 - **The defaults are the old layout**, so nothing changes for anyone who
-  doesn't touch them.
+  doesn't touch them. Comments Width was a percent at first (30–60, default
+  45). It's now in columns, and 46 is what 45 % gave in a 130-column
+  terminal. A saved percent is read as that many columns, which is about
+  the same width at that size: no warning, and Enter steps on from it.
 - **Never vanish, never overlap:**
   - The menu is never wider than half the screen.
   - The preview shows only while the list beside it keeps 50 columns. That's
