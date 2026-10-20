@@ -1095,7 +1095,7 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   follows the chosen set.
 
 
-## Unreleased (0.8.7)
+## 0.8.7: dynamic layouts, Title Case labels, fitted list rows, Watch Later moved (2026-10-20)
 
 ### Title Case bottom bar, Up Next titles cut with … (`titlecase-and-upnext-ellipsis`)
 
