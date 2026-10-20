@@ -1108,3 +1108,18 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   shows whole at the right edge, lined up row to row. Measured in screen
   cells, so wide characters and emoji don't push it out. Very narrow panes
   cut the title first, then the date and channel; the length goes last.
+- The same fitting now applies to every list opened from the menu: My
+  Recommendations, Watch Later, Subscriptions, History, playlists and their
+  videos, channels' videos, Search Videos, From What I Watched, Discover,
+  tubevibe Watch Later (all video lists), My Playlists (the count stays at
+  the right edge), My Videos / My Music (file names) and Downloads (the
+  path or error gives way first, then the title). Before, long titles were
+  cut at the pane edge and pushed the length out of view.
+- The channel column (and the My Videos / My Music folder column) ends in
+  `…` when cut, instead of stopping mid-word.
+- Right-to-left titles (Arabic, Hebrew): invisible direction marks are
+  dropped and widths are measured the way the screen draws them, so those
+  rows keep the length column lined up.
+- Menu: **Watch Later** now sits right above **Subscriptions** (My
+  Recommendations, Watch Later, Subscriptions, History, …). Icons, keys and
+  the shown mark follow the new order.

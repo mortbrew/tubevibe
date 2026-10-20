@@ -139,7 +139,7 @@ impl Icons {
 
 const EMOJI: Icons = Icons {
     sections: [
-        "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
+        "🏠", "🕒", "📺", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📏", "🔭", "💭", "📑",
@@ -187,8 +187,8 @@ const EMOJI: Icons = Icons {
 const NERD: Icons = Icons {
     sections: [
         "\u{f015}",
-        "\u{f05c6}",
         "\u{f017}",
+        "\u{f05c6}",
         "\u{f1da}",
         "\u{f0cb}",
         "\u{f005}",
@@ -289,7 +289,7 @@ const NERD: Icons = Icons {
 };
 
 const UNICODE: Icons = Icons {
-    sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
+    sections: ["⌂", "◷", "▣", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
         "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "➚", "◆",
         "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
@@ -857,7 +857,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
     // Inside the borders, less the cursor column.
     let row_width = usize::from(layout.related.width.saturating_sub(3));
-    let list = List::new(related.iter().map(|v| up_next_row(state, icons, view, v, row_width)))
+    let list = List::new(related.iter().map(|v| video_row_dated(state, icons, view, v, false, row_width)))
         .block(focus_panel(title, focused))
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
@@ -1456,10 +1456,16 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
             _ => format!(" {} · {} ", breadcrumb.join(" › "), listing.items.len()),
         },
     };
+    // Rows fit inside the borders, less the cursor column.
+    let list_width = match (&listing.items, split_preview(area, state.config.ui.preview_width)) {
+        (Items::Videos(_) | Items::Channels(_), (left, Some(_))) => left.width,
+        _ => area.width,
+    };
+    let row_width = usize::from(list_width.saturating_sub(3));
     let items: Vec<ListItem> = match &listing.items {
         Items::Videos(videos) => {
             let history = listing.kind == ListKind::History;
-            videos.iter().map(|v| video_row_dated(state, icons, view, v, history)).collect()
+            videos.iter().map(|v| video_row_dated(state, icons, view, v, history, row_width)).collect()
         }
         Items::Channels(channels) => {
             // The description goes in the panel when there is one, other details in the row.
@@ -1467,16 +1473,16 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
             channels.iter().map(|c| channel_row(state, icons, c, panel)).collect()
         }
         Items::Profiles(profiles) => profiles.iter().map(|p| profile_row(state, icons, p)).collect(),
-        Items::Playlists(playlists) => playlists.iter().map(|p| playlist_row(icons, p, state.lang())).collect(),
+        Items::Playlists(playlists) => playlists.iter().map(|p| playlist_row(icons, p, state.lang(), row_width)).collect(),
         Items::Settings => {
             Setting::ALL.iter().enumerate().map(|(i, s)| setting_row(state, icons.settings[i], *s)).collect()
         }
         Items::Files(files, kind) => {
-            files.iter().map(|f| file_row(icons, f, *kind, state.marked.contains(&f.path))).collect()
+            files.iter().map(|f| file_row(icons, f, *kind, state.marked.contains(&f.path), row_width)).collect()
         }
         Items::Downloads(downloads) => downloads
             .iter()
-            .map(|d| download_row(state, d, state.lang(), state.marked_downloads.contains(&d.id)))
+            .map(|d| download_row(state, d, state.lang(), state.marked_downloads.contains(&d.id), row_width))
             .collect(),
         Items::About | Items::System => Vec::new(),
     };
@@ -1596,17 +1602,17 @@ fn draw_channel_preview(frame: &mut Frame, state: &State, icons: &Icons, channel
 }
 
 /// `watched_date`: the date column says when I watched it (Historial).
-fn video_row_dated<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, watched_date: bool) -> ListItem<'a> {
-    let (mut spans, title, tail) = video_row_parts(state, icons, view, v, watched_date);
-    spans.push(title);
-    spans.extend(tail);
-    ListItem::new(Line::from(spans))
-}
-
-/// An Up Next row `width` cells wide: a long title is cut with `…` so the
-/// length always shows whole at the right edge.
-fn up_next_row<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, width: usize) -> ListItem<'a> {
-    let (head, title, tail) = video_row_parts(state, icons, view, v, false);
+/// A video row `width` cells wide (every video list and Up Next): a long
+/// title is cut with `…` so the length always shows whole at the right edge.
+fn video_row_dated<'a>(
+    state: &State,
+    icons: &Icons,
+    view: &View,
+    v: &'a Video,
+    watched_date: bool,
+    width: usize,
+) -> ListItem<'a> {
+    let (head, title, tail) = video_row_parts(state, icons, view, v, watched_date);
     ListItem::new(Line::from(fit_row(head, title, tail, width)))
 }
 
@@ -1625,6 +1631,7 @@ fn fit_row<'a>(head: Vec<Span<'a>>, title: Span<'a>, tail: Vec<Span<'a>>, width:
     let mut out = Vec::new();
     let mut used = 0;
     for span in head.into_iter().chain(std::iter::once(title)) {
+        let span = Span::styled(plain_cells(&span.content), span.style);
         let w = span.width();
         if used + w <= room {
             used += w;
@@ -1644,22 +1651,37 @@ fn fit_row<'a>(head: Vec<Span<'a>>, title: Span<'a>, tail: Vec<Span<'a>>, width:
 /// The text cut to at most `max` cells, ending in `…` when it was cut; and
 /// the cells it takes.
 fn cut_cells(text: &str, max: usize) -> (String, usize) {
-    use unicode_width::UnicodeWidthChar;
+    use unicode_width::UnicodeWidthStr;
+    let whole = UnicodeWidthStr::width(text);
+    if whole <= max {
+        return (text.to_owned(), whole);
+    }
     if max == 0 {
         return (String::new(), 0);
     }
+    // Measured as a whole string each time, the way ratatui measures the
+    // line (ligatures like Arabic lam-alef take one cell, not two).
     let mut out = String::new();
-    let mut used = 0;
     for c in text.chars() {
-        let w = c.width().unwrap_or(0);
-        if used + w > max - 1 {
-            out.push('…');
-            return (out, used + 1);
-        }
-        used += w;
         out.push(c);
+        if UnicodeWidthStr::width(out.as_str()) > max - 1 {
+            out.pop();
+            break;
+        }
     }
+    out.push('…');
+    let used = UnicodeWidthStr::width(out.as_str());
     (out, used)
+}
+
+/// Text for a fitted cell: no line breaks, and none of the invisible
+/// direction marks (RLM, embeddings, isolates) that terminals draw
+/// differently, so right-to-left titles keep the columns in place.
+fn plain_cells(text: &str) -> String {
+    text.chars()
+        .filter(|c| !matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'))
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 type RowParts<'a> = (Vec<Span<'a>>, Span<'a>, Vec<Span<'a>>);
@@ -1683,7 +1705,7 @@ fn video_row_parts<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, 
         }
         (Live::No, None) => vec![Span::raw(" ".repeat(DATE_WIDTH))],
     };
-    spans.push(Span::styled(format!(" {} ", pad(&v.channel, CHANNEL_WIDTH)), MAGENTA));
+    spans.push(Span::styled(format!(" {} ", pad_cells(&cut_cells(&plain_cells(&v.channel), CHANNEL_WIDTH).0, CHANNEL_WIDTH)), MAGENTA));
     if state.fresh_shown.contains(&v.id) {
         spans.push(Span::styled(format!("{} ", lang.pick("NUEVO", "NEW")), Style::new().fg(GREEN).bold()));
     }
@@ -1697,7 +1719,7 @@ fn video_row_parts<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, 
         // Already seen: marked and dimmed.
         spans.push(Span::styled(format!("{} ", icons.watched), MUTED));
     }
-    let title = Span::styled(v.title.as_str(), if state.watched.contains(&v.id) { MUTED } else { FG });
+    let title = Span::styled(v.title.clone(), if state.watched.contains(&v.id) { MUTED } else { FG });
     let mut tail = vec![Span::styled(format!("  {}", v.duration_label()), MUTED)];
     if let Some(at) = state.resume_at(&v.id) {
         tail.extend(resume_bar(at, v.duration));
@@ -1748,18 +1770,17 @@ fn channel_row<'a>(state: &State, icons: &Icons, c: &'a Channel, panel: bool) ->
 /// Every row starts with one icon from the icon set: YouTube's own lists
 /// their own (liked, Watch Later), the rest the playlists one, so the names
 /// line up.
-fn playlist_row<'a>(icons: &Icons, playlist: &'a Playlist, lang: Lang) -> ListItem<'a> {
+fn playlist_row<'a>(icons: &Icons, playlist: &'a Playlist, lang: Lang, width: usize) -> ListItem<'a> {
     let icon = match playlist.id.as_str() {
         crate::app::LIKED => icons.liked,
         crate::youtube::WATCH_LATER => icons.later,
         _ => icons.section(Section::MisListas),
     };
-    let mut spans =
-        vec![Span::raw(format!(" {icon} ")), Span::styled(pad_cells(&truncate(playlist.name(lang), 48), 50), FG)];
-    if let Some(count) = &playlist.count {
-        spans.push(Span::styled(count.as_str(), MUTED));
-    }
-    ListItem::new(Line::from(spans))
+    // A long name is cut with `…`; the count sits at the right edge.
+    let name = playlist.name(lang).to_owned();
+    let tail = playlist.count.iter().map(|c| Span::styled(c.as_str(), MUTED)).collect();
+    let head = vec![Span::raw(format!(" {icon} "))];
+    ListItem::new(Line::from(fit_row(head, Span::styled(name, FG), tail, width)))
 }
 
 /// `⇩  45.3% ━━━━━─────  2.1MiB/s  00:12   title · channel`.
@@ -1784,7 +1805,7 @@ fn size_line(state: &State, video: &Video) -> Option<Line<'static>> {
     Some(Line::from(text).fg(MUTED))
 }
 
-fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) -> ListItem<'static> {
+fn download_row(state: &State, download: &Download, lang: Lang, marked: bool, width: usize) -> ListItem<'static> {
     const BAR: usize = 12;
     let icons = icons(state.config.ui.icons);
     // The same mark as My Videos / My Music.
@@ -1824,7 +1845,8 @@ fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) ->
         }
     });
     spans.push(Span::styled(download.video.title.clone(), FG));
-    spans.push(Span::styled(format!(" · {}", download.video.channel), MAGENTA));
+    let channel = cut_cells(&plain_cells(&download.video.channel), CHANNEL_WIDTH).0;
+    spans.push(Span::styled(format!(" · {channel}"), MAGENTA));
     let size = match &download.state {
         DownloadState::Done(path) => std::fs::metadata(path).ok().map(|m| crate::domain::bytes_label(m.len())),
         _ => state.sizes.get(&download.video.id).map(Size::label).filter(|l| !l.is_empty()),
@@ -1832,12 +1854,13 @@ fn download_row(state: &State, download: &Download, lang: Lang, marked: bool) ->
     if let Some(size) = size {
         spans.push(Span::styled(format!("  {size}"), YELLOW));
     }
-    match &download.state {
-        DownloadState::Done(path) => spans.push(Span::styled(format!("  {}", path.display()), MUTED)),
-        DownloadState::Failed(error) => spans.push(Span::styled(format!("  {error}"), RED)),
-        _ => {}
-    }
-    ListItem::new(Line::from(spans))
+    // The path or error gives way first, then the title.
+    let last = match &download.state {
+        DownloadState::Done(path) => Span::styled(format!("  {}", path.display()), MUTED),
+        DownloadState::Failed(error) => Span::styled(format!("  {error}"), RED),
+        _ => Span::raw(""),
+    };
+    ListItem::new(Line::from(fit_row(spans, last, Vec::new(), width)))
 }
 
 fn profile_row<'a>(state: &State, icons: &Icons, spec: &'a str) -> ListItem<'a> {
@@ -1858,17 +1881,18 @@ fn profile_row<'a>(state: &State, icons: &Icons, spec: &'a str) -> ListItem<'a> 
     ]))
 }
 
-fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: bool) -> ListItem<'a> {
+fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: bool, width: usize) -> ListItem<'a> {
     let icon = match kind {
         MediaKind::Video => icons.section(Section::MisVideos),
         MediaKind::Music => icons.section(Section::MiMusica),
     };
-    ListItem::new(Line::from(vec![
+    let folder = pad_cells(&cut_cells(&plain_cells(&file.folder), 28).0, 28);
+    let head = vec![
         Span::styled(if marked { icons.marked } else { " " }, Style::new().fg(RED).bold()),
         Span::raw(format!("{icon} ")),
-        Span::styled(format!("{} ", pad(&file.folder, 28)), MAGENTA),
-        Span::styled(file.name.as_str(), FG),
-    ]))
+        Span::styled(format!("{folder} "), MAGENTA),
+    ];
+    ListItem::new(Line::from(fit_row(head, Span::styled(file.name.as_str(), FG), Vec::new(), width)))
 }
 
 /// Width of the settings' label column: the longest label and a gap, so
@@ -3639,15 +3663,15 @@ mod tests {
         let spot_at = |s: &State, (x, y): (u16, u16)| spot(s, None, screen_area, x, y);
         let musica = Section::ALL.iter().position(|x| *x == Section::MiMusica).unwrap();
         assert_eq!(spot_at(&s, find(&screen, Section::MiMusica.label(Lang::Es))), Some(Spot::Section(musica)));
-        assert_eq!(spot_at(&s, find(&screen, "title 2  1:00")), Some(Spot::Row(2)));
+        assert_eq!(spot_at(&s, find(&screen, "title 2 ")), Some(Spot::Row(2)));
         assert_eq!(spot_at(&s, (0, 39)), None, "the key hints");
         // Scrolled: the selection is the last visible row.
         for _ in 0..50 {
             s.update(Action::Down);
         }
         let screen = render(&s);
-        assert_eq!(spot_at(&s, find(&screen, "title 50  1:00")), Some(Spot::Row(50)));
-        assert_eq!(spot_at(&s, find(&screen, "title 30  1:00")), Some(Spot::Row(30)));
+        assert_eq!(spot_at(&s, find(&screen, "▌")), Some(Spot::Row(50)));
+        assert_eq!(spot_at(&s, find(&screen, "title 30 ")), Some(Spot::Row(30)));
         s.update(Action::Enter); // plays video 50 in tab 1
         let screen = render(&s);
         let (x, y) = find(&screen, "│ ▶ title 50 ");
@@ -4597,7 +4621,7 @@ mod tests {
         assert!(screen.iter().any(|l| l.contains("▌▶ title new")), "{}", screen.join("\n"));
         assert!(!screen.iter().any(|l| l.contains(down)) && screen.iter().any(|l| l.contains(up)));
         s.update(Action::Back);
-        assert!(render(&s).contains("title new  1:00"), "the list stays in front");
+        assert!(render(&s).contains("title new "), "the list stays in front");
     }
 
     #[test]
@@ -4622,5 +4646,56 @@ mod tests {
         assert_eq!(row("title", 8), "…  12:34");
         assert!(row("title", 7).ends_with("  12:34"));
         assert_eq!(row("title", 3), "head title  12:34", "too narrow: left for the screen to clip");
+    }
+
+    /// Where `1:00` starts on each screen row that has one, in cells.
+    fn length_columns(state: &State, width: u16) -> Vec<usize> {
+        let mut terminal = Terminal::new(TestBackend::new(width, 40)).unwrap();
+        terminal.draw(|f| draw(f, state, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let rows: Vec<Vec<&str>> =
+            buffer.content.chunks(width as usize).map(|r| r.iter().map(|c| c.symbol()).collect()).collect();
+        // List rows: a channel column and a length (the preview has them on separate lines).
+        rows.iter()
+            .filter(|r| r.concat().contains("chan") || r.concat().contains("A Channel"))
+            .filter_map(|r| r.windows(4).position(|w| w.concat() == "1:00"))
+            .collect()
+    }
+
+    #[test]
+    fn list_rows_cut_long_titles_and_line_up_the_length() {
+        let mut long = video("long");
+        long.title = "A very long title that would never fit in the list at all, not even close, really not".repeat(2);
+        let mut wide = video("wide");
+        wide.title = "日本語のとても長いタイトル😀😀 ".repeat(8);
+        let mut rtl = video("rtl");
+        rtl.title = "\u{200F}عنوان طويل جدا باللغة العربية لا يتسع في السطر ".repeat(4);
+        let mut chan = video("chan");
+        chan.channel = "A Channel Name Much Longer Than Its Column".into();
+        let s = with_items(Items::Videos(vec![long, wide, rtl, chan, video("short")]));
+        for width in [80, 130, 200] {
+            let columns = length_columns(&s, width);
+            assert_eq!(columns.len(), 5, "every row shows its length at {width}");
+            assert!(columns.iter().all(|c| *c == columns[0]), "lined up at {width}: {columns:?}");
+        }
+        let screen = render_sized(&s, &VIEW, 130);
+        assert!(screen.contains("A Channel Name Much…"), "{screen}");
+        assert!(screen.contains("A very long …  1:00"), "{screen}");
+    }
+
+    #[test]
+    fn watch_later_sits_above_subscriptions() {
+        let at = |x| Section::ALL.iter().position(|s| *s == x).unwrap();
+        assert_eq!(at(Section::Inicio) + 1, at(Section::VerDespues));
+        assert_eq!(at(Section::VerDespues) + 1, at(Section::Suscripciones));
+        assert_eq!(at(Section::Suscripciones) + 1, at(Section::Historial));
+        let s = state();
+        let screen = render(&s);
+        let row = |label: &str| screen.lines().position(|l| l.contains(label)).unwrap();
+        assert!(row(Section::Inicio.label(Lang::Es)) < row(Section::VerDespues.label(Lang::Es)));
+        assert!(row(Section::VerDespues.label(Lang::Es)) < row(Section::Suscripciones.label(Lang::Es)));
+        // The icons moved with them.
+        let icons = icons(IconSet::Unicode);
+        assert_eq!((icons.section(Section::VerDespues), icons.section(Section::Suscripciones)), ("◷", "▣"));
     }
 }
