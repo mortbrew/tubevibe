@@ -551,7 +551,7 @@ could not update itself either. From now on:
   opened (now covered by a test).
 
 
-## 0.8.6: Settings at the bottom of the menu, menu focus border, border styles, tabs in the menu only, Alt+, / Alt+. tabs, menu walks tabs, ← to the menu, fullscreen fix, consistency pass, tabs restored, Watch Later fix
+## 0.8.6: tabs in the menu, tab keys, fullscreen fix, width settings, theme accent (2026-10-19)
 
 ### Settings, About and Quit at the bottom of the menu (`menu-layout-borders`)
 
