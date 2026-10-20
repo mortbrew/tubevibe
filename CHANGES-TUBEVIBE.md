@@ -762,6 +762,37 @@ could not update itself either. From now on:
 - `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
 
+### Menu, Preview and Comments widths in Settings (`browser-tab-keys`)
+
+Three new rows in Settings, right after Border Style. Enter steps each one up
+and wraps from the largest back to the smallest, like the other cycling
+settings. They're saved to `[ui]` in config.toml and apply at once.
+
+| Setting (es) | Key | Unit | Range, step | Default |
+|---|---|---|---|---|
+| Menu Width (Ancho del menú) | `menu_width` | columns | 20–40, 2 | 26 |
+| Preview Width (Ancho de la vista previa) | `preview_width` | columns | 30–70, 4 | 46 |
+| Comments Width (Ancho de los comentarios) | `comments_width` | % of the video tab | 30–60, 5 | 45 |
+
+- **The defaults are the old layout**, so nothing changes for anyone who
+  doesn't touch them.
+- **Never vanish, never overlap:**
+  - The menu is never wider than half the screen.
+  - The preview shows only while the list beside it keeps 50 columns. That's
+    the old 96-column rule at the default 46, so a wider preview needs a
+    wider screen (70 needs 120 columns of content).
+  - The comments still need a video tab 100 columns wide inside, and Up Next
+    keeps at least 40 columns beside them.
+- **Loading is tolerant:** a value out of range or of the wrong type is
+  reported like other bad settings ("Bad value for ui.menu_width in
+  config.toml: using the default") and falls back to its
+  default. It never stops startup, and older builds skip the new keys.
+- Tests: `sizes_load_tolerantly`,
+  `menu_width_min_and_max_and_never_more_than_half`,
+  `preview_width_min_and_max_keep_the_list_its_columns`, and
+  `comments_width_min_and_max_and_the_100_column_threshold`. The settings
+  cycling test covers the new rows.
+
 ### Video tab: comments full height, Up next right under the summary (`browser-tab-keys`)
 
 - **Comments take the right side of the video tab from top to bottom**

@@ -70,7 +70,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 34],
+    pub settings: [&'static str; 37],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -145,8 +145,9 @@ const EMOJI: Icons = Icons {
         "🏠", "📺", "🕒", "📜", "📚", "⭐", "🔎", "📡", "🎯", "🧭", "💡", "🔖", "📼", "🎵", "📥", "🔧", "💜", "🚪",
     ],
     settings: [
-        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📑", "🎨", "📷", "🐭",
-        "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙", "📝",
+        "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📏", "🔭", "💭", "📑",
+        "🎨", "📷", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
+        "📝",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -222,6 +223,10 @@ const NERD: Icons = Icons {
         "\u{f0ac}",
         "\u{f118}",
         "\u{f00ce}",
+        // nf-fa-bars, nf-fa-eye, nf-fa-comments: the menu, preview and comments widths.
+        "\u{f0c9}",
+        "\u{f06e}",
+        "\u{f086}",
         "\u{f2d2}",
         "\u{f1fc}",
         "\u{f03e}",
@@ -289,8 +294,8 @@ const NERD: Icons = Icons {
 const UNICODE: Icons = Icons {
     sections: ["⌂", "▣", "◷", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "❐", "◐", "▨", "➚", "◆", "✦", "≈", "✸",
-        "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "➚", "◆",
+        "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
     tab: "▶",
@@ -381,11 +386,21 @@ pub struct Areas {
 }
 
 pub fn areas(area: Rect, sidebar: bool) -> Areas {
+    areas_with(area, if sidebar { SIDEBAR_WIDTH } else { 0 })
+}
+
+/// The screen's areas with the menu as wide as `state` says (Menu Width).
+pub fn screen_areas(area: Rect, state: &State) -> Areas {
+    areas_with(area, if state.sidebar { state.config.ui.menu_width } else { 0 })
+}
+
+/// `menu` columns of menu (0: none), never more than half the screen.
+fn areas_with(area: Rect, menu: u16) -> Areas {
     let [body, status, hints] =
         Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).areas(area);
-    let width = if sidebar { SIDEBAR_WIDTH } else { 0 };
+    let width = menu.min(area.width / 2);
     let [side, content] = Layout::horizontal([Constraint::Length(width), Constraint::Fill(1)]).areas(body);
-    Areas { sidebar: sidebar.then_some(side), content, status, hints }
+    Areas { sidebar: (menu > 0).then_some(side), content, status, hints }
 }
 
 /// What is under the mouse pointer.
@@ -418,7 +433,7 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     if state.fullscreen {
         return Some(Spot::Video);
     }
-    let areas = areas(screen, state.sidebar);
+    let areas = screen_areas(screen, state);
     if let Some(side) = areas.sidebar.filter(|a| a.contains(at)) {
         let inner = Block::bordered().inner(side);
         let line = usize::from(y.checked_sub(inner.y)?);
@@ -437,7 +452,8 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
         if state.details_shown(tab) {
             // The video is elsewhere (or not shown): here are its details and the related list.
             state.related_shown()?;
-            let list = Block::bordered().inner(tab_layout(tab, Block::bordered().inner(areas.content)).related);
+            let list = Block::bordered()
+                .inner(tab_layout(tab, Block::bordered().inner(areas.content), state.config.ui.comments_width).related);
             return list_row(list, tab.related, tab.related_videos().len(), at);
         }
         let inner = Block::bordered().inner(areas.content);
@@ -449,7 +465,7 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     let listing = state.listing()?;
     let (_, rest) = split_prompt(state, areas.content);
     let list = match listing.items {
-        Items::Videos(_) | Items::Channels(_) => split_preview(rest).0,
+        Items::Videos(_) | Items::Channels(_) => split_preview(rest, state.config.ui.preview_width).0,
         Items::About | Items::System => return None,
         _ => rest,
     };
@@ -474,7 +490,7 @@ pub fn video_area(state: &State, area: Rect) -> Option<Rect> {
         return None;
     }
     state.active_tab().filter(|t| !t.playback.audio_only)?;
-    let cells = if state.fullscreen { area } else { Block::bordered().inner(areas(area, state.sidebar).content) };
+    let cells = if state.fullscreen { area } else { Block::bordered().inner(screen_areas(area, state).content) };
     under_context_menu(state, area, cells)
 }
 
@@ -526,7 +542,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
         }
         return;
     }
-    let areas = areas(frame.area(), state.sidebar);
+    let areas = screen_areas(frame.area(), state);
     if let Some(side) = areas.sidebar {
         draw_sidebar(frame, state, icons, side);
     }
@@ -620,6 +636,8 @@ struct WatchLayout {
 
 /// Columns of the thumbnail on a video tab.
 const WATCH_THUMBNAIL_WIDTH: u16 = 36;
+/// Columns the details and "Up next" keep beside the comments.
+const WATCH_LEFT_MIN_WIDTH: u16 = 40;
 /// Narrower than this, a video tab shows no comments.
 const COMMENTS_MIN_WIDTH: u16 = 100;
 
@@ -633,14 +651,14 @@ thread_local! {
     static CARD_ROWS: std::cell::Cell<Option<DrawnCard>> = const { std::cell::Cell::new(None) };
 }
 
-fn watch_layout(inner: Rect) -> WatchLayout {
-    watch_layout_with(inner, (0, 0))
+fn watch_layout(inner: Rect, comments: u16) -> WatchLayout {
+    watch_layout_with(inner, comments, (0, 0))
 }
 
 /// The layout of `tab` as last drawn in `inner`.
-fn tab_layout(tab: &Tab, inner: Rect) -> WatchLayout {
+fn tab_layout(tab: &Tab, inner: Rect, comments: u16) -> WatchLayout {
     let drawn = CARD_ROWS.with(std::cell::Cell::get).filter(|(id, area, _)| *id == tab.id && *area == inner);
-    watch_layout_with(inner, drawn.map_or((0, 0), |(_, _, rows)| rows))
+    watch_layout_with(inner, comments, drawn.map_or((0, 0), |(_, _, rows)| rows))
 }
 
 /// `detail_rows` / `summary_rows`: what the details (beside the thumbnail,
@@ -648,10 +666,13 @@ fn tab_layout(tab: &Tab, inner: Rect) -> WatchLayout {
 /// Wide enough, the comments take the right side from top to bottom; the
 /// left column has the thumbnail and details, then the AI summary across it,
 /// then "Up next" right below.
-fn watch_layout_with(inner: Rect, (detail_rows, summary_rows): (u16, u16)) -> WatchLayout {
+/// `percent`: Comments Width, of the tab's inside; the left column keeps
+/// [`WATCH_LEFT_MIN_WIDTH`] columns whatever it says.
+fn watch_layout_with(inner: Rect, percent: u16, (detail_rows, summary_rows): (u16, u16)) -> WatchLayout {
     let (left, comments) = if inner.width >= COMMENTS_MIN_WIDTH {
-        // "Up next" a little wider: its rows carry date, channel, title and length.
-        let [left, comments] = Layout::horizontal([Constraint::Fill(11), Constraint::Fill(9)]).areas(inner);
+        let width = ((u32::from(inner.width) * u32::from(percent) + 50) / 100) as u16;
+        let width = width.min(inner.width - WATCH_LEFT_MIN_WIDTH);
+        let [left, comments] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)]).areas(inner);
         (left, Some(comments))
     } else {
         (inner, None)
@@ -744,7 +765,8 @@ fn summary_lines(text: Option<&str>, width: u16, rows: usize, lang: Lang, icon: 
 fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab: &Tab, inner: Rect) {
     let lang = state.lang();
     let Some(video) = &tab.playback.video else { return };
-    let mut layout = watch_layout(inner);
+    let comments_width = state.config.ui.comments_width;
+    let mut layout = watch_layout(inner, comments_width);
     let details = if view.thumbnails {
         let middle = Rect { y: layout.thumbnail.y + layout.thumbnail.height / 2, height: 1, ..layout.thumbnail };
         frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
@@ -811,7 +833,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let paragraph = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true });
     let most_card = inner.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
     let detail_rows = (paragraph.line_count(details.width) as u16).min(most_card);
-    layout = watch_layout_with(inner, (detail_rows, 0));
+    layout = watch_layout_with(inner, comments_width, (detail_rows, 0));
     let details = Rect { y: layout.details.y, height: layout.details.height, ..details };
     frame.render_widget(paragraph, details);
     // The AI summary across the left column, all of it, as long as "Up next"
@@ -823,7 +845,7 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         let lines = summary_lines(summary, width, usize::from(most), lang, icons.summary);
         let wrapped = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true });
         summary_rows = (wrapped.line_count(width) as u16).min(most);
-        layout = watch_layout_with(inner, (detail_rows, summary_rows));
+        layout = watch_layout_with(inner, comments_width, (detail_rows, summary_rows));
         frame.render_widget(wrapped, layout.summary);
     }
     CARD_ROWS.with(|c| c.set(Some((tab.id, inner, (detail_rows, summary_rows)))));
@@ -1211,11 +1233,13 @@ fn split_prompt(state: &State, area: Rect) -> (Option<Rect>, Rect) {
 }
 
 /// A video list and, when there is room, the preview panel beside it.
-fn split_preview(area: Rect) -> (Rect, Option<Rect>) {
-    if area.width < PREVIEW_MIN_WIDTH {
+/// `width`: Preview Width. The list keeps the columns it had beside the
+/// default preview: narrower than that, no preview.
+fn split_preview(area: Rect, width: u16) -> (Rect, Option<Rect>) {
+    if area.width < width + (PREVIEW_MIN_WIDTH - PREVIEW_WIDTH) {
         return (area, None);
     }
-    let [list, preview] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(PREVIEW_WIDTH)]).areas(area);
+    let [list, preview] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)]).areas(area);
     (list, Some(preview))
 }
 
@@ -1234,13 +1258,13 @@ pub fn thumbnail_area(state: &State, screen: Rect) -> Option<(String, Rect)> {
     }
     if let Some(tab) = state.active_tab() {
         let video = tab.playback.video.as_ref().filter(|_| state.details_shown(tab) && !state.fullscreen)?;
-        let inner = Block::bordered().inner(areas(screen, state.sidebar).content);
-        let cells = watch_layout(inner).thumbnail;
+        let inner = Block::bordered().inner(screen_areas(screen, state).content);
+        let cells = watch_layout(inner, state.config.ui.comments_width).thumbnail;
         return under_context_menu(state, screen, cells).filter(|c| c.height > 0).map(|c| (video.id.clone(), c));
     }
     let video = state.videos_from_selection(0).first()?;
-    let (_, list) = split_prompt(state, areas(screen, state.sidebar).content);
-    let (_, preview) = split_preview(list);
+    let (_, list) = split_prompt(state, screen_areas(screen, state).content);
+    let (_, preview) = split_preview(list, state.config.ui.preview_width);
     Some((video.id.clone(), under_context_menu(state, screen, thumbnail_cells(preview?))?))
 }
 
@@ -1445,7 +1469,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
         }
         Items::Channels(channels) => {
             // The description goes in the panel when there is one, other details in the row.
-            let panel = split_preview(area).1.is_some();
+            let panel = split_preview(area, state.config.ui.preview_width).1.is_some();
             channels.iter().map(|c| channel_row(state, icons, c, panel)).collect()
         }
         Items::Profiles(profiles) => profiles.iter().map(|p| profile_row(state, icons, p)).collect(),
@@ -1469,7 +1493,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
     let selected = (!listing.items.is_empty()).then_some(listing.selected);
-    let area = match (&listing.items, split_preview(area)) {
+    let area = match (&listing.items, split_preview(area, state.config.ui.preview_width)) {
         (Items::Videos(videos), (left, Some(preview))) => {
             draw_preview(frame, state, icons, view, videos.get(listing.selected), preview);
             left
@@ -2848,7 +2872,8 @@ mod tests {
 
     #[test]
     fn settings_screen_shows_labels_and_values() {
-        let screen = render(&open_settings());
+        // Taller than the default screen: the list scrolls past 36 rows.
+        let screen = render_screen(&open_settings(), 130, 46).join("\n");
         for setting in Setting::ALL {
             assert!(screen.contains(setting.label(Lang::Es)), "{setting:?}\n{screen}");
         }
@@ -4342,5 +4367,59 @@ mod tests {
         assert!(s.tabs.is_empty() && s.active == 0);
         assert!(matches!(s.menu_row(), MenuRow::Section(_)));
         render(&s);
+    }
+
+    #[test]
+    fn menu_width_min_and_max_and_never_more_than_half() {
+        for (width, screen_width, expect) in [(20, 130, 20u16), (40, 130, 40), (26, 130, 26), (40, 60, 30)] {
+            let mut s = state();
+            s.config.ui.menu_width = width;
+            let screen = render_screen(&s, screen_width, 40);
+            // The menu's right border, then the content's left one.
+            let top: Vec<char> = screen[0].chars().collect();
+            assert_eq!((top[usize::from(expect) - 1], top[usize::from(expect)]), ('┐', '┌'), "{width}: {}", screen[0]);
+            assert!(screen.iter().any(|l| l.contains("Suscripciones")), "{width} at {screen_width}");
+        }
+    }
+
+    #[test]
+    fn preview_width_min_and_max_keep_the_list_its_columns() {
+        let mut s = with_items(Items::Videos(vec![video("a"), video("b")]));
+        for (width, screen_width, shown) in [(30, 130, true), (46, 130, true), (70, 130, false), (70, 200, true)] {
+            s.config.ui.preview_width = width;
+            let screen = render_screen(&s, screen_width, 40);
+            let content = screen_areas(Rect::new(0, 0, screen_width, 40), &s).content;
+            let (list, preview) = split_preview(split_prompt(&s, content).1, width);
+            assert_eq!(preview.is_some(), shown, "{width} at {screen_width}");
+            if let Some(preview) = preview {
+                assert_eq!(preview.width, width);
+                assert!(list.width >= PREVIEW_MIN_WIDTH - PREVIEW_WIDTH, "the list keeps 50 columns");
+                // The preview's own border, right where the list's ends.
+                let row: Vec<char> = screen[usize::from(preview.y)].chars().collect();
+                assert_eq!(row[usize::from(preview.x)], '┌', "{}", screen.join("\n"));
+            }
+        }
+    }
+
+    #[test]
+    fn comments_width_min_and_max_and_the_100_column_threshold() {
+        let (mut s, _) = details_tab(Some("Corto."));
+        for (percent, screen_width, expect) in
+            [(30, 130, Some(31)), (45, 130, Some(46)), (60, 130, Some(61)), (60, 128, Some(60)), (60, 120, None)]
+        {
+            s.config.ui.comments_width = percent;
+            let screen = tab_screen(&s, screen_width, 40);
+            let inner = Block::bordered().inner(screen_areas(Rect::new(0, 0, screen_width, 40), &s).content);
+            let comments = watch_layout(inner, percent).comments;
+            assert_eq!(comments.map(|c| c.width), expect, "{percent}% at {screen_width}");
+            match comments {
+                Some(c) => {
+                    let row: Vec<char> = screen[usize::from(c.y)].chars().collect();
+                    assert_eq!(row[usize::from(c.x)], '┌', "{}", screen.join("\n"));
+                    assert!(inner.width - c.width >= 40, "Up next keeps 40 columns");
+                }
+                None => assert!(!screen.iter().any(|l| l.contains("Comentarios")), "under 100 columns: none"),
+            }
+        }
     }
 }

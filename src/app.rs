@@ -169,6 +169,9 @@ pub enum Setting {
     AppLang,
     Icons,
     BorderStyle,
+    MenuWidth,
+    PreviewWidth,
+    CommentsWidth,
     RestoreTabs,
     OmarchyTheme,
     Thumbnails,
@@ -192,7 +195,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 37] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -207,6 +210,9 @@ impl Setting {
         Self::AppLang,
         Self::Icons,
         Self::BorderStyle,
+        Self::MenuWidth,
+        Self::PreviewWidth,
+        Self::CommentsWidth,
         Self::RestoreTabs,
         Self::OmarchyTheme,
         Self::Thumbnails,
@@ -247,6 +253,9 @@ impl Setting {
             Self::AppLang => ("Idioma de la app (Ctrl+Y l)", "App Language (Ctrl+Y l)"),
             Self::Icons => ("Íconos", "Icons"),
             Self::BorderStyle => ("Estilo de los bordes", "Border Style"),
+            Self::MenuWidth => ("Ancho del menú", "Menu Width"),
+            Self::PreviewWidth => ("Ancho de la vista previa", "Preview Width"),
+            Self::CommentsWidth => ("Ancho de los comentarios", "Comments Width"),
             Self::RestoreTabs => ("Recuperar las pestañas al abrir", "Restore Tabs on Startup"),
             Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
             Self::Thumbnails => ("Portadas de los videos (kitty)", "Video Thumbnails (kitty)"),
@@ -1315,6 +1324,11 @@ impl State {
             Setting::AppLang => lang.name().into(),
             Setting::Icons => self.config.ui.icons.label().into(),
             Setting::BorderStyle => self.config.ui.border_style.label(lang).into(),
+            Setting::MenuWidth => format!("{} {}", self.config.ui.menu_width, self.tr("columnas", "Columns")),
+            Setting::PreviewWidth => format!("{} {}", self.config.ui.preview_width, self.tr("columnas", "Columns")),
+            Setting::CommentsWidth => {
+                format!("{} % {}", self.config.ui.comments_width, self.tr("de la pestaña", "of the Tab"))
+            }
             Setting::RestoreTabs => {
                 let (es, en) = on_off(self.config.ui.restore_tabs);
                 self.tr(es, en).into()
@@ -2424,6 +2438,17 @@ impl State {
             Setting::RestoreTabs => {
                 self.config.ui.restore_tabs = !self.config.ui.restore_tabs;
                 save("ui", "restore_tabs", SettingValue::Bool(self.config.ui.restore_tabs))
+            }
+            Setting::MenuWidth | Setting::PreviewWidth | Setting::CommentsWidth => {
+                use crate::config::{COMMENTS_WIDTH, MENU_WIDTH, PREVIEW_WIDTH};
+                let ui = &mut self.config.ui;
+                let (size, value) = match setting {
+                    Setting::MenuWidth => (MENU_WIDTH, &mut ui.menu_width),
+                    Setting::PreviewWidth => (PREVIEW_WIDTH, &mut ui.preview_width),
+                    _ => (COMMENTS_WIDTH, &mut ui.comments_width),
+                };
+                *value = size.next(*value);
+                save("ui", size.key, SettingValue::Number((*value).into()))
             }
             Setting::BorderStyle => {
                 self.config.ui.border_style = self.config.ui.border_style.next();
@@ -6236,6 +6261,13 @@ mod tests {
         assert_eq!(s.config.player.mode, PlayerMode::Overlay);
         assert_eq!(change(&mut s, Setting::Icons), [saved("ui", "icons", text("nerd"))]);
         assert_eq!(change(&mut s, Setting::BorderStyle), [saved("ui", "border_style", text("rounded"))]);
+        assert_eq!(change(&mut s, Setting::MenuWidth), [saved("ui", "menu_width", SettingValue::Number(28))]);
+        assert_eq!(s.setting_value(Setting::MenuWidth), "28 columnas");
+        assert_eq!(change(&mut s, Setting::PreviewWidth), [saved("ui", "preview_width", SettingValue::Number(50))]);
+        assert_eq!(change(&mut s, Setting::CommentsWidth), [saved("ui", "comments_width", SettingValue::Number(50))]);
+        s.config.ui.comments_width = 60;
+        assert_eq!(change(&mut s, Setting::CommentsWidth), [saved("ui", "comments_width", SettingValue::Number(30))]);
+        assert_eq!(s.setting_value(Setting::CommentsWidth), "30 % de la pestaña");
         assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);

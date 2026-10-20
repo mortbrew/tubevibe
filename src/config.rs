@@ -145,10 +145,45 @@ impl Language {
     }
 }
 
+/// A size setting: its allowed values (`min..=max` by `step`) and default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Size {
+    pub key: &'static str,
+    pub min: u16,
+    pub max: u16,
+    pub step: u16,
+    pub default: u16,
+}
+
+impl Size {
+    /// The next value Enter picks: one step up, from the largest back to the smallest.
+    pub fn next(self, value: u16) -> u16 {
+        let up = value.saturating_add(self.step);
+        if value >= self.max || up > self.max { self.min } else { up.max(self.min) }
+    }
+
+    pub fn contains(self, value: u16) -> bool {
+        (self.min..=self.max).contains(&value)
+    }
+}
+
+/// Columns; 26 is the layout of earlier versions.
+pub const MENU_WIDTH: Size = Size { key: "menu_width", min: 20, max: 40, step: 2, default: 26 };
+/// Columns; 46 is the layout of earlier versions.
+pub const PREVIEW_WIDTH: Size = Size { key: "preview_width", min: 30, max: 70, step: 4, default: 46 };
+/// Percent of the video tab; 45 is the layout of earlier versions.
+pub const COMMENTS_WIDTH: Size = Size { key: "comments_width", min: 30, max: 60, step: 5, default: 45 };
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct UiConfig {
     pub sidebar: bool,
+    /// Columns of the left menu ([`MENU_WIDTH`]).
+    pub menu_width: u16,
+    /// Columns of the preview panel right of video and channel lists ([`PREVIEW_WIDTH`]).
+    pub preview_width: u16,
+    /// Percent of a video tab the comments take ([`COMMENTS_WIDTH`]).
+    pub comments_width: u16,
     pub icons: IconSet,
     /// Interface language; unset follows the system locale.
     pub lang: Option<Lang>,
@@ -393,6 +428,9 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             sidebar: true,
+            menu_width: MENU_WIDTH.default,
+            preview_width: PREVIEW_WIDTH.default,
+            comments_width: COMMENTS_WIDTH.default,
             icons: IconSet::Emoji,
             lang: None,
             thumbnails: true,
@@ -549,6 +587,20 @@ impl Config {
                 "media" => c.media = section(&name, value, w),
                 "effects" => c.effects = section(&name, value, w),
                 _ => w.push(ConfigWarning::Unknown(name)),
+            }
+        }
+        // Sizes out of range: said, and back to the default.
+        for (size, value) in [
+            (MENU_WIDTH, &mut c.ui.menu_width),
+            (PREVIEW_WIDTH, &mut c.ui.preview_width),
+            (COMMENTS_WIDTH, &mut c.ui.comments_width),
+        ] {
+            if !size.contains(*value) {
+                warnings.push(ConfigWarning::BadValue {
+                    key: format!("ui.{}", size.key),
+                    error: format!("{} is not between {} and {}", value, size.min, size.max),
+                });
+                *value = size.default;
             }
         }
         Ok((c, warnings))
@@ -885,5 +937,23 @@ mod tests {
         let (config, warnings) = Config::parse("[ui]\nmax_tabs = 3\nsidebar = false\n").unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert!(!config.ui.sidebar, "the rest still applies");
+    }
+
+    #[test]
+    fn sizes_load_tolerantly() {
+        let (c, w) = Config::parse("[ui]\nmenu_width = 30\npreview_width = 70\ncomments_width = 30\n").unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (30, 70, 30));
+        let (c, w) =
+            Config::parse("[ui]\nmenu_width = 5\npreview_width = \"wide\"\ncomments_width = 99\nmouse = false\n")
+                .unwrap();
+        assert_eq!(w.len(), 3, "{w:?}");
+        assert_eq!((c.ui.menu_width, c.ui.preview_width, c.ui.comments_width), (26, 46, 45));
+        assert!(!c.ui.mouse, "the rest still applies");
+        let d = UiConfig::default();
+        assert_eq!((d.menu_width, d.preview_width, d.comments_width), (26, 46, 45), "the old layout");
+        assert_eq!(MENU_WIDTH.next(40), 20);
+        assert_eq!(MENU_WIDTH.next(26), 28);
+        assert_eq!(COMMENTS_WIDTH.next(60), 30);
     }
 }
