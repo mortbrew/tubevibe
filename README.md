@@ -11,7 +11,7 @@ in their own window by default (its tab shows the video's details and what to
 watch next), or drawn **inside the app** in [kitty](https://sw.kovidgoyal.net/kitty/).
 Every video opens in its own tab.
 
-> Interface in English and Spanish (`Ctrl+Y l` switches). Early but usable:
+> Interface in English and Spanish (`L`, i.e. Shift+L, switches). Early but usable:
 > feedback welcome.
 
 ![Search results with the preview panel and the selected video's thumbnail](docs/preview.png)
@@ -28,10 +28,10 @@ Every video opens in its own tab.
 - **Watch Later** (under YOUTUBE): your real YouTube *Watch Later* playlist
   (needs a login; the old local-only list is the Watch Later under TUBEVIBE). `w` adds the
   selected video to it right away (if it is already there, it just says so);
-  inside the list `Ctrl+Y` `x` removes the selected video (after asking)
+  inside the list `X` (Shift+X) removes the selected video (after asking)
 - **My Playlists**: your YouTube playlists, plus *Liked videos* and *Watch
-  Later*; `Enter` opens one, `x` deletes it from YouTube (after asking).
-  Inside one, `Ctrl+Y` `x` takes the selected video out of it on YouTube
+  Later*; `Enter` opens one, `X` deletes it from YouTube (after asking).
+  Inside one, `X` takes the selected video out of it on YouTube
   (after asking; in *Liked videos* that takes the like back)
 - **History**: everything you watched, newest first, with the day you
   watched it: in tubevibe and, logged in, on YouTube too (the browser, the
@@ -74,7 +74,7 @@ Every video opens in its own tab.
   **Right click** opens a menu with what can be done there: play, sound only,
   watch later, download, like, channel, subscribe, close the tab, delete…
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
-  dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`w` adds), **tubevibe Watch Later** (`l` adds),
+  dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`w` adds), **tubevibe Watch Later** (`W` adds),
   **download** with subtitles (`d`), open the **channel** (`c`), open it in a
   **new tab in the background** (`t`: it joins TABS in the menu, nothing plays,
   you stay where you are)
@@ -95,8 +95,8 @@ Every video opens in its own tab.
   channels (picks from channels you don't follow yet)
 - **Watch Later** (under TUBEVIBE): the app's own watch-later
   list, kept only on this computer (`~/.local/share/tubevibe/later.json`),
-  apart from YouTube's Watch Later. `l` adds the selected video to it (if it
-  is already there, it just says so); inside it `Ctrl+Y` `x` removes the
+  apart from YouTube's Watch Later. `W` (Shift+W) adds the selected video to it (if it
+  is already there, it just says so); inside it `X` removes the
   selected video (after asking). Messages call it *tubevibe Watch Later*
   and the other one *YouTube Watch Later*.
 
@@ -138,7 +138,7 @@ Every video opens in its own tab.
   machines without a browser (servers, SSH)
 - A settings screen for everything; changes go to `config.toml`, keeping your
   comments. `$EDITOR` can open the file from the app
-- The bottom bar always shows the keys that work right now; `Ctrl+Y ?` lists
+- The bottom bar always shows the keys that work right now; `Shift+/` (`?`) lists
   them all
 - English or Spanish, following the system language until you pick one
 - Short animations when pages and dialogs open, each one can be turned off
@@ -247,30 +247,27 @@ tubetui, not this fork.)
 
 ## Keys
 
-Global commands use a **`Ctrl+Y` prefix** (tmux style): press `Ctrl+Y`, then:
+Every command is a single key. Lowercase keys do everyday things;
+Shift (uppercase, `?`) is for the bigger ones. Nothing needs a terminal
+setting.
 
 | Key | Action |
 |---|---|
-| `b` | show / hide the menu |
-| `m` | go to the menu |
-| `f` | fullscreen |
-| `x` | close the tab · in either Watch Later or a playlist: remove the selected video (asks first) |
+| `Shift+/` (`?`) | every shortcut, explained |
+| `M` | show / hide the menu |
+| `L` | English / español |
+| `Q` | quit (asks first; says so if downloads are running) |
+| `x` | close: the tab you're in, or the tab under the cursor in the menu. It never deletes anything |
+| `X` | take out, always after asking: files to the trash (My Videos, My Music, Downloads), a video out of History, Watch Later or a playlist, cancel a download. In a video tab: close it **and** take the video out of the list it was opened from (the question names the list; opened from anywhere else, it just closes) |
 | `/` | search videos |
-| `l` | English / español |
-| `?` | every shortcut, explained |
-| `q` | quit |
-
-Without the prefix, one hand on the left of the keyboard:
-
-| Key | Action |
-|---|---|
+| `f` | fullscreen |
 | `Alt+,` | previous tab in the menu (from the first, round to the last; from browsing, the last) |
 | `Alt+.` | next tab in the menu (from the last, back to the first; from browsing, the first) |
+| `Ctrl+C` | quit now |
 
-These work in any terminal as it comes: no setting to change (on macOS,
-`Option+,` and `Option+.` work too, whether or not Option is set to act as
-Alt). `Ctrl+Y`
-`1`–`9` still jumps straight to a tab.
+These work in any terminal as it comes (on macOS, `Option+,` and
+`Option+.` work too, whether or not Option is set to act as Alt). While
+typing in the search box every key types; `Esc` leaves it.
 
 With the mouse: click selects (menu sections and tabs open), double click
 plays / opens, the wheel scrolls lists and sets the volume over the video,
@@ -278,23 +275,23 @@ a click on the video pauses (double click: fullscreen), a click on the
 progress bar jumps there. A right click opens the options of what is under
 it (each with its key). Hold Shift to select text.
 
-In the menu, `↑↓` walk the sections and the open tabs (under TABS) alike; `Enter` (or `→`, except on Quit, which only `Enter` triggers) opens either. `←` from a list or a video tab comes back to the menu with the cursor on the section or tab it came from. From a video tab the video stays on screen (and keeps playing) while the menu has the keys; moving the cursor changes nothing until `Enter` / `→` opens a row (`Enter` on that same tab, or `Tab`, goes back to it). `x` on a tab row closes that tab, like `Ctrl+Y` `x` inside it; the cursor moves to the next tab (or the previous one, or back to the sections). With more tabs than fit, the tab list scrolls between the fixed sections and Settings; a chevron by the TABS title means more tabs above, one under the list more below.
+In the menu, `↑↓` walk the sections and the open tabs (under TABS) alike; `Enter` (or `→`, except on Quit, which only `Enter` triggers) opens either. `←` from a list or a video tab comes back to the menu with the cursor on the section or tab it came from. From a video tab the video stays on screen (and keeps playing) while the menu has the keys; moving the cursor changes nothing until `Enter` / `→` opens a row (`Enter` on that same tab, or `Tab`, goes back to it). `x` on a tab row closes that tab, like `x` inside it; the cursor moves to the next tab (or the previous one, or back to the sections). With more tabs than fit, the tab list scrolls between the fixed sections and Settings; a chevron by the TABS title means more tabs above, one under the list more below.
 
 In lists: `↑↓` / `jk`, `Enter`, `Esc` / `Backspace` to go back, `f` fullscreen for the video that is playing, `Tab` menu ↔ list,
-`w` save to YouTube Watch Later, `l` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
-audio only. In **History** `x` removes the video; in YouTube's **Watch Later** and
-**playlists** `Ctrl+Y` `x` removes it on YouTube (after asking), in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** `x` cancels
-the download, or moves a finished one's file to the system trash after asking
+`w` save to YouTube Watch Later, `W` save to tubevibe Watch Later, `s` subscribe, `g` / `G` like / dislike, `d` download, `c` channel, `a` play as
+audio only. `X` always asks first: in **History** it removes the video; in YouTube's **Watch Later** and
+**playlists** it removes it on YouTube, in tubevibe's **Watch Later** it removes it from that local list; in **Downloads** it cancels
+the download, or moves a finished one's file to the system trash
 (only that file, never a folder or link; a file that is already gone just
-leaves the list); `Space` marks several downloads for one `x`. In **My Videos**
-and **My Music**: `Space` marks files, `x` / `Del` moves the marked ones (or
+leaves the list); `Space` marks several downloads for one `X`. In **My Videos**
+and **My Music**: `Space` marks files, `X` / `Del` moves the marked ones (or
 the selected one) to the system trash, after asking.
 In a video tab that is not playing yet (or closed), `Enter` or `Space` plays it.
 While watching: `Space` pause, `Shift+←` / `Shift+→` seek 5 s (`→` alone seeks forward too), `←` or `Esc` goes to the menu (cursor on the tab; `Esc` in Up Next first goes back to the video, and in fullscreen first leaves it), `↑↓` volume, `m` mute, `j`
 subtitles, `i` original / subtitles / dubbed, `o` language, `v` quality
 (360p–1440p), `b` codec (H.264 / VP9 / AV1 / any), `f` fullscreen, `.` `,`
 next / previous song, `[` `]` previous / next chapter, `a` audio only ⇄ video,
-`PgUp` `PgDn` scroll the comments. Quality, codec and language reload the video at the
+`PgUp` `PgDn` scroll the comments, `x` closes the tab, `X` closes it and takes the video out of its list. Quality, codec and language reload the video at the
 same second and are remembered. If embedded video looks behind the sound,
 the CPU is dropping frames: `v` down to 480p, or try the overlay.
 

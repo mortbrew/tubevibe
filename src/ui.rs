@@ -1431,8 +1431,8 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
         ))
         .fg(MUTED),
         Line::from(lang.pick(
-            "Ctrl+Y ?  muestra todos los atajos explicados · Ctrl+Y l  English",
-            "Ctrl+Y ?  shows every shortcut, explained · Ctrl+Y l  español",
+            "Shift+/  muestra todos los atajos explicados · L  English",
+            "Shift+/  shows every shortcut, explained · L  español",
         ))
         .fg(MUTED),
     ];
@@ -2023,8 +2023,10 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     let lang = state.lang();
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
-    // Global commands are two keys: Ctrl+Y, let go, then the letter.
-    let all_keys = key("Ctrl+Y ?", "Ayuda", "Help");
+    // Every shortcut, explained: the one hint always shown.
+    let all_keys = key("Shift+/", "Ayuda", "Help");
+    // Moving around (arrows, j k, Tab, Esc) is in the help, not the bar.
+    let normal = state.confirm.is_none() && !state.help && state.context.is_none() && state.prompt.is_none();
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
         key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
@@ -2042,7 +2044,12 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             Confirm::Trash(_) | Confirm::TrashDownload { .. } | Confirm::TrashDownloads { .. } => {
                 key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash")
             }
+            Confirm::Quit(0) => key(lang.pick("s", "y"), "sí, salir", "yes, quit"),
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
+            Confirm::ForgetHistory(_) => key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it"),
+            Confirm::Download { running: true, .. } => key(lang.pick("s", "y"), "sí, cancelarla", "yes, cancel it"),
+            Confirm::Download { .. } => key(lang.pick("s", "y"), "sí, quitarla", "yes, remove it"),
+            Confirm::CloseAndRemove { .. } => key(lang.pick("s", "y"), "sí, cerrar y quitar", "yes, close and remove"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
             Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } | Confirm::RemoveFromSaved(_) => {
                 key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
@@ -2057,10 +2064,6 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             key(lang.pick("Enter / Clic", "Enter / Click"), "hacerlo", "do it"),
             key("Esc", "cerrar", "close"),
         ]
-    } else if state.prefix {
-        let mut keys = vec![key("Ctrl+Y", "ahora la tecla:", "now the key:")];
-        keys.extend(keymap::prefix_rows(lang));
-        return keys;
     } else if let Some(prompt) = &state.prompt {
         match prompt {
             Prompt::Videos { .. } => rows(keymap::IN_SEARCH),
@@ -2099,12 +2102,15 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         if state.related_shown().is_some() {
             keys.push(key("Tab", "A continuación", "Up Next"));
         }
-        keys.push(key("Ctrl+Y x", "cerrar la pestaña", "close the tab"));
+        keys.push(key("x", "cerrar la pestaña", "close the tab"));
+        if state.active_tab().is_some_and(|t| t.source.is_some()) {
+            keys.push(key("X", "cerrar y quitar de la lista", "close and remove from the list"));
+        }
         keys.push(key("v", "Cambiar calidad", "Quality Change"));
         keys.push(key("b", "Cambiar códec", "Codec Change"));
         // The rest of the tab's keys, but the ones above and Up Next's own,
         // which the help explains.
-        let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc"];
+        let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc", "x", "X"];
         keys.extend(
             keymap::IN_TAB
                 .iter()
@@ -2133,7 +2139,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                     key("v", "mostrar vistos", "show watched")
                 },
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("l", "ver después tubevibe", "tubevibe Watch Later"),
+                key("W", "ver después tubevibe", "tubevibe Watch Later"),
                 key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -2144,7 +2150,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
                 key("Enter", "ver", "play"),
-                key("Ctrl+Y x", "quitar de la lista", "remove from the list"),
+                key("X", "quitar de la lista", "remove from the list"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("a", "solo audio", "audio only"),
                 key("c", "canal", "channel"),
@@ -2152,16 +2158,29 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
                 key("Enter", "ver (sigue donde lo dejaste)", "play (resumes where you left)"),
-                key("x", "quitar del historial", "remove from history"),
+                key("X", "quitar del historial", "remove from history"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("l", "ver después tubevibe", "tubevibe Watch Later"),
+                key("W", "ver después tubevibe", "tubevibe Watch Later"),
                 key("c", "canal", "channel"),
                 back,
             ],
+            Some(Items::Videos(_))
+                if state.listing().is_some_and(|l| matches!(l.kind, ListKind::Later | ListKind::Playlist(_))) =>
+            {
+                vec![
+                    key("Enter", "ver", "play"),
+                    key("X", "quitar de la lista", "remove from the list"),
+                    key("W", "ver después tubevibe", "tubevibe Watch Later"),
+                    key("a", "solo audio", "audio only"),
+                    key("d", "descargar", "download"),
+                    key("c", "canal", "channel"),
+                    back,
+                ]
+            }
             Some(Items::Videos(_)) => vec![
                 key("Enter", "ver", "play"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("l", "ver después tubevibe", "tubevibe Watch Later"),
+                key("W", "ver después tubevibe", "tubevibe Watch Later"),
                 key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -2174,7 +2193,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             Some(Items::Profiles(_)) => vec![key("Enter", "usar esta sesión", "use this login"), back],
             Some(Items::Playlists(_)) => vec![
                 key("Enter", "ver sus videos", "its videos"),
-                key("x", "borrar la lista (pide confirmar)", "delete the playlist (asks first)"),
+                key("X", "borrar la lista (pide confirmar)", "delete the playlist (asks first)"),
                 back,
             ],
             Some(Items::Files(_, kind)) => vec![
@@ -2182,22 +2201,22 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                     MediaKind::Music => key("Enter", "escuchar desde esta canción", "play from this song"),
                     MediaKind::Video => key("Enter", "ver", "play"),
                 },
-                // Several files: mark them first, then `x` sends them all.
+                // Several files: mark them first, then `X` sends them all.
                 if state.marked_files().is_empty() {
                     key(keymap::space(lang), "marcar varios", "mark several")
                 } else {
                     key(keymap::space(lang), "marcar / desmarcar", "mark / unmark")
                 },
                 if state.marked_files().is_empty() {
-                    key("x", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
+                    key("X", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
                 } else {
-                    key("x", "los marcados a la papelera (pide confirmar)", "the marked ones to the trash (asks first)")
+                    key("X", "los marcados a la papelera (pide confirmar)", "the marked ones to the trash (asks first)")
                 },
                 back,
             ],
             Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
                 key(keymap::space(lang), "marcar / desmarcar", "mark / unmark"),
-                key("x", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
+                key("X", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
                 back,
             ],
             Some(Items::Downloads(downloads)) => {
@@ -2205,13 +2224,15 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 let mut keys = Vec::new();
                 match selected {
                     Some(DownloadState::Running { .. }) => {
-                        keys.push(key("x", "cancelar la descarga", "cancel the download"))
+                        keys.push(key("X", "cancelar la descarga (pide confirmar)", "cancel the download (asks first)"))
                     }
                     Some(DownloadState::Done(_)) => {
                         keys.push(key("Enter", "ver", "play"));
-                        keys.push(key("x", "a la papelera (pide confirmar)", "move to trash (asks first)"));
+                        keys.push(key("X", "a la papelera (pide confirmar)", "move to trash (asks first)"));
                     }
-                    Some(_) => keys.push(key("x", "quitar de la lista", "take off the list")),
+                    Some(_) => {
+                        keys.push(key("X", "quitar de la lista (pide confirmar)", "take off the list (asks first)"))
+                    }
                     None => {}
                 }
                 if selected.is_some() {
@@ -2221,18 +2242,36 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 keys
             }
             Some(Items::About) if about_button_ready(state) => {
-                vec![key("Enter", "actualizar ahora", "update now"), key("Tab", "ir al menú", "go to the menu"), back]
+                let press = if restart_ready(state) {
+                    key("Enter", "reiniciar ahora", "restart now")
+                } else {
+                    key("Enter", "actualizar ahora", "update now")
+                };
+                vec![press, back]
             }
             Some(Items::About) => vec![back],
             Some(Items::System) => vec![key("Enter", "revisar de nuevo", "check again"), back],
             _ => vec![key("Enter", "cambiar / abrir", "change / open"), back],
         }
     };
+    if normal {
+        // The About button is chosen with Tab: that one stays.
+        const MOVING: &[&str] = &["↑ ↓", "↑ ↓  j k", "j k", "Esc", "Esc  ←  h", "←  Esc"];
+        let menu = state.focus == Focus::Menu;
+        hints.retain(|(k, d)| {
+            let select_button = k == "Tab"
+                && (d.contains("Actualizar")
+                    || d.contains("Update")
+                    || d.contains("Reiniciar")
+                    || d.contains("Restart"));
+            !(MOVING.contains(&k.as_str()) || (k == "Tab" && !select_button) || (menu && k == "Enter"))
+        });
+    }
     hints.push(all_keys);
     hints
 }
 
-/// As many hints as fit in the line, whole; the last one (`Ctrl+Y ?`, every
+/// As many hints as fit in the line, whole; the last one (`Shift+/`, every
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
     let hint = |(key, description): &(String, String)| {
@@ -2331,6 +2370,36 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         Confirm::Unsubscribe { name, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Desuscribirte de ", "Unsubscribe from ")),
             Span::styled(name.as_str(), Style::new().fg(MAGENTA).bold()),
+            Span::raw("?"),
+        ]),
+        Confirm::Quit(0) => Line::from(lang.pick("¿Salir de tubevibe?", "Quit tubevibe?")),
+        Confirm::ForgetHistory(video) => Line::from(vec![
+            Span::raw(lang.pick("¿Quitar ", "Remove ")),
+            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" del historial?", " from history?")),
+        ]),
+        Confirm::Download { title, running } => Line::from(vec![
+            Span::raw(match (running, lang) {
+                (true, Lang::Es) => "¿Cancelar la descarga de ",
+                (true, _) => "Cancel the download of ",
+                (false, Lang::Es) => "¿Quitar de la lista ",
+                (false, _) => "Take off the list ",
+            }),
+            Span::styled(truncate(title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::raw("?"),
+        ]),
+        Confirm::CloseAndRemove { source, video, .. } => Line::from(vec![
+            Span::raw(lang.pick("¿Cerrar y quitar ", "Close and remove ")),
+            Span::styled(truncate(&video.title, 20), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" de ", " from ")),
+            Span::styled(
+                match source {
+                    crate::app::TabSource::YouTubeLater => lang.pick(YOUTUBE_LATER.0, YOUTUBE_LATER.1).to_owned(),
+                    crate::app::TabSource::Saved => lang.pick(LOCAL_LATER.0, LOCAL_LATER.1).to_owned(),
+                    crate::app::TabSource::Playlist { title, .. } => truncate(title, 20),
+                },
+                Style::new().fg(CYAN).bold(),
+            ),
             Span::raw("?"),
         ]),
         Confirm::Quit(n) => Line::from(vec![
@@ -2635,7 +2704,12 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         // The Update Now button: focused with Tab (like a list), pressed with Enter.
         let ready = about_button_ready(state);
         let focused = state.active == 0 && state.focus == Focus::List;
-        let button = format!("  {} {}  ", icons.update, lang.pick("Actualizar Ahora", "Update Now"));
+        let label = if restart_ready(state) {
+            lang.pick("Reiniciar Ahora", "Restart Now")
+        } else {
+            lang.pick("Actualizar Ahora", "Update Now")
+        };
+        let button = format!("  {} {label}  ", icons.update);
         let style = match (ready, focused) {
             (true, true) => Style::new().fg(BG).bg(GREEN).bold(),
             (true, false) => Style::new().fg(GREEN).bg(HIGHLIGHT).bold(),
@@ -2660,8 +2734,10 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
                 lines.push(Line::from(format!("{} {text} {percent}%", icons.downloading)).fg(YELLOW).bold());
             }
             Progress::Done(version) => {
-                let text =
-                    lang.pick("instalada · reiniciá tubevibe para usarla", "Installed · Restart tubevibe to Use It");
+                let text = lang.pick(
+                    "instalada · Reiniciar Ahora la abre (tus pestañas vuelven)",
+                    "Installed · Restart Now Opens It (Your Tabs Come Back)",
+                );
                 lines.push(Line::from(format!("{} tubevibe {version} {text}", icons.up_to_date)).fg(GREEN).bold());
             }
             Progress::Failed(error) => {
@@ -2749,7 +2825,12 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
 /// this copy can be replaced, and no update is running or done.
 fn about_button_ready(state: &State) -> bool {
     state.update.as_ref().is_some_and(|u| matches!(u.replace, Replace::Ready(_)))
-        && matches!(state.self_update, Progress::Idle | Progress::Failed(_))
+        && matches!(state.self_update, Progress::Idle | Progress::Failed(_) | Progress::Done(_))
+}
+
+/// The update is in: the button restarts tubevibe into it.
+fn restart_ready(state: &State) -> bool {
+    matches!(state.self_update, Progress::Done(_))
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
@@ -3088,13 +3169,13 @@ mod tests {
         );
         assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
         assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
-        assert!(at("Space", "Pause") < at("Ctrl+Y x", "Close the Tab"));
-        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Help".to_string()));
+        assert!(at("Space", "Pause") < at("x", "Close the Tab"));
+        assert_eq!(keys.last().unwrap(), &("Shift+/".to_string(), "Help".to_string()));
         s.update(Action::ToggleUiLang);
         let keys = hints(&s);
         assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
         assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
-        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Ayuda".to_string()));
+        assert_eq!(keys.last().unwrap(), &("Shift+/".to_string(), "Ayuda".to_string()));
     }
 
     #[test]
@@ -3159,15 +3240,15 @@ mod tests {
     #[test]
     fn hints_follow_the_context() {
         let mut s = state();
-        assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+Y ?"]);
-        s.update(Action::Prefix);
-        assert!(hint_keys(&s).contains(&"b".to_string()) && !hint_keys(&s).contains(&"0-9".to_string()));
+        assert_eq!(hint_keys(&s), ["/", "Shift+/"], "the menu: no moving keys");
+        s.update(Action::FocusSearch);
+        s.update(Action::Back);
         let tab = with_tab();
         assert!(hint_keys(&tab).contains(&"Espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
         let list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(
             hint_keys(&list),
-            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+Y ?"],
+            ["Enter", "v", "w", "W", "a", "s", "g", "d", "c", "/", "Shift+/"],
             "Inicio: a feed"
         );
         let mut search = state();
@@ -3178,9 +3259,6 @@ mod tests {
     #[test]
     fn hints_explain_two_step_keys() {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
-        let mut s = state();
-        s.update(Action::Prefix);
-        assert_eq!(hints(&s)[0].0, "Ctrl+Y", "says the key comes next");
         let mut list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(hint(&list, "s").as_deref(), Some("suscribirse"));
         list.subs.insert("UCa".into());
@@ -3188,9 +3266,9 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
         assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar varios"));
-        assert_eq!(hint(&files, "x").as_deref(), Some("este a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("este a la papelera (pide confirmar)"));
         files.update(Action::ToggleMark);
-        assert_eq!(hint(&files, "x").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
         files.update(Action::Trash);
         assert_eq!(hint(&files, "s").as_deref(), Some("sí, a la papelera"));
     }
@@ -3215,7 +3293,7 @@ mod tests {
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
             assert!(screen.contains("Space Mark Several"), "{screen}");
-            assert!(screen.contains("Ctrl+Y ? Help"), "whole hints only, the last one kept");
+            assert!(screen.contains("Shift+/ Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -3233,7 +3311,7 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
         assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
-        assert_eq!(hint(&s, "x").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
         assert_eq!(hint(&s, "Space").as_deref(), Some("Mark / Unmark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
@@ -3250,7 +3328,7 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let done = Download { id: 0, video: video("a"), state: DownloadState::Done("/v/a.mp4".into()) };
         let mut s = with_items(Items::Downloads(vec![done]));
-        assert_eq!(hint(&s, "x").as_deref(), Some("a la papelera (pide confirmar)"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("a la papelera (pide confirmar)"));
         s.confirm = Some(Confirm::TrashDownload { id: 0, path: "/v/a.mp4".into() });
         assert_eq!(hint(&s, "s").as_deref(), Some("sí, a la papelera"));
         s.update(Action::ToggleUiLang);
@@ -3263,8 +3341,8 @@ mod tests {
     fn hint_bar_shows_keys_with_descriptions() {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
         assert!(screen.contains("w ver después YouTube"), "{screen}");
-        assert!(screen.contains("l ver después tubevibe"), "{screen}");
-        assert!(screen.contains("Ctrl+Y ? Ayuda"));
+        assert!(screen.contains("W ver después tubevibe"), "{screen}");
+        assert!(screen.contains("Shift+/ Ayuda"));
     }
 
     #[test]
@@ -3349,7 +3427,7 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "Ctrl+Y ? Help"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "Shift+/ Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
@@ -3375,7 +3453,7 @@ mod tests {
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("Ctrl+Y ? Ayuda"), "{line}");
+        assert!(line.contains("Shift+/ Ayuda"), "{line}");
         assert!(line.contains("Espacio pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
@@ -4009,7 +4087,11 @@ mod tests {
         assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
         let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        assert_eq!((hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()), ("Espacio", "Tab"), "Space before Tab");
+        assert_eq!(
+            (hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()),
+            ("Espacio", "x"),
+            "Space, then x (Tab to Up Next is in the help)"
+        );
         s.update(Action::ToggleFocus);
         let screen = render_with(&s, &view);
         assert!(screen.contains("A continuación · 2 "), "{screen}");
@@ -4074,8 +4156,13 @@ mod tests {
         assert!(s.update(Action::Enter).is_empty(), "one at a time");
         s.update(Action::SelfUpdated(Ok("9.9.9".into())));
         let screen = render(&s);
-        assert!(screen.contains("✔ tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
+        assert!(screen.contains("✔ tubevibe 9.9.9 Installed · Restart Now Opens It"), "{screen}");
         assert!(!screen.contains("Update with:"), "no command once done: {screen}");
+        // The button is now Restart Now: Enter quits so the runtime starts the new one.
+        assert!(screen.contains("Restart Now") && !screen.contains("Update Now  "), "{screen}");
+        assert_eq!(hints(&s)[0], ("Enter".to_string(), "Restart Now".to_string()));
+        assert!(s.update(Action::Enter).is_empty());
+        assert!(s.restart && s.quit);
     }
 
     #[test]
@@ -4520,7 +4607,7 @@ mod tests {
         };
         let shown = s.tabs[34].id;
         assert_eq!(s.update(x(&s).unwrap()), vec![Effect::Close(shown)]);
-        // The shown tab is gone: the previous one is shown, like Ctrl+Y x, and has the cursor.
+        // The shown tab is gone: the previous one is shown, like x in it, and has the cursor.
         assert_eq!((s.tabs.len(), s.active, s.menu_row()), (34, 34, MenuRow::Tab(33)));
         // Not the shown tab: the next one gets the cursor, the shown one stays.
         s.update(Action::Up);

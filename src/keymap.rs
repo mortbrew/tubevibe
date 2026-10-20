@@ -1,6 +1,7 @@
-//! Keys → actions. Global commands live behind the `Ctrl+Y` prefix
-//! (tmux style: the prefix waits for exactly one more key); plain keys go to
-//! whatever has focus, so the video tab can use space and arrows freely.
+//! Keys → actions. Every command is one key: lowercase for everyday ones,
+//! Shift (uppercase, `?`) for the bigger ones (quit, the menu, the
+//! language, `X` that takes things out). Plain keys go to whatever has
+//! focus, so the video tab can use space and arrows freely.
 //! The help screen is generated from the same tables.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -12,8 +13,6 @@ use crate::youtube::Rating;
 /// The slice of state that decides how a key is read.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct KeyContext {
-    /// `Ctrl+Y` was pressed and the next key is a command.
-    pub prefix: bool,
     pub help: bool,
     /// A yes/no question is open.
     pub confirm: bool,
@@ -34,30 +33,19 @@ pub struct KeyContext {
 pub const SEEK_SECONDS: i32 = 5;
 pub const VOLUME_STEP: i32 = 5;
 
-/// `Ctrl+Y` commands.
-pub const PREFIX: &[(char, Action, Text)] = &[
-    ('b', Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
-    ('m', Action::FocusMenu, Text::new("ir al menú", "go to the menu")),
-    ('f', Action::ToggleFullscreen, Text::new("pantalla completa", "fullscreen")),
-    (
-        'x',
-        Action::CloseTab,
-        Text::new(
-            "cerrar la pestaña · en listas: quitar el video",
-            "close tab · in Watch Later lists/playlists: remove video",
-        ),
-    ),
-    ('/', Action::FocusSearch, Text::new("buscar videos", "search videos")),
-    ('l', Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
-    ('?', Action::ToggleHelp, Text::new("esta ayuda", "this help")),
-    ('q', Action::Quit, Text::new("salir", "quit")),
+/// Commands that work everywhere but while typing: `(char, key name, action, what)`.
+pub const GLOBAL: &[(char, &str, Action, Text)] = &[
+    ('?', "Shift+/", Action::ToggleHelp, Text::new("esta ayuda", "this help")),
+    ('M', "M", Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
+    ('L', "L", Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
+    ('Q', "Q", Action::AskQuit, Text::new("salir (pide confirmar)", "quit (asks first)")),
 ];
 
 /// Keys that act on the selected video, in lists and in video tabs.
 pub const ON_VIDEO: &[(&str, Text)] = &[
     ("w", Text::new("a Ver después de YouTube (ya está: lo dice)", "save to YouTube Watch Later (if there: says so)")),
     (
-        "l",
+        "W",
         Text::new("a Ver después de tubevibe (ya está: lo dice)", "save to tubevibe Watch Later (if there: says so)"),
     ),
     ("s", Text::new("suscribirse / desuscribirse (pide confirmar)", "subscribe / unsubscribe (asks first)")),
@@ -84,10 +72,7 @@ pub const IN_LISTS: &[(&str, Text)] = &[
     ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched videos (My Recommendations…)")),
     ("Espacio", Text::new("marcar varios (videos, música, descargas)", "mark several (videos, music, downloads)")),
     ("f", Text::new("pantalla completa del video que se reproduce", "fullscreen the video playing")),
-    (
-        "x  Supr",
-        Text::new("a la papelera (pide s) · Historial: quitarlo", "to the trash (asks y) · History: remove it"),
-    ),
+    ("X  Supr", Text::new("quitar de la lista o a la papelera (pide s)", "remove from the list or trash (asks y)")),
 ];
 
 pub const WITH_MOUSE: &[(&str, Text)] = &[
@@ -124,6 +109,8 @@ pub const IN_TAB: &[(&str, Text)] = &[
     ("j k", Text::new("moverse en A continuación", "move in Up Next")),
     ("Esc", Text::new("en A continuación: volver al video", "in Up Next: back to the video")),
     ("PgUp PgDn", Text::new("recorrer los comentarios (en ventana)", "scroll the comments (in a window)")),
+    ("x", Text::new("cerrar la pestaña", "close the tab")),
+    ("X", Text::new("cerrar y quitar de su lista (pide s)", "close + remove from its list (asks y)")),
 ];
 
 /// `(keys, description)` rows of a table, in `lang`.
@@ -134,7 +121,7 @@ pub fn rows(table: &[(&str, Text)], lang: Lang) -> Vec<(String, &'static str)> {
 /// Keys and mouse actions with a name of their own, in Spanish and English.
 const KEY_NAMES: &[(&str, &str)] = &[
     ("Espacio", "Space"),
-    ("x  Supr", "x  Del"),
+    ("X  Supr", "X  Del"),
     ("Clic", "Click"),
     ("Doble clic", "Double Click"),
     ("Rueda", "Wheel"),
@@ -156,9 +143,9 @@ pub fn key_name(keys: &str, lang: Lang) -> String {
     }
 }
 
-/// `Ctrl+Y` commands, in `lang`.
-pub fn prefix_rows(lang: Lang) -> Vec<(String, &'static str)> {
-    PREFIX.iter().map(|(k, _, d)| (k.to_string(), d.get(lang))).collect()
+/// The commands that work everywhere, in `lang`.
+pub fn global_rows(lang: Lang) -> Vec<(String, &'static str)> {
+    GLOBAL.iter().map(|(_, k, _, d)| (k.to_string(), d.get(lang))).collect()
 }
 
 /// What macOS types for Option+, and Option+. (US and most layouts).
@@ -218,14 +205,17 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     {
         return Some(action);
     }
+    // Ctrl+anything else does nothing.
     if ctrl {
-        return (key.code == KeyCode::Char('y')).then_some(Action::Prefix);
-    }
-    if ctx.prefix {
-        return Some(prefixed(key.code));
+        return None;
     }
     if ctx.typing {
         return typing(key.code);
+    }
+    if let KeyCode::Char(c) = key.code
+        && let Some((.., action, _)) = GLOBAL.iter().find(|(k, ..)| *k == c)
+    {
+        return Some(action.clone());
     }
     // The menu has the keys (over the browsing view or a video tab still
     // shown): moving, opening (→ too, but Quit), back, Tab, / and f; x
@@ -246,8 +236,11 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     }
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
+        KeyCode::Char('W') => return Some(Action::SaveForLater),
         KeyCode::Char('t') => return Some(Action::OpenInBackground),
-        KeyCode::Char('l') => return Some(Action::SaveForLater),
+        // `x` only ever closes; `X` takes things out, after asking.
+        KeyCode::Char('x') => return Some(Action::CloseTab),
+        KeyCode::Char('X') => return Some(Action::Trash),
         KeyCode::Char('s') => return Some(Action::ToggleSubscription),
         KeyCode::Char('g') => return Some(Action::Rate(Rating::Like)),
         KeyCode::Char('G') => return Some(Action::Rate(Rating::Dislike)),
@@ -270,15 +263,6 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
         (true, true) => related(key.code).or_else(|| player(key.code)),
         (true, false) => player(key.code),
         _ => lists(key.code),
-    }
-}
-
-fn prefixed(code: KeyCode) -> Action {
-    match code {
-        KeyCode::Char(c) => {
-            PREFIX.iter().find(|(key, ..)| *key == c).map_or(Action::CancelPrefix, |(_, action, _)| action.clone())
-        }
-        _ => Action::CancelPrefix,
     }
 }
 
@@ -332,7 +316,7 @@ fn related(code: KeyCode) -> Option<Action> {
 fn lists(code: KeyCode) -> Option<Action> {
     match code {
         KeyCode::Char(' ') => Some(Action::ToggleMark),
-        KeyCode::Char('x') | KeyCode::Delete => Some(Action::Trash),
+        KeyCode::Delete => Some(Action::Trash),
         KeyCode::Char('v') => Some(Action::ToggleWatched),
         // The video playing (in the tab shown last) fills the screen.
         KeyCode::Char('f') => Some(Action::ToggleFullscreen),
@@ -349,7 +333,12 @@ fn lists(code: KeyCode) -> Option<Action> {
 /// Sections of the help screen: title and `(keys, description)` rows.
 pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
     vec![
-        (lang.pick("Comandos: Ctrl+Y y después una tecla", "Commands: Ctrl+Y, Then a Key"), prefix_rows(lang)),
+        (lang.pick("Comandos (en cualquier lado)", "Commands (Anywhere)"), {
+            let mut commands = global_rows(lang);
+            commands.push(("Alt+,  Alt+.".into(), lang.pick("pestaña anterior / siguiente", "previous / next tab")));
+            commands.push(("Ctrl+C".into(), lang.pick("salir ya", "quit now")));
+            commands
+        }),
         (lang.pick("Menú", "Menu"), {
             let mut menu = rows(IN_MENU, lang);
             // → opens too (not Quit); the bar keeps just Enter.
@@ -370,14 +359,6 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
         (lang.pick("Pestaña de video", "Video Tab"), rows(IN_TAB, lang)),
         (lang.pick("Cuadro de búsqueda", "Search Box"), rows(IN_SEARCH, lang)),
         ("Mouse", rows(WITH_MOUSE, lang)),
-        (
-            lang.pick("Siempre", "Always"),
-            vec![
-                ("Alt+,".into(), lang.pick("pestaña anterior del menú", "previous tab in the menu")),
-                ("Alt+.".into(), lang.pick("pestaña siguiente del menú", "next tab in the menu")),
-                ("Ctrl+C".into(), lang.pick("salir", "quit")),
-            ],
-        ),
     ]
 }
 
@@ -399,7 +380,6 @@ mod tests {
     }
 
     const LISTS: KeyContext = KeyContext {
-        prefix: false,
         help: false,
         confirm: false,
         typing: false,
@@ -419,44 +399,60 @@ mod tests {
         assert_eq!(map(key(KeyCode::Tab), MENU), Some(Action::ToggleFocus), "Tab still switches panes");
         assert_eq!(map(key(KeyCode::Left), MENU), Some(Action::Back));
         // Outside the menu they keep their meaning.
-        assert_eq!(map(char('l'), LISTS), Some(Action::SaveForLater));
+        assert_eq!(map(char('l'), LISTS), None, "l is free now");
         assert_eq!(map(key(KeyCode::Right), LISTS), None);
         assert_eq!(map(char('l'), KeyContext { typing: true, ..MENU }), Some(Action::Input('l')));
     }
     const TYPING: KeyContext = KeyContext { typing: true, ..LISTS };
     const TAB: KeyContext = KeyContext { in_tab: true, ..LISTS };
-    const PREFIXED: KeyContext = KeyContext { prefix: true, ..LISTS };
     const HELP: KeyContext = KeyContext { help: true, ..LISTS };
     const CONFIRM: KeyContext = KeyContext { confirm: true, ..LISTS };
 
+    const RELATED: KeyContext = KeyContext { related: true, in_tab: true, ..LISTS };
+
     #[test]
-    fn ctrl_y_starts_prefix_everywhere_but_dialogs() {
-        for ctx in [LISTS, TYPING, TAB] {
-            assert_eq!(map(ctrl('y'), ctx), Some(Action::Prefix), "{ctx:?}");
+    fn ctrl_y_does_nothing_anywhere() {
+        for ctx in [LISTS, TYPING, TAB, RELATED, MENU] {
+            assert_eq!(map(ctrl('y'), ctx), None, "{ctx:?}");
         }
-        assert_eq!(map(ctrl('y'), HELP), Some(Action::ToggleHelp));
     }
 
     #[test]
-    fn prefix_commands_come_from_the_table() {
-        for (c, action, _) in PREFIX {
-            assert_eq!(map(char(*c), PREFIXED).as_ref(), Some(action), "{c}");
+    fn global_commands_are_single_shifted_keys() {
+        let shift = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+        for ctx in [LISTS, TAB, RELATED, MENU] {
+            assert_eq!(map(shift('?'), ctx), Some(Action::ToggleHelp), "{ctx:?}");
+            assert_eq!(map(char('?'), ctx), Some(Action::ToggleHelp), "{ctx:?}");
+            assert_eq!(map(shift('M'), ctx), Some(Action::ToggleSidebar), "{ctx:?}");
+            assert_eq!(map(shift('L'), ctx), Some(Action::ToggleUiLang), "{ctx:?}");
+            assert_eq!(map(shift('Q'), ctx), Some(Action::AskQuit), "{ctx:?}");
+            assert_ne!(map(char('q'), ctx), Some(Action::Quit), "q is a no-op: {ctx:?}");
+            assert_ne!(map(char('q'), ctx), Some(Action::AskQuit), "{ctx:?}");
+            assert_eq!(map(char('B'), ctx), None, "B does nothing: {ctx:?}");
         }
-        for digit in '0'..='9' {
-            assert_eq!(map(char(digit), PREFIXED), Some(Action::CancelPrefix), "Ctrl+Y {digit} is gone");
+        // Typing: they are just letters.
+        for c in ['?', 'M', 'L', 'Q', 'X', 'W', 'x'] {
+            assert_eq!(map(shift(c), TYPING), Some(Action::Input(c)));
         }
-        assert_eq!(map(char('?'), PREFIXED), Some(Action::ToggleHelp));
     }
 
     #[test]
-    fn unknown_key_after_prefix_cancels_it() {
-        assert_eq!(map(char('z'), PREFIXED), Some(Action::CancelPrefix));
-        assert_eq!(map(key(KeyCode::Esc), PREFIXED), Some(Action::CancelPrefix));
+    fn w_and_shift_w_save_for_later() {
+        for ctx in [LISTS, TAB, RELATED] {
+            assert_eq!(map(char('w'), ctx), Some(Action::AddLater), "YouTube Watch Later");
+            assert_eq!(map(char('W'), ctx), Some(Action::SaveForLater), "tubevibe Watch Later");
+            assert_eq!(map(char('l'), ctx), None, "l is free");
+        }
     }
 
     #[test]
-    fn prefix_wins_over_typing() {
-        assert_eq!(map(char('b'), KeyContext { typing: true, ..PREFIXED }), Some(Action::ToggleSidebar));
+    fn x_only_closes_and_shift_x_takes_out() {
+        assert_eq!(map(char('x'), MENU), Some(Action::MenuCloseTab));
+        for ctx in [LISTS, TAB, RELATED] {
+            assert_eq!(map(char('x'), ctx), Some(Action::CloseTab), "{ctx:?}");
+            assert_eq!(map(char('X'), ctx), Some(Action::Trash), "{ctx:?}");
+        }
+        assert_eq!(map(key(KeyCode::Delete), LISTS), Some(Action::Trash), "Del like X");
     }
 
     #[test]
@@ -499,7 +495,7 @@ mod tests {
     fn video_keys_work_in_lists_and_tabs() {
         for ctx in [LISTS, TAB] {
             assert_eq!(map(char('w'), ctx), Some(Action::AddLater), "YouTube Watch Later");
-            assert_eq!(map(char('l'), ctx), Some(Action::SaveForLater), "tubevibe Watch Later");
+            assert_eq!(map(char('W'), ctx), Some(Action::SaveForLater), "tubevibe Watch Later");
             assert_eq!(map(char('s'), ctx), Some(Action::ToggleSubscription));
             assert_eq!(map(char('g'), ctx), Some(Action::Rate(Rating::Like)));
             assert_eq!(map(char('G'), ctx), Some(Action::Rate(Rating::Dislike)));
@@ -534,7 +530,6 @@ mod tests {
         assert_eq!(map(char('o'), TAB), Some(Action::CycleSubLang));
         assert_eq!(map(char('v'), TAB), Some(Action::CycleQuality));
         assert_eq!(map(char(' '), LISTS), Some(Action::ToggleMark));
-        assert_eq!(map(char('x'), LISTS), Some(Action::Trash));
         assert_eq!(map(key(KeyCode::Delete), LISTS), Some(Action::Trash));
         assert_eq!(map(char('b'), TAB), Some(Action::CycleCodec));
         assert_eq!(map(char('.'), TAB), Some(Action::NextTrack));
@@ -549,7 +544,7 @@ mod tests {
     #[test]
     fn plain_q_does_not_quit_but_ctrl_c_always_does() {
         assert_eq!(map(char('q'), LISTS), None);
-        for ctx in [LISTS, TYPING, TAB, PREFIXED, HELP, CONFIRM] {
+        for ctx in [LISTS, TYPING, TAB, HELP, CONFIRM] {
             assert_eq!(map(ctrl('c'), ctx), Some(Action::Quit), "{ctx:?}");
         }
     }
@@ -562,12 +557,12 @@ mod tests {
     }
 
     #[test]
-    fn help_lists_every_prefix_command() {
+    fn help_lists_every_global_command() {
         for lang in [Lang::Es, Lang::En] {
             let help = help(lang);
             let (_, commands) = &help[0];
-            for (c, ..) in PREFIX {
-                assert!(commands.iter().any(|(k, _)| *k == c.to_string()), "{c} missing from help");
+            for (_, name, ..) in GLOBAL {
+                assert!(commands.iter().any(|(k, _)| k == name), "{name} missing from help");
             }
             assert!(!commands.iter().any(|(k, _)| k == "0-9"), "no tab digits any more");
         }
@@ -576,7 +571,7 @@ mod tests {
     #[test]
     fn alt_comma_and_period_switch_tabs() {
         let alt = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
-        for ctx in [LISTS, TYPING, TAB, KeyContext { related: true, ..TAB }, PREFIXED] {
+        for ctx in [LISTS, TYPING, TAB, KeyContext { related: true, ..TAB }] {
             assert_eq!(map(alt(','), ctx), Some(Action::PrevTab), "{ctx:?}");
             assert_eq!(map(alt('.'), ctx), Some(Action::NextTab), "{ctx:?}");
             // With Shift held by mistake (US layout: < and >).
@@ -603,9 +598,6 @@ mod tests {
         assert_eq!(map(key(KeyCode::Tab), LISTS), Some(Action::ToggleFocus));
         assert_eq!(map(key(KeyCode::Tab), TAB), Some(Action::ToggleFocus));
         assert_eq!(map(key(KeyCode::Tab), TYPING), Some(Action::CycleScope));
-        // No more Ctrl+Y n / p.
-        assert_eq!(map(char('n'), PREFIXED), Some(Action::CancelPrefix));
-        assert_eq!(map(char('p'), PREFIXED), Some(Action::CancelPrefix));
         // Repeats and releases count for nothing.
         for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
             assert_eq!(map(KeyEvent { kind, ..alt('.') }, LISTS), None);
@@ -614,7 +606,7 @@ mod tests {
         for lang in [Lang::Es, Lang::En] {
             let help = help(lang);
             let keys: Vec<_> = help.iter().flat_map(|(_, rows)| rows.iter().map(|(k, _)| k.as_str())).collect();
-            assert!(keys.contains(&"Alt+,") && keys.contains(&"Alt+."), "{keys:?}");
+            assert!(keys.contains(&"Alt+,  Alt+."), "{keys:?}");
             assert!(!keys.iter().any(|k| k.contains("Ctrl+Tab")));
             assert!(!help[0].1.iter().any(|(k, _)| k == "n" || k == "p"));
         }
@@ -622,15 +614,15 @@ mod tests {
 
     #[test]
     fn help_is_translated() {
-        assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "q").unwrap().1, "quit");
-        assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "q").unwrap().1, "salir");
+        assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "Q").unwrap().1, "quit (asks first)");
+        assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "Q").unwrap().1, "salir (pide confirmar)");
         assert_eq!(rows(IN_TAB, Lang::En)[0].0, "Space");
         assert_eq!(rows(IN_TAB, Lang::Es)[0].0, "Espacio");
-        assert!(rows(IN_LISTS, Lang::En).iter().any(|(k, _)| k == "x  Del"));
+        assert!(rows(IN_LISTS, Lang::En).iter().any(|(k, _)| k == "X  Del"));
         assert!(rows(IN_LISTS, Lang::En).iter().any(|(_, d)| d.contains("Backspace")));
         let mouse: Vec<_> = rows(WITH_MOUSE, Lang::En).into_iter().map(|(k, _)| k).collect();
         assert_eq!(mouse, ["Click", "Double Click", "Wheel", "Click Video", "Right Click", "Click Bar", "Shift"]);
         assert_eq!(rows(WITH_MOUSE, Lang::Es)[1].0, "Doble clic");
-        assert_eq!(map(char('l'), PREFIXED), Some(Action::ToggleUiLang));
+        assert_eq!(map(char('L'), LISTS), Some(Action::ToggleUiLang));
     }
 }

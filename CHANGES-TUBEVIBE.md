@@ -1133,3 +1133,43 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   beside Comments Width (two fifths of the rows; left out when the tab is
   too short for them and *Up next*). Wide windows keep the side-by-side
   layout and the width settings; stacked panes take the full width.
+
+
+## Unreleased (0.8.8)
+
+### One key per command: no more Ctrl+Y (`key-remap`)
+
+- The `Ctrl+Y` prefix is gone (`Ctrl+Y` alone does nothing). Every
+  command is now a single key: lowercase for everyday ones, Shift for the
+  bigger ones.
+  - `Shift+/` (`?`): help. `M`: show / hide the menu. `L`: English /
+    español. `Q`: quit, after a yes/no question (it still says when
+    downloads are running). Plain `q` does nothing; `Ctrl+C` still quits
+    at once, and so does Enter on Quit in the menu. The old "go to the
+    menu" command is gone (`←` / `Esc` / `Tab` do that).
+  - `w`: YouTube Watch Later; `W`: tubevibe Watch Later. Plain `l` is free.
+  - `x` only ever **closes**: the tab under the cursor in the menu, or the
+    video tab you are in (Up Next too). It never deletes, trashes or
+    removes anything.
+  - `X` takes things out, **always after asking**: files to the trash in
+    My Videos / My Music / Downloads (all the marked ones with Space), a
+    video out of History, YouTube Watch Later, tubevibe Watch Later or a
+    playlist, a running download cancelled, a failed one taken off the
+    list, a playlist deleted in My Playlists. `Del` does the same in lists.
+  - `X` in a video tab: close it **and** take its video out of the list it
+    was opened from; the question names that list (YouTube Watch Later,
+    tubevibe Watch Later or the playlist). A tab opened from anywhere else
+    has nothing to take it out of, so `X` just closes it, like `x`. The
+    list is remembered in `tabs.json` (an unknown or damaged value is
+    ignored; the tab still comes back).
+- **Restart Now**: once Update Now has installed the new version, the About
+  button becomes *Restart Now*. It saves the tabs, stops playback, gives the
+  terminal back and starts the new tubevibe with the same arguments (on
+  Linux and macOS in place of the old one; on Windows a new process, then
+  this one exits). Builds from source never restart this way.
+- Bottom bar: only action keys now; moving around (arrows, `j k`, `Tab`,
+  `Esc`, "go to the menu", "back") is in the help. The last hint is
+  `Shift+/ Help`.
+- Help, README, the website and every hint name the new keys; the help's
+  first box lists the commands that work anywhere, with `Alt+,` / `Alt+.`
+  and `Ctrl+C`.

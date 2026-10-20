@@ -250,7 +250,7 @@ impl Setting {
             Self::BackgroundAudio => ("Al salir de la pestaña del video", "When Leaving the Video Tab"),
             Self::SponsorBlock => ("Saltar patrocinios (SponsorBlock)", "Skip Sponsors (SponsorBlock)"),
             Self::Autoplay => ("Enter en un video", "Enter on a Video"),
-            Self::AppLang => ("Idioma de la app (Ctrl+Y l)", "App Language (Ctrl+Y l)"),
+            Self::AppLang => ("Idioma de la app (L)", "App Language (L)"),
             Self::Icons => ("Íconos", "Icons"),
             Self::BorderStyle => ("Estilo de los bordes", "Border Style"),
             Self::MenuWidth => ("Ancho del menú", "Menu Width"),
@@ -304,6 +304,8 @@ pub enum Focus {
     Menu,
     List,
 }
+
+pub use crate::store::TabSource;
 
 /// A YouTube playlist shown as a list (not Watch Later: that one is `Later`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -369,7 +371,7 @@ pub enum ListKind {
     Downloads,
     /// A channel's videos; `/` searches inside it.
     Channel(ChannelRef),
-    /// A YouTube playlist's videos (mine, saved, Liked videos): `Ctrl+Y x`
+    /// A YouTube playlist's videos (mine, saved, Liked videos): `X`
     /// takes one out.
     Playlist(PlaylistRef),
     /// "Mis canales": unsubscribing takes the channel out.
@@ -462,6 +464,20 @@ pub enum Confirm {
         playlist: PlaylistRef,
         video: Video,
     },
+    /// A video to take out of the history.
+    ForgetHistory(Video),
+    /// The selected download: cancel it (`running`) or take it off the list.
+    Download {
+        title: String,
+        running: bool,
+    },
+    /// `X` in a video tab: close it and take its video out of the list it
+    /// was opened from.
+    CloseAndRemove {
+        tab: TabId,
+        source: TabSource,
+        video: Video,
+    },
 }
 
 /// The right-click menu: what can be done with what is under the pointer.
@@ -492,15 +508,15 @@ pub enum SettingValue {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    Prefix,
-    CancelPrefix,
+    /// `Q`: quit, after asking.
+    AskQuit,
     ToggleSidebar,
     ToggleHelp,
     Up,
     Down,
     Enter,
     Back,
-    /// Search videos from anywhere (`/`, `Ctrl+Y /`).
+    /// Search videos from anywhere (`/`).
     FocusSearch,
     /// Next search scope (Tab in the search box).
     CycleScope,
@@ -537,7 +553,7 @@ pub enum Action {
     AddLater,
     /// Put the selected video in the local tubevibe Watch Later (`l`).
     SaveForLater,
-    /// `Ctrl+Y x` in Watch Later or a YouTube playlist: take the selected
+    /// `X` in Watch Later or a YouTube playlist: take the selected
     /// video out of it, after asking.
     RemoveFromList,
     /// A video taken out of one of my YouTube playlists, or why not.
@@ -603,7 +619,7 @@ pub enum Action {
     GoTab(usize),
     /// The wheel over the menu's tabs: rows to scroll them by.
     ScrollTabs(isize),
-    /// `x` in the menu: closes the tab under the cursor, like Ctrl+Y x in it.
+    /// `x` in the menu: closes the tab under the cursor, like x in it.
     MenuCloseTab,
     /// `t`: the selected video in a new tab, left in the background.
     OpenInBackground,
@@ -942,6 +958,8 @@ pub struct Tab {
     /// Brought back from `tabs.json`: its details and SponsorBlock segments
     /// are fetched the first time it is shown, not at startup.
     pub restored: bool,
+    /// The list it was opened from, when `X` can take the video out of it.
+    pub source: Option<TabSource>,
 }
 
 impl Tab {
@@ -959,6 +977,7 @@ impl Tab {
             ended: false,
             started: true,
             restored: false,
+            source: None,
         }
     }
 
@@ -1005,7 +1024,6 @@ pub struct TabScroll {
 pub struct State {
     pub config: Config,
     pub sidebar: bool,
-    pub prefix: bool,
     pub help: bool,
     /// The active video fills the terminal (video drawn in the app: kitty or overlay).
     pub fullscreen: bool,
@@ -1089,6 +1107,8 @@ pub struct State {
     pub up_to_date: bool,
     /// The self-update (About's Update Now), once started.
     pub self_update: Progress,
+    /// Restart Now was pressed: once quit, start the new version.
+    pub restart: bool,
     /// Videos I watched, here or on YouTube.
     pub watched: HashSet<String>,
     /// The last system check.
@@ -1123,7 +1143,6 @@ impl State {
             splash: false,
             focus: if config.ui.sidebar { Focus::Menu } else { Focus::List },
             config,
-            prefix: false,
             help: false,
             fullscreen: false,
             menu: 0,
@@ -1161,6 +1180,7 @@ impl State {
             palette: Palette::default(),
             up_to_date: false,
             self_update: Progress::Idle,
+            restart: false,
             watched: HashSet::new(),
             system: None,
             tabs: Vec::new(),
@@ -1259,7 +1279,6 @@ impl State {
 
     pub fn key_context(&self) -> KeyContext {
         KeyContext {
-            prefix: self.prefix,
             help: self.help,
             confirm: self.confirm.is_some(),
             typing: self.prompt.is_some(),
@@ -1402,7 +1421,6 @@ impl State {
     }
 
     pub fn update(&mut self, action: Action) -> Vec<Effect> {
-        self.prefix = matches!(action, Action::Prefix);
         if let Some(effects) = self.in_context_menu(&action) {
             return effects;
         }
@@ -1464,7 +1482,9 @@ impl State {
 
     fn apply(&mut self, action: Action) -> Vec<Effect> {
         match action {
-            Action::Prefix | Action::CancelPrefix => {}
+            Action::AskQuit => self.confirm = Some(Confirm::Quit(self.downloading())),
+            // `X` in a video tab: close it and take its video out of the list it came from.
+            Action::Trash | Action::RemoveFromList if self.active != 0 => return self.ask_close_and_remove(),
             Action::ToggleSidebar => {
                 self.sidebar = !self.sidebar;
                 self.focus = if self.sidebar && self.stack.is_empty() { Focus::Menu } else { Focus::List };
@@ -1655,15 +1675,7 @@ impl State {
             Action::AddLater => return self.add_to_later(),
             Action::OpenInBackground => self.open_in_background(),
             Action::SaveForLater => return self.save_for_later(),
-            Action::Trash if self.active == 0 && self.saved_list_video().is_some() => {
-                self.status = self
-                    .tr(
-                        "Ctrl+Y x lo quita de esta lista (pide confirmar)",
-                        "Ctrl+Y x removes it from this list (asks first)",
-                    )
-                    .into();
-            }
-            Action::CloseTab | Action::RemoveFromList if self.active == 0 && self.saved_list_video().is_some() => {
+            Action::Trash | Action::RemoveFromList if self.active == 0 && self.saved_list_video().is_some() => {
                 self.confirm = self.saved_list_video().cloned().map(Confirm::RemoveFromSaved);
             }
             Action::LaterChecked { video, result } => return self.later_checked(video, result),
@@ -1697,6 +1709,24 @@ impl State {
                     return vec![Effect::TrashDownload { id, path }];
                 }
                 Some(Confirm::Quit(_)) => self.quit = true,
+                Some(Confirm::ForgetHistory(video)) => return self.forget(video),
+                Some(Confirm::Download { .. }) => return self.cancel_or_forget_download(true),
+                Some(Confirm::CloseAndRemove { tab, source, video }) => {
+                    let mut effects = Vec::new();
+                    if self.tabs.iter().any(|t| t.id == tab) {
+                        self.remove_tab(tab);
+                        effects.push(Effect::Close(tab));
+                    }
+                    self.confirm = Some(match source {
+                        TabSource::YouTubeLater => Confirm::RemoveFromLater(video),
+                        TabSource::Saved => Confirm::RemoveFromSaved(video),
+                        TabSource::Playlist { id, title } => {
+                            Confirm::RemoveFromPlaylist { playlist: PlaylistRef { id, title }, video }
+                        }
+                    });
+                    effects.extend(self.apply(Action::Confirm(true)));
+                    return effects;
+                }
                 Some(Confirm::DeletePlaylist { id, title }) => {
                     self.status = format!(
                         "{} {} {title}…",
@@ -1762,7 +1792,7 @@ impl State {
                 }
             }
             Action::SelfUpdated(Ok(version)) => {
-                let restart = self.tr("reiniciá tubevibe para usarla", "restart tubevibe to use it");
+                let restart = self.tr("Reiniciar Ahora en Acerca de la abre", "Restart Now in About opens it");
                 self.status = format!(
                     "{} tubevibe {version} {} · {restart}",
                     self.icons().up_to_date,
@@ -1776,25 +1806,16 @@ impl State {
                 self.self_update = Progress::Failed(error);
             }
             Action::ToggleMark => return self.toggle_mark(),
-            // Plain `x` no longer takes videos out of YouTube lists: `Ctrl+Y x` does.
-            Action::Trash if self.active == 0 && self.youtube_list_video().is_some() => {
-                self.status = self
-                    .tr(
-                        "Ctrl+Y x lo quita de esta lista (pide confirmar)",
-                        "Ctrl+Y x removes it from this list (asks first)",
-                    )
-                    .into();
-            }
-            Action::CloseTab | Action::RemoveFromList if self.active == 0 && self.youtube_list_video().is_some() => {
+            Action::Trash | Action::RemoveFromList if self.active == 0 && self.youtube_list_video().is_some() => {
                 self.ask_remove_from_list();
             }
             Action::RemoveFromList => {}
             Action::PlaylistEdited { playlist, video, result } => self.playlist_edited(playlist, video, result),
             Action::Trash if self.listing().is_some_and(|l| l.kind == ListKind::History) && self.active == 0 => {
-                return self.forget_selected();
+                self.confirm = self.selected_video().cloned().map(Confirm::ForgetHistory);
             }
             Action::Trash if self.listing().is_some_and(|l| l.kind == ListKind::Downloads) && self.active == 0 => {
-                return self.cancel_or_forget_download();
+                return self.cancel_or_forget_download(false);
             }
             Action::Trash if self.active == 0 && self.selected_playlist().is_some() => self.ask_delete_playlist(),
             Action::Trash => self.ask_trash(),
@@ -2014,6 +2035,7 @@ impl State {
                 video: t.playback.video.clone(),
                 queue: t.playback.queue.clone(),
                 audio_only: t.playback.audio_only,
+                source: t.source.clone(),
             })
             .collect();
         crate::store::SavedTabs { version: crate::store::TABS_VERSION, active: self.active, tabs }
@@ -2049,6 +2071,7 @@ impl State {
             self.next_tab += 1;
             let mut tab = Tab::new(id, playback);
             (tab.ended, tab.started, tab.restored) = (true, false, true);
+            tab.source = t.source;
             self.tabs.push(tab);
         }
     }
@@ -3176,7 +3199,7 @@ impl State {
                 });
                 items.extend(self.video_items());
             }
-            items.push(item("Cerrar la pestaña", "Close the Tab", "Ctrl+Y x", Action::CloseTab));
+            items.push(item("Cerrar la pestaña", "Close the Tab", "x", Action::CloseTab));
             return items;
         }
         let Some(listing) = self.listing().filter(|_| self.focus == Focus::List) else { return items };
@@ -3191,13 +3214,13 @@ impl State {
                 items.push(item("Solo audio", "Audio Only", "a", Action::Listen));
                 items.extend(self.video_items());
                 if listing.kind == ListKind::History {
-                    items.push(item("Quitar del historial", "Remove from History", "x", Action::Trash));
+                    items.push(item("Quitar del historial", "Remove from History", "X", Action::Trash));
                 }
                 if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_) | ListKind::Saved) {
                     items.push(item(
                         "Quitar de esta lista (pide confirmar)",
                         "Remove from This List (Asks First)",
-                        "Ctrl+Y x",
+                        "X",
                         Action::RemoveFromList,
                     ));
                 }
@@ -3208,7 +3231,7 @@ impl State {
             }
             Items::Playlists(playlists) if playlists.get(selected).is_some() => {
                 items.push(item("Ver sus videos", "Its Videos", "Enter", Action::Enter));
-                items.push(item("Borrar la lista", "Delete the Playlist", "x", Action::Trash));
+                items.push(item("Borrar la lista", "Delete the Playlist", "X", Action::Trash));
             }
             Items::Files(files, kind) if files.get(selected).is_some() => {
                 items.push(match kind {
@@ -3216,7 +3239,7 @@ impl State {
                     MediaKind::Video => item("Ver", "Play", "Enter", Action::Enter),
                 });
                 items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
-                items.push(item("A la papelera", "To the Trash", "x", Action::Trash));
+                items.push(item("A la papelera", "To the Trash", "X", Action::Trash));
             }
             Items::Downloads(downloads) => match downloads.get(selected).map(|d| &d.state) {
                 Some(DownloadState::Done(_)) => {
@@ -3225,13 +3248,13 @@ impl State {
                     items.push(item(
                         "A la papelera (pide confirmar)",
                         "Move to Trash (Asks First)",
-                        "x",
+                        "X",
                         Action::Trash,
                     ));
                 }
                 Some(_) => {
                     items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
-                    items.push(item("Cancelar / quitar", "Cancel / Remove", "x", Action::Trash));
+                    items.push(item("Cancelar / quitar", "Cancel / Remove", "X", Action::Trash));
                 }
                 None => {}
             },
@@ -3258,9 +3281,9 @@ impl State {
                 item("Guardar en Ver después de YouTube", "Save to YouTube Watch Later", "w", Action::AddLater)
             },
             if self.saved.iter().any(|v| v.id == video.id) {
-                item("Ya está en Ver después de tubevibe", "Already in tubevibe Watch Later", "l", Action::SaveForLater)
+                item("Ya está en Ver después de tubevibe", "Already in tubevibe Watch Later", "W", Action::SaveForLater)
             } else {
-                item("Guardar en Ver después de tubevibe", "Save to tubevibe Watch Later", "l", Action::SaveForLater)
+                item("Guardar en Ver después de tubevibe", "Save to tubevibe Watch Later", "W", Action::SaveForLater)
             },
             item("Descargar", "Download", "d", Action::Download),
             if self.ratings.get(&video.id) == Some(&Rating::Like) {
@@ -3354,6 +3377,42 @@ impl State {
         Some((&listing.kind, self.selected_video()?))
     }
 
+    /// The list `video` is being opened from, when `X` in its tab can take
+    /// it out: YouTube Watch Later, tubevibe Watch Later or a playlist.
+    fn removable_source(&self, video: &Video) -> Option<TabSource> {
+        let listing = self.listing().filter(|_| self.active == 0)?;
+        self.selected_video().filter(|v| v.id == video.id)?;
+        match &listing.kind {
+            ListKind::Later => Some(TabSource::YouTubeLater),
+            ListKind::Saved => Some(TabSource::Saved),
+            ListKind::Playlist(p) => Some(TabSource::Playlist { id: p.id.clone(), title: p.title.clone() }),
+            _ => None,
+        }
+    }
+
+    /// `X` in a video tab: from a list it can leave, ask to close the tab and
+    /// take the video out of that list; otherwise it only closes the tab.
+    fn ask_close_and_remove(&mut self) -> Vec<Effect> {
+        let Some(tab) = self.active_tab() else { return Vec::new() };
+        let (id, source, video) = (tab.id, tab.source.clone(), tab.playback.video.clone());
+        match (source, video) {
+            (Some(source), Some(video)) => {
+                if source != TabSource::Saved && !self.logged_in() {
+                    self.status = self
+                        .tr(
+                            "Sin sesión: elegí un navegador en Configuración",
+                            "Not logged in: pick a browser in Settings",
+                        )
+                        .into();
+                    return Vec::new();
+                }
+                self.confirm = Some(Confirm::CloseAndRemove { tab: id, source, video });
+                Vec::new()
+            }
+            _ => self.apply(Action::CloseTab),
+        }
+    }
+
     /// The selected video of the local tubevibe Watch Later, when it is shown.
     fn saved_list_video(&self) -> Option<&Video> {
         self.listing().filter(|l| self.focus == Focus::List && l.kind == ListKind::Saved)?;
@@ -3398,7 +3457,7 @@ impl State {
         }
     }
 
-    /// `Ctrl+Y x` in Watch Later or a playlist: take the selected video out, after asking.
+    /// `X` in Watch Later or a playlist: take the selected video out, after asking.
     fn ask_remove_from_list(&mut self) {
         if !self.logged_in() {
             self.status = self
@@ -3550,13 +3609,11 @@ impl State {
                 );
                 return Vec::new();
             }
-            Progress::Done(version) => {
-                let restart = self.tr("reiniciá tubevibe para usarla", "restart tubevibe to use it");
-                self.status = format!(
-                    "{} tubevibe {version} {} · {restart}",
-                    self.icons().up_to_date,
-                    self.tr("ya está instalada", "is installed")
-                );
+            Progress::Done(_) => {
+                // Restart Now: quit cleanly (tabs saved, players stopped),
+                // then the runtime starts the new binary in its place.
+                self.restart = true;
+                self.quit = true;
                 return Vec::new();
             }
             Progress::Idle | Progress::Failed(_) => {}
@@ -3855,6 +3912,7 @@ impl State {
             };
         }
         let mut tab = Tab::new(id, playback.clone());
+        tab.source = playback.video.as_ref().and_then(|v| self.removable_source(v));
         tab.ended = !now;
         tab.started = now;
         self.tabs.push(tab);
@@ -3916,8 +3974,7 @@ impl State {
     }
 
     /// Takes the selected video out of the history.
-    fn forget_selected(&mut self) -> Vec<Effect> {
-        let Some(video) = self.selected_video().cloned() else { return Vec::new() };
+    fn forget(&mut self, video: Video) -> Vec<Effect> {
         let on_youtube = self.youtube_history.iter().any(|e| e.video.id == video.id);
         self.history.retain(|e| e.video.id != video.id);
         self.youtube_history.retain(|e| e.video.id != video.id);
@@ -4238,7 +4295,9 @@ impl State {
         line
     }
 
-    fn cancel_or_forget_download(&mut self) -> Vec<Effect> {
+    /// `X` in Downloads: cancel a running one, trash a finished one's file or
+    /// take the rest off the list; always after asking (`confirmed`).
+    fn cancel_or_forget_download(&mut self, confirmed: bool) -> Vec<Effect> {
         let marked = self.marked_download_ids();
         if !marked.is_empty() {
             return self.act_on_marked_downloads(marked);
@@ -4249,6 +4308,11 @@ impl State {
         let Some(id) = shown.get(*selected).map(|d| d.id) else { return Vec::new() };
         let Some(i) = self.downloads.iter().position(|d| d.id == id) else { return Vec::new() };
         let title = self.downloads[i].video.title.clone();
+        let running = matches!(self.downloads[i].state, DownloadState::Running { .. });
+        if !confirmed && !matches!(self.downloads[i].state, DownloadState::Done(_)) {
+            self.confirm = Some(Confirm::Download { title, running });
+            return Vec::new();
+        }
         let effects = if matches!(self.downloads[i].state, DownloadState::Running { .. }) {
             self.downloads[i].state = DownloadState::Cancelled;
             self.status =
@@ -4545,8 +4609,10 @@ mod tests {
         assert_eq!(s.status, "❌ Could not update: download: timeout");
         assert_eq!(s.update(Action::SelfUpdate).len(), 1, "after a failure, the button tries again");
         s.update(Action::SelfUpdated(Ok("9.9.9".into())));
-        assert!(s.status.contains("9.9.9 installed · restart tubevibe"), "{}", s.status);
-        assert!(s.update(Action::SelfUpdate).is_empty(), "already done");
+        assert!(s.status.contains("9.9.9 installed · Restart Now"), "{}", s.status);
+        // Now the button restarts: quit cleanly, the runtime starts the new one.
+        assert!(s.update(Action::SelfUpdate).is_empty());
+        assert!(s.restart && s.quit);
     }
 
     #[test]
@@ -4673,10 +4739,11 @@ mod tests {
         let listing = s.listing().unwrap();
         assert_eq!(listing.kind, ListKind::History);
         assert_eq!(listing.items, Items::Videos(vec![video("b"), video("a")]));
-        let effects = s.update(Action::Trash);
+        assert!(s.update(Action::Trash).is_empty(), "X asks first");
+        assert_eq!(s.confirm, Some(Confirm::ForgetHistory(video("b"))));
+        let effects = s.update(Action::Confirm(true));
         assert!(matches!(effects.as_slice(), [Effect::SaveHistory(h)] if h.len() == 1 && h[0].video.id == "a"));
         assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
-        assert!(s.confirm.is_none(), "no question for the history");
     }
 
     #[test]
@@ -4712,9 +4779,11 @@ mod tests {
         assert_eq!(s.listing().unwrap().selected, 2, "the selection stays on y2");
         s.listing_mut().selected = 1;
         s.update(Action::Trash);
+        s.update(Action::Confirm(true));
         assert_eq!(ids(&s), ["y1", "y2", "y3"]);
         s.listing_mut().selected = 0;
         s.update(Action::Trash);
+        s.update(Action::Confirm(true));
         assert!(s.status.contains("YouTube"), "{}", s.status);
         assert_eq!(ids(&s), ["y2", "y3"]);
     }
@@ -4851,8 +4920,10 @@ mod tests {
             other => panic!("{other:?}"),
         };
         assert!(matches!(shown(&s)[1].state, DownloadState::Running { permille: 453, .. }), "newest first");
-        // Cancel the selected one (b, the newest).
-        assert_eq!(s.update(Action::Trash), [Effect::CancelDownload(1)]);
+        // Cancel the selected one (b, the newest): X asks first.
+        assert!(s.update(Action::Trash).is_empty());
+        assert_eq!(s.confirm, Some(Confirm::Download { title: "title b".into(), running: true }));
+        assert_eq!(s.update(Action::Confirm(true)), [Effect::CancelDownload(1)]);
         assert!(s.update(Action::Downloaded { id: 1, result: Err("killed".into()) }).is_empty(), "stays cancelled");
         assert_eq!(shown(&s)[0].state, DownloadState::Cancelled);
         let file = PathBuf::from("/v/title a.mp4");
@@ -4865,7 +4936,7 @@ mod tests {
             other => panic!("{other:?}"),
         }
         s.update(Action::GoTab(0));
-        // A finished one: x asks, then its file goes to the trash.
+        // A finished one: X asks, then its file goes to the trash.
         assert!(s.update(Action::Trash).is_empty());
         assert_eq!(s.confirm, Some(Confirm::TrashDownload { id: 0, path: file.clone() }));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::TrashDownload { id: 0, path: file.clone() }]);
@@ -4873,9 +4944,10 @@ mod tests {
         assert!(matches!(effects.as_slice(), [Effect::SaveDownloads(d), Effect::CheckDownloads] if d.len() == 1));
         assert!(s.status.contains("title a.mp4 moved to the trash") || s.status.contains("title a.mp4 a la papelera"));
         assert_eq!(s.downloading(), 0);
-        // The cancelled one has no file: x just takes it off, no question.
-        assert!(matches!(s.update(Action::Trash).as_slice(), [Effect::SaveDownloads(d)] if d.is_empty()));
-        assert_eq!(s.confirm, None);
+        // The cancelled one has no file: X asks, then takes it off.
+        assert!(s.update(Action::Trash).is_empty());
+        assert_eq!(s.confirm, Some(Confirm::Download { title: "title b".into(), running: false }));
+        assert!(matches!(s.update(Action::Confirm(true)).as_slice(), [Effect::SaveDownloads(d)] if d.is_empty()));
     }
 
     /// Downloads with one finished item, shown and selected.
@@ -5130,16 +5202,6 @@ mod tests {
         assert_eq!((s.active, s.focus, s.menu), (0, Focus::Menu, 0));
         let config = Config { ui: UiConfig { sidebar: false, ..Default::default() }, ..Default::default() };
         assert_eq!(State::new(config, vec![]).focus, Focus::List);
-    }
-
-    #[test]
-    fn prefix_lasts_one_action() {
-        let mut s = state();
-        s.update(Action::Prefix);
-        assert!(s.prefix);
-        s.update(Action::ToggleSidebar);
-        assert!(!s.prefix);
-        assert!(!s.sidebar);
     }
 
     #[test]
@@ -5899,16 +5961,15 @@ mod tests {
     }
 
     #[test]
-    fn prefix_x_in_watch_later_removes_after_asking_and_the_list_follows() {
+    fn shift_x_in_watch_later_removes_after_asking_and_the_list_follows() {
         let mut s = state();
         s.config.session.browser = "brave".into();
         let id = load_id(&open(&mut s, Section::VerDespues));
         s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a"), video("b")]))));
         s.update(Action::Down);
-        // Plain `x` no longer removes: it says how.
-        assert!(s.update(Action::Trash).is_empty());
-        assert!(s.confirm.is_none() && s.status.contains("Ctrl+Y x"), "{}", s.status);
-        assert!(s.update(Action::CloseTab).is_empty(), "Ctrl+Y x");
+        // x never removes; X asks.
+        assert!(s.update(Action::CloseTab).is_empty() && s.confirm.is_none());
+        assert!(s.update(Action::Trash).is_empty(), "X");
         assert_eq!(s.confirm, Some(Confirm::RemoveFromLater(video("b"))));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::EditLater { video: video("b"), add: false }]);
         s.update(Action::LaterEdited { video: video("b"), add: false, result: Ok(()) });
@@ -5944,14 +6005,14 @@ mod tests {
     }
 
     #[test]
-    fn prefix_x_in_a_playlist_removes_after_asking() {
+    fn shift_x_in_a_playlist_removes_after_asking() {
         let mut s = playlist_with("PLx", &["a", "b"]);
         let mine = PlaylistRef { id: "PLx".into(), title: "Mine".into() };
         assert_eq!(s.listing().unwrap().kind, ListKind::Playlist(mine.clone()));
         s.update(Action::Down);
-        assert!(s.update(Action::Trash).is_empty());
-        assert!(s.confirm.is_none(), "plain x does not remove");
-        s.update(Action::CloseTab);
+        assert!(s.update(Action::CloseTab).is_empty());
+        assert!(s.confirm.is_none(), "x does not remove");
+        s.update(Action::Trash);
         assert_eq!(s.confirm, Some(Confirm::RemoveFromPlaylist { playlist: mine, video: video("b") }));
         assert_eq!(
             s.update(Action::Confirm(true)),
@@ -5983,13 +6044,13 @@ mod tests {
         // The right-click menu offers it too.
         s.update(Action::ContextMenu { x: 0, y: 0, row: true });
         let menu = &s.context.as_ref().unwrap().items;
-        assert!(menu.iter().any(|i| i.action == Action::RemoveFromList && i.key == "Ctrl+Y x"));
+        assert!(menu.iter().any(|i| i.action == Action::RemoveFromList && i.key == "X"));
     }
 
     #[test]
     fn out_of_liked_videos_is_unliking() {
         let mut s = playlist_with(LIKED, &["a", "b"]);
-        s.update(Action::CloseTab);
+        s.update(Action::Trash);
         assert!(matches!(&s.confirm, Some(Confirm::RemoveFromPlaylist { video, .. }) if video.id == "a"));
         assert_eq!(
             s.update(Action::Confirm(true)),
@@ -6000,7 +6061,7 @@ mod tests {
     }
 
     #[test]
-    fn prefix_x_still_closes_the_tab_elsewhere() {
+    fn x_closes_the_tab_and_removes_nothing() {
         let mut s = playlist_with("PLx", &["a"]);
         let tab = play(&mut s, 0);
         assert_eq!(s.update(Action::CloseTab), [Effect::Close(tab)], "in a video tab");
@@ -6605,11 +6666,10 @@ mod tests {
         let listing = s.listing().unwrap();
         assert_eq!((listing.kind.clone(), listing.title.as_str()), (ListKind::Saved, "Ver después"));
         assert_eq!(listing.items, Items::Videos(vec![video("a"), video("b")]));
-        // Plain x only says how; Ctrl+Y x asks, then takes it out and saves the file.
+        // x closes nothing here and removes nothing; X asks, then takes it out and saves the file.
         s.update(Action::Down);
+        assert!(s.update(Action::CloseTab).is_empty() && s.confirm.is_none());
         s.update(Action::Trash);
-        assert!(s.confirm.is_none() && s.status.contains("Ctrl+Y x"), "{}", s.status);
-        s.update(Action::CloseTab);
         assert_eq!(s.confirm, Some(Confirm::RemoveFromSaved(video("b"))));
         assert_eq!(s.update(Action::Confirm(true)), [Effect::SaveSaved(vec![video("a")])]);
         assert_eq!(s.listing().unwrap().items, Items::Videos(vec![video("a")]));
@@ -6824,7 +6884,7 @@ mod tests {
         assert_eq!(s.menu_row(), MenuRow::Tab(1));
         s.update(Action::Enter);
         assert_eq!(s.active_tab().map(|t| t.id), Some(b), "Enter opens the tab");
-        // ← (or Ctrl+Y m) back to the menu: the cursor waits on that tab.
+        // ← back to the menu: the cursor waits on that tab.
         s.update(Action::GoTab(1));
         s.update(Action::FocusMenu);
         assert_eq!((s.active, s.focus, s.menu_row()), (1, Focus::Menu, MenuRow::Tab(0)));
@@ -6997,7 +7057,7 @@ mod tests {
         let mut s = with_videos(&["a"]);
         let a = play(&mut s, 0);
         s.update(Action::ToggleFullscreen);
-        // Ctrl+Y m from fullscreen: it ends (it would hide the menu), mpv is told.
+        // FocusMenu from fullscreen: it ends (it would hide the menu), mpv is told.
         let effects = s.update(Action::FocusMenu);
         assert!(!s.fullscreen && s.active == 1 && s.focus == Focus::Menu);
         assert!(effects.contains(&Effect::Command(a, PlayerCommand::Fullscreen(false))), "{effects:?}");
@@ -7014,8 +7074,9 @@ mod tests {
             s.update(action)
         };
         let ctrl_y_q = |s: &mut State| {
-            let mut effects = press(s, KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
-            effects.extend(press(s, KeyEvent::from(KeyCode::Char('q'))));
+            let mut effects = press(s, KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT));
+            assert_eq!(s.confirm, Some(Confirm::Quit(0)), "Q asks");
+            effects.extend(press(s, KeyEvent::from(KeyCode::Char('y'))));
             effects
         };
         let relaunches = |e: &[Effect]| {
@@ -7306,5 +7367,106 @@ mod tests {
         assert_ne!(t(&s), Some(Action::OpenInBackground));
         s.update(Action::FocusSearch);
         assert_eq!(t(&s), Some(Action::Input('t')));
+    }
+
+    #[test]
+    fn shift_q_asks_before_quitting() {
+        let mut s = with_videos(&["a"]);
+        assert!(s.update(Action::AskQuit).is_empty());
+        assert_eq!((s.quit, s.confirm.clone()), (false, Some(Confirm::Quit(0))));
+        s.update(Action::Confirm(false));
+        assert!(!s.quit && s.confirm.is_none(), "any other key: stays");
+        s.update(Action::Download);
+        s.update(Action::AskQuit);
+        assert_eq!(s.confirm, Some(Confirm::Quit(1)), "the downloads wording");
+        s.update(Action::Confirm(true));
+        assert!(s.quit);
+    }
+
+    #[test]
+    fn x_never_takes_anything_out() {
+        let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
+        let mut files = with_videos(&[]);
+        files.stack.last_mut().unwrap().items = Items::Files(vec![file("a")], MediaKind::Music);
+        let mut history = with_videos(&["a"]);
+        play(&mut history, 0);
+        open(&mut history, Section::Historial);
+        let mut saved = State::new(Config::default(), vec![video("a")]);
+        open(&mut saved, Section::Guardados);
+        let mut later = state();
+        later.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut later, Section::VerDespues));
+        later.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a")]))));
+        let mut downloads = with_videos(&["a"]);
+        downloads.update(Action::Download);
+        open(&mut downloads, Section::Descargas);
+        for (name, mut s) in
+            [("files", files), ("history", history), ("saved", saved), ("later", later), ("downloads", downloads)]
+        {
+            let before = s.listing().unwrap().items.clone();
+            assert!(s.update(Action::CloseTab).is_empty(), "{name}");
+            assert!(s.confirm.is_none(), "{name}: no question either");
+            assert_eq!(s.listing().unwrap().items, before, "{name}");
+            // X asks, every time.
+            assert!(s.update(Action::Trash).is_empty(), "{name}");
+            assert!(s.confirm.is_some(), "{name}: X asks");
+        }
+    }
+
+    #[test]
+    fn shift_x_in_a_tab_closes_it_and_takes_it_out_of_its_list() {
+        // From tubevibe Watch Later: the prompt names it, yes closes and removes.
+        let mut s = State::new(Config::default(), vec![video("a"), video("b")]);
+        open(&mut s, Section::Guardados);
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        assert_eq!(s.active_tab().unwrap().source, Some(TabSource::Saved));
+        assert!(s.update(Action::Trash).is_empty());
+        assert_eq!(s.confirm, Some(Confirm::CloseAndRemove { tab, source: TabSource::Saved, video: video("a") }));
+        assert_eq!(s.update(Action::Confirm(true)), [Effect::Close(tab), Effect::SaveSaved(vec![video("b")])]);
+        assert!(s.tabs.is_empty());
+        // No: nothing happens.
+        s.update(Action::GoTab(0));
+        s.update(Action::Enter);
+        s.update(Action::Trash);
+        assert!(s.update(Action::Confirm(false)).is_empty());
+        assert_eq!(s.tabs.len(), 1);
+        // From YouTube Watch Later.
+        let mut s = state();
+        s.config.session.browser = "brave".into();
+        let id = load_id(&open(&mut s, Section::VerDespues));
+        s.update(Action::Loaded(id, Ok(Items::Videos(vec![video("a")]))));
+        let tab = play(&mut s, 0);
+        s.update(Action::Trash);
+        assert!(matches!(&s.confirm, Some(Confirm::CloseAndRemove { source: TabSource::YouTubeLater, .. })));
+        assert_eq!(
+            s.update(Action::Confirm(true)),
+            [Effect::Close(tab), Effect::EditLater { video: video("a"), add: false }]
+        );
+        // From a playlist, in Up Next: named after it.
+        let mut s = playlist_with("PLx", &["a"]);
+        let tab = play(&mut s, 0);
+        s.active_tab_mut().unwrap().on_related = true;
+        s.update(Action::RemoveFromList);
+        let source = TabSource::Playlist { id: "PLx".into(), title: "Mine".into() };
+        assert_eq!(s.confirm, Some(Confirm::CloseAndRemove { tab, source, video: video("a") }));
+        // From a feed: X just closes the tab, nothing to take it out of.
+        let mut s = with_videos(&["a"]);
+        let tab = play(&mut s, 0);
+        assert_eq!(s.active_tab().unwrap().source, None);
+        assert_eq!(s.update(Action::Trash), [Effect::Close(tab)]);
+        assert!(s.confirm.is_none());
+    }
+
+    #[test]
+    fn a_tab_remembers_its_list_across_restarts() {
+        let mut s = State::new(Config::default(), vec![video("a")]);
+        open(&mut s, Section::Guardados);
+        s.update(Action::Enter);
+        let saved = s.saved_tabs();
+        assert_eq!(saved.tabs[0].source, Some(TabSource::Saved));
+        let mut back = state();
+        back.update(Action::TabsRestored(Ok(saved)));
+        assert_eq!(back.tabs[0].source, Some(TabSource::Saved));
     }
 }
