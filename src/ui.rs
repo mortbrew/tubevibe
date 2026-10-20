@@ -1108,18 +1108,12 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     if room >= top.len() + tabs_head + tail + usize::from(!tabs.is_empty()) {
         // The top and the bottom stay put; the tabs take what is left and scroll.
         let mut items = top;
+        let mut more_below = false;
         if !tabs.is_empty() {
             let total = tabs.len();
             let title = lang.pick(" PESTAÑAS", " TABS");
-            // Too many: the last row is kept for the "more below" chevron…
-            let rows = if total > tab_rows && tab_rows > 1 { tab_rows - 1 } else { tab_rows.min(total) };
-            let mut offset = tab_offset(state, total, rows);
-            let mut shown = rows;
-            // …unless nothing is below: then it holds one more tab, from above.
-            if offset + rows >= total && rows < tab_rows.min(total) {
-                shown = tab_rows.min(total);
-                offset = total - shown;
-            }
+            let shown = tab_rows.min(total);
+            let offset = tab_offset(state, total, shown);
             let chevron = |icon: &str| format!("{}{icon}", " ".repeat(Span::raw(title).width() + 1));
             let mut head = Line::from(title.to_owned()).fg(MUTED).bold();
             if offset > 0 {
@@ -1130,11 +1124,13 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
             items.push((ListItem::new(""), None));
             items.push((ListItem::new(head), None));
             items.extend(tabs.into_iter().skip(offset).take(shown));
-            if offset + shown < total {
+            // More below: the chevron takes the blank row above the rule.
+            more_below = offset + shown < total;
+            if more_below {
                 items.push((ListItem::new(Line::from(chevron(icons.more_below)).fg(MUTED).bold()), None));
             }
         }
-        let gap = room.saturating_sub(items.len() + 1 + bottom.len()).max(1);
+        let gap = room.saturating_sub(items.len() + 1 + bottom.len()).max(usize::from(!more_below));
         items.extend((0..gap).map(|_| (ListItem::new(""), None)));
         items.push(rule());
         items.extend(bottom);
@@ -4216,14 +4212,15 @@ mod tests {
         // Alt+. wraps to the first tab: the list follows.
         s.update(Action::NextTab);
         let screen = render_screen(&s, 130, 40);
-        // One row fewer: the last is the "more below" chevron.
-        assert_eq!(tab_rows_shown(&screen), (0..count - 1).collect::<Vec<_>>());
+        // As many rows: the "more below" chevron takes the blank row above the rule.
+        assert_eq!(tab_rows_shown(&screen), (0..count).collect::<Vec<_>>());
         // At the top: no chevron by the title, a down one in its own row below
         // the last tab shown, in the title chevron's column.
         let title = at(&screen, "PESTAÑAS");
         assert!(!screen[title].contains(up), "{}", screen[title]);
         let below = at(&screen, down);
-        assert_eq!(below, at(&screen, &format!(" title {} ", count - 2)) + 1);
+        assert_eq!(below, at(&screen, &format!("│ ▶ title {} ", count - 1)) + 1);
+        assert!(screen[below + 1].contains("──"), "the rule right under it:\n{}", screen.join("\n"));
         let column = |line: &str, icon: &str| line[..line.find(icon).unwrap()].chars().count();
         assert_eq!(column(&screen[below], down), "│ PESTAÑAS ".chars().count(), "{}", screen[below]);
         // In the middle: both.
@@ -4278,6 +4275,15 @@ mod tests {
             if rows.len() == 1 {
                 pinned = Some(height);
                 assert_eq!(rows, [34], "the tab shown");
+                // The first tab shown instead: one tab row, the down chevron right
+                // above the rule (no blank row between).
+                let mut first = s.clone();
+                first.update(Action::GoTab(1));
+                let screen = render_screen(&first, 130, height);
+                assert_eq!(tab_rows_shown(&screen), [0]);
+                let down = icons(first.config.ui.icons).more_below;
+                let below = row_of(&screen, down);
+                assert!(screen[below + 1].contains("──"), "{}", screen.join("\n"));
                 assert!(screen.iter().any(|l| l.contains(Section::Salir.label(Lang::Es))));
                 assert!(screen.iter().any(|l| l.contains("YOUTUBE")), "the top stays");
                 break;

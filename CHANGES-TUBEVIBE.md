@@ -912,8 +912,10 @@ settings. They're saved to `[ui]` in config.toml and apply at once.
   in the same column, while tabs are hidden below. Toby's screenshot showed
   *TABS ⌄*: before, the title showed the down chevron, the up one, or both.
   Both chevrons come from the chosen icon set. With nothing hidden there
-  are no chevrons and no reserved row. When the list reaches its last tab,
-  that row holds one more tab instead of a blank.
+  are no chevrons and no reserved row. The down chevron sits on the blank
+  row just above the rule over Settings, with no blank row between them.
+  The tabs keep every row above it, so as many tabs show whether or not it's
+  there. This holds down to the shortest menu that still has a tab row.
 - Tests: `x_in_the_menu_closes_the_tab_under_the_cursor`,
   `few_tabs_have_no_chevrons_and_no_rule_above`, and the 35-tab render test,
   which now checks both chevrons and their column.
