@@ -6,7 +6,7 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::app::Action;
+use crate::app::{Action, Section};
 use crate::i18n::{Lang, Text};
 use crate::youtube::Rating;
 
@@ -39,6 +39,20 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
     ('M', "M", Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('L', "L", Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
     ('Q', "Q", Action::AskQuit, Text::new("salir (pide confirmar)", "quit (asks first)")),
+    ('S', "S", Action::GoSection(Section::Configuracion), Text::new("abrir Configuración", "open Settings")),
+    ('A', "A", Action::GoSection(Section::AcercaDe), Text::new("abrir Acerca de", "open About")),
+    (
+        'Y',
+        "Y",
+        Action::GoSection(Section::VerDespues),
+        Text::new("abrir Ver después de YouTube", "open YouTube Watch Later"),
+    ),
+    (
+        'V',
+        "V",
+        Action::GoSection(Section::Guardados),
+        Text::new("abrir Ver después de tubevibe", "open tubevibe Watch Later"),
+    ),
 ];
 
 /// Keys that act on the selected video, in lists and in video tabs.
@@ -145,7 +159,15 @@ pub fn key_name(keys: &str, lang: Lang) -> String {
 
 /// The commands that work everywhere, in `lang`.
 pub fn global_rows(lang: Lang) -> Vec<(String, &'static str)> {
-    GLOBAL.iter().map(|(_, k, _, d)| (k.to_string(), d.get(lang))).collect()
+    // Keys share rows so the help still fits 40 lines.
+    let pick = |es, en| lang.pick(es, en);
+    vec![
+        ("?".into(), pick("esta ayuda", "this help")),
+        ("M  L".into(), pick("menú sí / no · idioma: English", "menu on / off · language: español")),
+        ("Q  Ctrl+C".into(), pick("salir (pide confirmar) / salir ya", "quit (asks first) / quit now")),
+        ("S  A".into(), pick("abrir Configuración / Acerca de", "open Settings / About")),
+        ("Y  V".into(), pick("abrir Ver después: YouTube / tubevibe", "open Watch Later: YouTube / tubevibe")),
+    ]
 }
 
 /// What macOS types for Option+, and Option+. (US and most layouts).
@@ -337,7 +359,6 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
         (lang.pick("Comandos (en cualquier lado)", "Commands (Anywhere)"), {
             let mut commands = global_rows(lang);
             commands.push(("Alt+,  Alt+.".into(), lang.pick("pestaña anterior / siguiente", "previous / next tab")));
-            commands.push(("Ctrl+C".into(), lang.pick("salir ya", "quit now")));
             commands
         }),
         (lang.pick("Menú", "Menu"), {
@@ -564,7 +585,7 @@ mod tests {
             let help = help(lang);
             let (_, commands) = &help[0];
             for (_, name, ..) in GLOBAL {
-                assert!(commands.iter().any(|(k, _)| k == name), "{name} missing from help");
+                assert!(commands.iter().any(|(k, _)| k.split_whitespace().any(|t| t == *name)), "{name} missing from help");
             }
             assert!(!commands.iter().any(|(k, _)| k == "0-9"), "no tab digits any more");
         }
@@ -616,8 +637,8 @@ mod tests {
 
     #[test]
     fn help_is_translated() {
-        assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "Q").unwrap().1, "quit (asks first)");
-        assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "Q").unwrap().1, "salir (pide confirmar)");
+        assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "Y  V").unwrap().1, "open Watch Later: YouTube / tubevibe");
+        assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "Y  V").unwrap().1, "abrir Ver después: YouTube / tubevibe");
         assert_eq!(rows(IN_TAB, Lang::En)[0].0, "Space");
         assert_eq!(rows(IN_TAB, Lang::Es)[0].0, "Espacio");
         assert!(rows(IN_LISTS, Lang::En).iter().any(|(k, _)| k == "X  Del"));

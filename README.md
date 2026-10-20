@@ -257,6 +257,10 @@ setting.
 | `M` | show / hide the menu |
 | `L` | English / español |
 | `Q` | quit (asks first; says so if downloads are running) |
+| `S` | open Settings, from anywhere |
+| `A` | open About, from anywhere |
+| `Y` | open YouTube Watch Later, from anywhere |
+| `V` | open tubevibe Watch Later, from anywhere |
 | `x` | close: the tab you're in, or the tab under the cursor in the menu. It never deletes anything |
 | `X` | take out, always after asking: files to the trash (My Videos, My Music, Downloads), a video out of History, Watch Later or a playlist, cancel a download. In a video tab: close it **and** take the video out of the list it was opened from (the question names the list; opened from anywhere else, it just closes) |
 | `/` | search videos |

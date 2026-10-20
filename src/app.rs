@@ -715,6 +715,8 @@ pub enum Action {
     },
     /// Open this section of the menu (a click on it).
     OpenSection(usize),
+    /// `S`, `A`, `Y`, `V`: open that menu section from anywhere.
+    GoSection(Section),
     /// Select this row of the list (a click on it).
     Select(usize),
     /// Move the list selection by this many rows (the mouse wheel).
@@ -1520,6 +1522,10 @@ impl State {
                     self.tr("¿De qué navegador tomo tu sesión de YouTube?", "Which browser has your YouTube login?");
                 let id = self.request(title.into(), Filter::None, false, ListKind::Plain);
                 return vec![Effect::ScanBrowsers { id }];
+            }
+            Action::GoSection(section) => {
+                let Some(i) = Section::ALL.iter().position(|s| *s == section) else { return Vec::new() };
+                return self.apply(Action::OpenSection(i));
             }
             Action::OpenSection(i) => {
                 let Some(section) = Section::ALL.get(i) else { return Vec::new() };
@@ -7513,5 +7519,38 @@ mod tests {
         s.update(Action::OpenInTab);
         assert_eq!((s.tabs.len(), s.active), (2, 2));
         assert_eq!(s.active_tab().unwrap().playback.video, Some(video("r1")));
+    }
+
+    #[test]
+    fn capital_keys_open_sections_from_anywhere_but_not_while_typing() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let shift = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+        let pos = |sec| Section::ALL.iter().position(|s| *s == sec).unwrap();
+        for (c, sec) in [
+            ('S', Section::Configuracion),
+            ('A', Section::AcercaDe),
+            ('Y', Section::VerDespues),
+            ('V', Section::Guardados),
+        ] {
+            // From a list, a video tab and Up Next.
+            for setup in 0..3 {
+                let mut s = with_videos(&["a", "b"]);
+                if setup >= 1 {
+                    play(&mut s, 0);
+                }
+                if setup == 2 {
+                    s.video_window = true;
+                    s.tabs[0].on_related = true;
+                }
+                let action = crate::keymap::map(shift(c), s.key_context());
+                assert_eq!(action, Some(Action::GoSection(sec)), "{c} in setup {setup}");
+                s.update(action.unwrap());
+                assert_eq!((s.active, s.menu), (0, pos(sec)), "{c} in setup {setup}");
+            }
+            // While typing: just a letter.
+            let mut s = with_videos(&["a"]);
+            s.update(Action::FocusSearch);
+            assert_eq!(crate::keymap::map(shift(c), s.key_context()), Some(Action::Input(c)));
+        }
     }
 }

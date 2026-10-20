@@ -1137,6 +1137,17 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.8)
 
+### S, A, Y, V open screens from anywhere (`key-remap`)
+
+- **`S`** Settings, **`A`** About, **`Y`** YouTube Watch Later, **`V`**
+  tubevibe Watch Later: from any list, video tab, *Up next* or Downloads,
+  like choosing that menu item. Not while typing (they type the letter). No
+  clash: these capitals were free everywhere (`s`, `a`, `v` stay as they are).
+- Help: they share two rows of Commands (`S  A`, `Y  V`), and `M  L`,
+  `Q  Ctrl+C` now share rows too, so Help still fits a 40-line terminal. Not
+  in the bottom bar (no room).
+- Test: `capital_keys_open_sections_from_anywhere_but_not_while_typing`.
+
 ### t goes to the new tab, T stays; uppercase keys in bold (`key-remap`)
 
 - **`t`** on a video (any list or *Up next*) now opens it in a new tab and
