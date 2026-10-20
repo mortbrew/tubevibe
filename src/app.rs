@@ -99,8 +99,8 @@ impl Group {
 impl Section {
     pub const ALL: [Self; 18] = [
         Self::Inicio,
-        Self::Suscripciones,
         Self::VerDespues,
+        Self::Suscripciones,
         Self::Historial,
         Self::MisListas,
         Self::Canales,
@@ -6925,7 +6925,11 @@ mod tests {
             [Effect::Search { id, .. }] => *id,
             other => panic!("{other:?}"),
         };
-        assert_eq!(s.shown_row(), Some(MenuRow::Section(1)), "not yet: Subscriptions still shown");
+        assert_eq!(
+            s.shown_row(),
+            Some(MenuRow::Section(State::section_index(Section::Suscripciones))),
+            "not yet: Subscriptions still shown"
+        );
         s.update(Action::Page(id, Ok(SearchPage { videos: vec![video("r")], next: None })));
         assert_eq!(s.shown_row(), Some(MenuRow::Section(State::section_index(Section::BuscarVideos))));
         use crate::doctor::Tool;

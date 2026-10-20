@@ -1093,3 +1093,43 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 - Tests: every set has every icon; Nerd and Unicode have no emoji and Nerd
   stays in the v3 Font Awesome / Material Design ranges; a status line
   follows the chosen set.
+
+
+## 0.8.7: dynamic layouts, Title Case labels, fitted list rows, Watch Later moved (2026-10-20)
+
+### Title Case bottom bar, Up Next titles cut with … (`titlecase-and-upnext-ellipsis`)
+
+- Every English label in the bottom key bar is now Title Case, like
+  *Quality Change* and *Help* ("Pause", "Close the Tab", "YouTube Watch
+  Later", "Mark / Unmark"…). Short joining words (to, the, of…) stay
+  lowercase, *tubevibe* stays lowercase, key names are untouched. Spanish
+  is unchanged.
+- Up Next: a long title is cut with a single `…` so the video length always
+  shows whole at the right edge, lined up row to row. Measured in screen
+  cells, so wide characters and emoji don't push it out. Very narrow panes
+  cut the title first, then the date and channel; the length goes last.
+- The same fitting now applies to every list opened from the menu: My
+  Recommendations, Watch Later, Subscriptions, History, playlists and their
+  videos, channels' videos, Search Videos, From What I Watched, Discover,
+  tubevibe Watch Later (all video lists), My Playlists (the count stays at
+  the right edge), My Videos / My Music (file names) and Downloads (the
+  path or error gives way first, then the title). Before, long titles were
+  cut at the pane edge and pushed the length out of view.
+- The channel column (and the My Videos / My Music folder column) ends in
+  `…` when cut, instead of stopping mid-word.
+- Right-to-left titles (Arabic, Hebrew): invisible direction marks are
+  dropped and widths are measured the way the screen draws them, so those
+  rows keep the length column lined up.
+- Menu: **Watch Later** now sits right above **Subscriptions** (My
+  Recommendations, Watch Later, Subscriptions, History, …). Icons, keys and
+  the shown mark follow the new order.
+- Narrow windows: the **preview** goes under the list (across it) when the
+  list would keep fewer than 50 columns beside a Preview Width panel, so
+  it is no longer cut off; the list keeps at least 10 rows and the preview
+  takes up to 16 (with fewer than 6 to spare it is left out, never
+  squeezed in). Its thumbnail stays 16:9 and takes at most half its rows.
+- Likewise the **comments** in a video tab go under the details and *Up
+  next*, across the tab, when those would keep fewer than 50 columns
+  beside Comments Width (two fifths of the rows; left out when the tab is
+  too short for them and *Up next*). Wide windows keep the side-by-side
+  layout and the width settings; stacked panes take the full width.

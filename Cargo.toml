@@ -1,6 +1,6 @@
 [package]
 name = "tubevibe"
-version = "0.8.6"
+version = "0.8.7"
 edition = "2024"
 rust-version = "1.88"
 description = "YouTube and your local videos and music in the terminal: tabs, video embedded in kitty via mpv, subscriptions, playlists, history with resume, downloads, SponsorBlock, chapters, comments and browser login"
@@ -31,6 +31,7 @@ thiserror = "2.0.21"
 toml = { version = "1.1.8", features = ["preserve_order"] }
 toml_edit = "0.25.17"
 trash = "5.2.9"
+unicode-width = "0.2"
 ureq = "3.4.2"
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2"] }
 

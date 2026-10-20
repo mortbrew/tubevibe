@@ -79,7 +79,8 @@ Every video opens in its own tab.
   **new tab in the background** (`t`: it joins TABS in the menu, nothing plays,
   you stay where you are)
 - **Comments**: the full height of the tab's right side, beside the details and *Up next*, when the video plays in its own window or
-  as audio only (in terminals 100 columns wide or more); `PgUp` / `PgDn`
+  as audio only; in a narrow window they go under *Up next*, across the
+  tab (and are left out when it is too short too); `PgUp` / `PgDn`
   scroll them
 - **AI summary**: YouTube's *AI-generated video summary*, on the videos
   that have one, right under the details of the same tabs, across the left
