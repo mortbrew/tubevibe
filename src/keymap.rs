@@ -246,6 +246,7 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     }
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
+        KeyCode::Char('t') => return Some(Action::OpenInBackground),
         KeyCode::Char('l') => return Some(Action::SaveForLater),
         KeyCode::Char('s') => return Some(Action::ToggleSubscription),
         KeyCode::Char('g') => return Some(Action::Rate(Rating::Like)),
@@ -357,7 +358,15 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             menu
         }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),
-        (lang.pick("Sobre un video (lista o pestaña)", "On a Video (List or Tab)"), rows(ON_VIDEO, lang)),
+        (lang.pick("Sobre un video (lista o pestaña)", "On a Video (List or Tab)"), {
+            // t only in the help: the bar has no room for it.
+            let mut on_video = rows(ON_VIDEO, lang);
+            on_video.push((
+                "t".into(),
+                lang.pick("abrir en una pestaña nueva, sin ir a ella", "open in a new tab in the background"),
+            ));
+            on_video
+        }),
         (lang.pick("Pestaña de video", "Video Tab"), rows(IN_TAB, lang)),
         (lang.pick("Cuadro de búsqueda", "Search Box"), rows(IN_SEARCH, lang)),
         ("Mouse", rows(WITH_MOUSE, lang)),

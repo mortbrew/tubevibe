@@ -605,6 +605,8 @@ pub enum Action {
     ScrollTabs(isize),
     /// `x` in the menu: closes the tab under the cursor, like Ctrl+Y x in it.
     MenuCloseTab,
+    /// `t`: the selected video in a new tab, left in the background.
+    OpenInBackground,
     CloseTab,
     /// The player went away on its own (window closed, video ended, failed to start).
     PlayerClosed(TabId, Option<String>),
@@ -1651,6 +1653,7 @@ impl State {
                 }
             }
             Action::AddLater => return self.add_to_later(),
+            Action::OpenInBackground => self.open_in_background(),
             Action::SaveForLater => return self.save_for_later(),
             Action::Trash if self.active == 0 && self.saved_list_video().is_some() => {
                 self.status = self
@@ -3290,6 +3293,24 @@ impl State {
 
     /// `l`: a video not in my YouTube Watch Later goes in; one that is there
     /// comes out after asking. When the loaded list can't tell, YouTube is asked.
+    /// `t`: a tab for the selected video, added under TABS (and so to
+    /// tabs.json) like a restored one: nothing plays, nothing is fetched
+    /// until it is shown, and the keys and the screen stay where they are.
+    fn open_in_background(&mut self) {
+        let Some(video) = self.selected_video().cloned() else { return };
+        let playback = Playback::youtube(video);
+        if self.tabs.iter().any(|t| t.playback.queue.first() == playback.queue.first()) {
+            self.status = format!("{}: {}", self.tr("Ya está en una pestaña", "Already Open in a Tab"), playback.title);
+            return;
+        }
+        let id = TabId(self.next_tab);
+        self.next_tab += 1;
+        self.status = format!("{}: {}", self.tr("Abierto en una pestaña nueva", "Opened in a New Tab"), playback.title);
+        let mut tab = Tab::new(id, playback);
+        (tab.ended, tab.started, tab.restored) = (true, false, true);
+        self.tabs.push(tab);
+    }
+
     fn add_to_later(&mut self) -> Vec<Effect> {
         let Some(video) = self.selected_video().cloned() else { return Vec::new() };
         if !self.logged_in() {
@@ -7237,5 +7258,49 @@ mod tests {
         let mut s = state();
         open(&mut s, Section::Salir);
         assert!(s.quit);
+    }
+
+    #[test]
+    fn t_opens_the_video_in_a_background_tab() {
+        let mut s = with_videos(&["a", "b"]);
+        s.config.ui.lang = Some(Lang::En);
+        let t = |s: &State| {
+            crate::keymap::map(
+                ratatui::crossterm::event::KeyEvent::from(ratatui::crossterm::event::KeyCode::Char('t')),
+                s.key_context(),
+            )
+        };
+        assert_eq!(t(&s), Some(Action::OpenInBackground));
+        s.stack[0].selected = 1;
+        assert!(s.update(t(&s).unwrap()).is_empty(), "nothing plays, nothing loads");
+        assert_eq!((s.tabs.len(), s.active, s.focus, s.stack[0].selected), (1, 0, Focus::List, 1), "the list stays");
+        assert_eq!(s.status, "Opened in a New Tab: title b");
+        assert!(s.tabs[0].ended && !s.tabs[0].started && s.tabs[0].restored);
+        assert_eq!(s.saved_tabs().tabs.len(), 1, "saved in tabs.json");
+        // Again: no second tab.
+        s.update(Action::OpenInBackground);
+        assert_eq!((s.tabs.len(), s.status.as_str()), (1, "Already Open in a Tab: title b"));
+        // Shown later: its details are asked for then.
+        let tab = s.tabs[0].id;
+        assert!(s.update(Action::GoTab(1)).contains(&Effect::Watch { tab, video: "b".into() }));
+        // From Up Next in a video tab: the tab shown stays.
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        let watch = Watch { related: vec![video("r1"), video("r2")], ..Watch::default() };
+        let id = s.tabs[0].id;
+        s.update(Action::Watched(id, Ok(watch)));
+        s.video_window = true;
+        s.tabs[0].on_related = true;
+        assert!(s.on_related());
+        s.update(Action::Down);
+        s.update(Action::OpenInBackground);
+        assert_eq!((s.tabs.len(), s.active, s.on_related()), (2, 1, true));
+        assert_eq!(s.tabs[1].playback.video, Some(video("r2")));
+        // In the menu, Settings or the search box: nothing (t is typed there).
+        let mut s = with_videos(&["a"]);
+        s.focus = Focus::Menu;
+        assert_ne!(t(&s), Some(Action::OpenInBackground));
+        s.update(Action::FocusSearch);
+        assert_eq!(t(&s), Some(Action::Input('t')));
     }
 }

@@ -763,6 +763,29 @@ could not update itself either. From now on:
 - `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
 
+### t opens a video in a background tab (`browser-tab-keys`)
+
+- **`t`** on a YouTube video opens it in a new tab in the background. That
+  works in the browsing lists, search results, channels, History, Watch
+  Later and playlists, and in Up Next in a video tab.
+- The tab joins TABS in the menu and is saved to tabs.json. The keys and
+  the screen stay where they are, and nothing plays.
+- The tab behaves like a restored one: nothing is fetched until it's shown
+  (Enter plays it).
+- The status says *Opened in a New Tab: <title>* (*Abierto en una pestaña
+  nueva*). If the video is already in a tab there's no second one, and the
+  status says *Already Open in a Tab: <title>* (*Ya está en una pestaña*).
+- The tab list scrolls and its chevrons update as usual: a tab added out
+  of view shows the down chevron.
+- **`t` wasn't used anywhere before**, so there's no conflict.
+  - In the menu, Settings, About, System Check, My Videos, My Music and
+    Downloads (local files, not YouTube videos) it does nothing.
+  - In a search box it's typed. In a video tab, on the video itself, the
+    video is already in a tab, so the status says so.
+- It's in the help (*On a Video*) and the README, not in the bottom bar.
+- Tests: `t_opens_the_video_in_a_background_tab` and
+  `a_background_tab_joins_the_scrolled_tab_list`.
+
 ### The menu's cursor row in the theme's accent; no blended colours (`browser-tab-keys`)
 
 - **One colour for the menu's cursor row**, both the `▌` and the text:

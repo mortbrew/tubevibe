@@ -4462,4 +4462,30 @@ mod tests {
         s.update(Action::Down);
         assert_eq!(shown_rows(&s).len(), 1);
     }
+
+    #[test]
+    fn a_background_tab_joins_the_scrolled_tab_list() {
+        let mut s = with_35_tabs();
+        s.update(Action::GoTab(0));
+        s.focus = Focus::List;
+        let mut more = with_items(Items::Videos(vec![video("new")]));
+        std::mem::swap(&mut s.stack, &mut more.stack);
+        s.update(Action::OpenInBackground);
+        assert_eq!((s.tabs.len(), s.active), (36, 0));
+        let up = icons(s.config.ui.icons).more_above;
+        let down = icons(s.config.ui.icons).more_below;
+        let screen = render_screen(&s, 130, 40);
+        assert!(!screen.iter().any(|l| l.contains("▶ title new")), "out of view, below");
+        assert!(screen.iter().any(|l| l.contains(down)), "the down chevron says so:\n{}", screen.join("\n"));
+        // Walking the menu down to it scrolls it in, the chevron goes.
+        s.update(Action::FocusMenu);
+        while s.menu_row() != MenuRow::Tab(35) {
+            s.update(Action::Down);
+        }
+        let screen = render_screen(&s, 130, 40);
+        assert!(screen.iter().any(|l| l.contains("▌▶ title new")), "{}", screen.join("\n"));
+        assert!(!screen.iter().any(|l| l.contains(down)) && screen.iter().any(|l| l.contains(up)));
+        s.update(Action::Back);
+        assert!(render(&s).contains("title new  1:00"), "the list stays in front");
+    }
 }
