@@ -76,8 +76,8 @@ Every video opens in its own tab.
 - **Subscribe / unsubscribe** (`s`, unsubscribing asks first), **like /
   dislike** (`g` / `G`, again takes it back), **YouTube Watch Later** (`w` adds), **tubevibe Watch Later** (`W` adds),
   **download** with subtitles (`d`), open the **channel** (`c`), open it in a
-  **new tab in the background** (`t`: it joins TABS in the menu, nothing plays,
-  you stay where you are)
+  **new tab** (`t`: it opens and you go to it) or a **background tab**
+  (`T`: it joins TABS in the menu, nothing plays, you stay where you are)
 - **Comments**: the full height of the tab's right side, beside the details and *Up next*, when the video plays in its own window or
   as audio only; in a narrow window they go under *Up next*, across the
   tab (and are left out when it is too short too); `PgUp` / `PgDn`

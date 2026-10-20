@@ -1137,6 +1137,18 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.8)
 
+### t goes to the new tab, T stays; uppercase keys in bold (`key-remap`)
+
+- **`t`** on a video (any list or *Up next*) now opens it in a new tab and
+  shows it; **`T`** opens it in a background tab without moving, as `t` did
+  before. If the video is already open, `t` goes to its tab. Both are in the
+  video's context menu too, and in Help.
+- Shortcuts that are an **uppercase letter** (`Q`, `M`, `L`, `W`, `X`, `T`,
+  `G`…) are drawn **bold** in the bottom bar, Help and context menus, in the
+  same theme colour; lowercase keys are drawn regular, so Shift keys stand out.
+- Tests: `t_opens_a_tab_and_goes_to_it_shift_t_stays`,
+  `uppercase_keys_are_bold_lowercase_are_not`.
+
 ### One key per command: no more Ctrl+Y (`key-remap`)
 
 - The `Ctrl+Y` prefix is gone (`Ctrl+Y` alone does nothing). Every

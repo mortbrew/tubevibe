@@ -623,6 +623,8 @@ pub enum Action {
     MenuCloseTab,
     /// `t`: the selected video in a new tab, left in the background.
     OpenInBackground,
+    /// `t`: the selected video in a new tab, shown at once.
+    OpenInTab,
     CloseTab,
     /// The player went away on its own (window closed, video ended, failed to start).
     PlayerClosed(TabId, Option<String>),
@@ -1674,6 +1676,10 @@ impl State {
             }
             Action::AddLater => return self.add_to_later(),
             Action::OpenInBackground => self.open_in_background(),
+            Action::OpenInTab => {
+                let Some(video) = self.selected_video().cloned() else { return Vec::new() };
+                return self.open_video(video);
+            }
             Action::SaveForLater => return self.save_for_later(),
             Action::Trash | Action::RemoveFromList if self.active == 0 && self.saved_list_video().is_some() => {
                 self.confirm = self.saved_list_video().cloned().map(Confirm::RemoveFromSaved);
@@ -3275,6 +3281,8 @@ impl State {
         let item = |es, en, key, action| MenuItem { label: self.tr(es, en), key, action };
         let Some(video) = self.selected_video() else { return Vec::new() };
         let mut items = vec![
+            item("Abrir en una pestaña nueva", "Open in a New Tab", "t", Action::OpenInTab),
+            item("Abrir en segundo plano", "Open in a Background Tab", "T", Action::OpenInBackground),
             if self.later.iter().any(|v| v.id == video.id) {
                 item("Ya está en Ver después de YouTube", "Already in YouTube Watch Later", "w", Action::AddLater)
             } else {
@@ -7335,9 +7343,17 @@ mod tests {
                 s.key_context(),
             )
         };
-        assert_eq!(t(&s), Some(Action::OpenInBackground));
+        assert_eq!(t(&s), Some(Action::OpenInTab));
+        let shift_t = crate::keymap::map(
+            ratatui::crossterm::event::KeyEvent::new(
+                ratatui::crossterm::event::KeyCode::Char('T'),
+                ratatui::crossterm::event::KeyModifiers::SHIFT,
+            ),
+            s.key_context(),
+        );
+        assert_eq!(shift_t, Some(Action::OpenInBackground));
         s.stack[0].selected = 1;
-        assert!(s.update(t(&s).unwrap()).is_empty(), "nothing plays, nothing loads");
+        assert!(s.update(Action::OpenInBackground).is_empty(), "nothing plays, nothing loads");
         assert_eq!((s.tabs.len(), s.active, s.focus, s.stack[0].selected), (1, 0, Focus::List, 1), "the list stays");
         assert_eq!(s.status, "Opened in a New Tab: title b");
         assert!(s.tabs[0].ended && !s.tabs[0].started && s.tabs[0].restored);
@@ -7364,7 +7380,7 @@ mod tests {
         // In the menu, Settings or the search box: nothing (t is typed there).
         let mut s = with_videos(&["a"]);
         s.focus = Focus::Menu;
-        assert_ne!(t(&s), Some(Action::OpenInBackground));
+        assert_ne!(t(&s), Some(Action::OpenInTab));
         s.update(Action::FocusSearch);
         assert_eq!(t(&s), Some(Action::Input('t')));
     }
@@ -7468,5 +7484,34 @@ mod tests {
         let mut back = state();
         back.update(Action::TabsRestored(Ok(saved)));
         assert_eq!(back.tabs[0].source, Some(TabSource::Saved));
+    }
+
+    #[test]
+    fn t_opens_a_tab_and_goes_to_it_shift_t_stays() {
+        let mut s = with_videos(&["a", "b"]);
+        s.stack[0].selected = 1;
+        let effects = s.update(Action::OpenInTab);
+        assert_eq!((s.tabs.len(), s.active), (1, 1), "shown at once");
+        assert_eq!(s.active_tab().unwrap().playback.video, Some(video("b")));
+        assert!(effects.iter().any(|e| matches!(e, Effect::Watch { video, .. } if video == "b")));
+        // T from the list: a second tab, the first stays shown... from browsing, browsing stays.
+        s.update(Action::GoTab(0));
+        s.stack[0].selected = 0;
+        assert!(s.update(Action::OpenInBackground).is_empty());
+        assert_eq!((s.tabs.len(), s.active), (2, 0));
+        // t again on an open one: just goes to it.
+        s.update(Action::OpenInTab);
+        assert_eq!((s.tabs.len(), s.active), (2, 2));
+        // From Up Next: t goes to the new tab.
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        let watch = Watch { related: vec![video("r1")], ..Watch::default() };
+        let id = s.tabs[0].id;
+        s.update(Action::Watched(id, Ok(watch)));
+        s.video_window = true;
+        s.tabs[0].on_related = true;
+        s.update(Action::OpenInTab);
+        assert_eq!((s.tabs.len(), s.active), (2, 2));
+        assert_eq!(s.active_tab().unwrap().playback.video, Some(video("r1")));
     }
 }

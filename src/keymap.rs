@@ -237,7 +237,8 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
     match key.code {
         KeyCode::Char('w') => return Some(Action::AddLater),
         KeyCode::Char('W') => return Some(Action::SaveForLater),
-        KeyCode::Char('t') => return Some(Action::OpenInBackground),
+        KeyCode::Char('t') => return Some(Action::OpenInTab),
+        KeyCode::Char('T') => return Some(Action::OpenInBackground),
         // `x` only ever closes; `X` takes things out, after asking.
         KeyCode::Char('x') => return Some(Action::CloseTab),
         KeyCode::Char('X') => return Some(Action::Trash),
@@ -350,8 +351,9 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
         (lang.pick("Sobre un video (lista o pestaña)", "On a Video (List or Tab)"), {
             // t only in the help: the bar has no room for it.
             let mut on_video = rows(ON_VIDEO, lang);
+            on_video.push(("t".into(), lang.pick("abrir en una pestaña nueva e ir a ella", "open in a new tab and go to it")));
             on_video.push((
-                "t".into(),
+                "T".into(),
                 lang.pick("abrir en una pestaña nueva, sin ir a ella", "open in a new tab in the background"),
             ));
             on_video

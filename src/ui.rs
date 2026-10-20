@@ -2271,11 +2271,20 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     hints
 }
 
+/// A shortcut's style: the theme colour, bold when the key is an uppercase
+/// letter (`Q`, `X  Del`, `G`), so Shift keys stand out from lowercase ones.
+pub(crate) fn key_style(key: &str, color: Color) -> Style {
+    let upper = key
+        .split(|c: char| c.is_whitespace() || c == '/' || c == ',')
+        .any(|t| t.len() == 1 && t.chars().all(|c| c.is_ascii_uppercase()));
+    if upper { Style::new().fg(color).bold() } else { Style::new().fg(color) }
+}
+
 /// As many hints as fit in the line, whole; the last one (`Shift+/`, every
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
     let hint = |(key, description): &(String, String)| {
-        [Span::styled(key.clone(), Style::new().fg(CYAN).bold()), Span::styled(format!(" {description}   "), MUTED)]
+        [Span::styled(key.clone(), key_style(key, CYAN)), Span::styled(format!(" {description}   "), MUTED)]
     };
     let width = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
     let Some((last, rest)) = hints.split_last() else { return };
@@ -2355,7 +2364,7 @@ fn draw_help_section(frame: &mut Frame, title: &str, rows: &[(String, &'static s
         .iter()
         .map(|(keys, description)| {
             Line::from(vec![
-                Span::styled(format!(" {}", pad_cells(keys, width)), Style::new().fg(CYAN).bold()),
+                Span::styled(format!(" {}", pad_cells(keys, width)), key_style(keys, CYAN)),
                 Span::styled(*description, FG),
             ])
         })
@@ -2568,7 +2577,7 @@ fn draw_context_menu(frame: &mut Frame, menu: &ContextMenu, lang: Lang) {
             let gap = width.saturating_sub(Span::raw(item.label).width() + Span::raw(item.key).width() + 2);
             let line = Line::from(vec![
                 Span::raw(format!(" {}{}", item.label, " ".repeat(gap))),
-                Span::styled(format!("{} ", item.key), Style::new().fg(MUTED)),
+                Span::styled(format!("{} ", item.key), key_style(item.key, MUTED)),
             ]);
             if i == menu.selected { line.style(Style::new().bg(HIGHLIGHT).fg(BLUE).bold()) } else { line }
         })
@@ -4893,5 +4902,19 @@ mod tests {
         for (w, h) in [(1, 1), (30, 8), (60, 15)] {
             tab_screen(&s, w, h);
         }
+    }
+
+    #[test]
+    fn uppercase_keys_are_bold_lowercase_are_not() {
+        use ratatui::style::Modifier;
+        for key in ["Q", "M", "L", "W", "X  Del", "T", "G"] {
+            let st = key_style(key, CYAN);
+            assert!(st.add_modifier.contains(Modifier::BOLD), "{key}");
+            assert_eq!(st.fg, Some(CYAN));
+        }
+        for key in ["q", "w", "t", "Enter", "Esc", "Shift+/", "g", "x"] {
+            assert!(!key_style(key, CYAN).add_modifier.contains(Modifier::BOLD), "{key}");
+        }
+        assert!(key_style("T", MUTED).add_modifier.contains(Modifier::BOLD));
     }
 }
