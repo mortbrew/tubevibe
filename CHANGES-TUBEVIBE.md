@@ -1137,6 +1137,18 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.8)
 
+### R opens My Recommendations; X on a tab in the menu (`key-remap`)
+
+- **`R`** opens My Recommendations from anywhere, like choosing it in the
+  menu (it reloads only if older than 60 s). Not while typing. In Help it
+  shares the `R  S  A` row.
+- Fix: **`X`** (or Del) on a tab under the menu cursor did nothing. Now it
+  works like `X` in that tab: it asks, naming the list the video came from,
+  then closes the tab and takes the video out of that list. A tab with no
+  such list just closes, like `x`.
+- Tests: `capital_keys_open_sections_from_anywhere_but_not_while_typing`
+  (now with `R`), `shift_x_on_a_tab_in_the_menu_works_like_in_the_tab`.
+
 ### Confirm dialogs wrap instead of cutting the question (`key-remap`)
 
 - Every yes/no box word-wraps its question by cell width, keeping the

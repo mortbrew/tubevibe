@@ -39,6 +39,7 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
     ('M', "M", Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('L', "L", Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
     ('Q', "Q", Action::AskQuit, Text::new("salir (pide confirmar)", "quit (asks first)")),
+    ('R', "R", Action::GoSection(Section::Inicio), Text::new("abrir Mis recomendados", "open My Recommendations")),
     ('S', "S", Action::GoSection(Section::Configuracion), Text::new("abrir Configuración", "open Settings")),
     ('A', "A", Action::GoSection(Section::AcercaDe), Text::new("abrir Acerca de", "open About")),
     (
@@ -165,7 +166,7 @@ pub fn global_rows(lang: Lang) -> Vec<(String, &'static str)> {
         ("?".into(), pick("esta ayuda", "this help")),
         ("M  L".into(), pick("menú sí / no · idioma: English", "menu on / off · language: español")),
         ("Q  Ctrl+C".into(), pick("salir (pide confirmar) / salir ya", "quit (asks first) / quit now")),
-        ("S  A".into(), pick("abrir Configuración / Acerca de", "open Settings / About")),
+        ("R  S  A".into(), pick("Recomendados, Configuración, Acerca de", "My Recommendations, Settings, About")),
         ("Y  V".into(), pick("abrir Ver después: YouTube / tubevibe", "open Watch Later: YouTube / tubevibe")),
     ]
 }
@@ -253,6 +254,7 @@ pub fn map(key: KeyEvent, ctx: KeyContext) -> Option<Action> {
             KeyCode::Char('/') => Some(Action::FocusSearch),
             KeyCode::Char('f') => Some(Action::ToggleFullscreen),
             KeyCode::Char('x') => Some(Action::MenuCloseTab),
+            KeyCode::Char('X') | KeyCode::Delete => Some(Action::MenuTrash),
             _ => None,
         };
     }
@@ -365,7 +367,7 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             let mut menu = rows(IN_MENU, lang);
             // → opens too (not Quit); the bar keeps just Enter.
             menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
-            menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
+            menu.push(("x  X".into(), lang.pick("cerrar la pestaña del cursor (X: y quitar)", "close the tab under the cursor (X: and remove)")));
             menu
         }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),

@@ -621,6 +621,8 @@ pub enum Action {
     ScrollTabs(isize),
     /// `x` in the menu: closes the tab under the cursor, like x in it.
     MenuCloseTab,
+    /// `X` on a tab in the menu: like `X` in that tab.
+    MenuTrash,
     /// `t`: the selected video in a new tab, left in the background.
     OpenInBackground,
     /// `t`: the selected video in a new tab, shown at once.
@@ -715,7 +717,7 @@ pub enum Action {
     },
     /// Open this section of the menu (a click on it).
     OpenSection(usize),
-    /// `S`, `A`, `Y`, `V`: open that menu section from anywhere.
+    /// `R`, `S`, `A`, `Y`, `V`: open that menu section from anywhere.
     GoSection(Section),
     /// Select this row of the list (a click on it).
     Select(usize),
@@ -1728,6 +1730,10 @@ impl State {
                     if self.tabs.iter().any(|t| t.id == tab) {
                         self.remove_tab(tab);
                         effects.push(Effect::Close(tab));
+                        // From the menu: the cursor stays on a tab that exists.
+                        if let Some(m) = self.menu_tab {
+                            self.menu_tab = (!self.tabs.is_empty()).then(|| m.min(self.tabs.len() - 1));
+                        }
                     }
                     self.confirm = Some(match source {
                         TabSource::YouTubeLater => Confirm::RemoveFromLater(video),
@@ -1887,6 +1893,10 @@ impl State {
                 // The cursor: the next tab, else the previous, else the sections.
                 self.menu_tab = (!self.tabs.is_empty()).then(|| i.min(self.tabs.len() - 1));
                 return vec![Effect::Close(id)];
+            }
+            Action::MenuTrash => {
+                let MenuRow::Tab(i) = self.menu_row() else { return Vec::new() };
+                return self.ask_close_and_remove_tab(i, true);
             }
             Action::CloseTab => {
                 if let Some(id) = self.active_tab().map(|t| t.id) {
@@ -3407,7 +3417,16 @@ impl State {
     /// `X` in a video tab: from a list it can leave, ask to close the tab and
     /// take the video out of that list; otherwise it only closes the tab.
     fn ask_close_and_remove(&mut self) -> Vec<Effect> {
-        let Some(tab) = self.active_tab() else { return Vec::new() };
+        match self.active.checked_sub(1) {
+            Some(i) if i < self.tabs.len() => self.ask_close_and_remove_tab(i, false),
+            _ => Vec::new(),
+        }
+    }
+
+    /// `X` on tab `i` (shown, or under the menu cursor): ask, naming the
+    /// list it came from; without one, just close it like `x`.
+    fn ask_close_and_remove_tab(&mut self, i: usize, from_menu: bool) -> Vec<Effect> {
+        let Some(tab) = self.tabs.get(i) else { return Vec::new() };
         let (id, source, video) = (tab.id, tab.source.clone(), tab.playback.video.clone());
         match (source, video) {
             (Some(source), Some(video)) => {
@@ -3423,6 +3442,7 @@ impl State {
                 self.confirm = Some(Confirm::CloseAndRemove { tab: id, source, video });
                 Vec::new()
             }
+            _ if from_menu => self.apply(Action::MenuCloseTab),
             _ => self.apply(Action::CloseTab),
         }
     }
@@ -7531,6 +7551,7 @@ mod tests {
             ('A', Section::AcercaDe),
             ('Y', Section::VerDespues),
             ('V', Section::Guardados),
+            ('R', Section::Inicio),
         ] {
             // From a list, a video tab and Up Next.
             for setup in 0..3 {
@@ -7552,5 +7573,32 @@ mod tests {
             s.update(Action::FocusSearch);
             assert_eq!(crate::keymap::map(shift(c), s.key_context()), Some(Action::Input(c)));
         }
+    }
+
+    #[test]
+    fn shift_x_on_a_tab_in_the_menu_works_like_in_the_tab() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        // A tab from tubevibe Watch Later: asks naming it, then closes and removes.
+        let mut s = State::new(Config::default(), vec![video("a"), video("b")]);
+        open(&mut s, Section::Guardados);
+        s.update(Action::Enter);
+        let tab = s.active_tab().unwrap().id;
+        s.update(Action::GoTab(0));
+        s.focus = Focus::Menu;
+        s.menu_tab = Some(0);
+        let key = KeyEvent::new(KeyCode::Char('X'), KeyModifiers::SHIFT);
+        assert_eq!(crate::keymap::map(key, s.key_context()), Some(Action::MenuTrash));
+        assert!(s.update(Action::MenuTrash).is_empty());
+        assert_eq!(s.confirm, Some(Confirm::CloseAndRemove { tab, source: TabSource::Saved, video: video("a") }));
+        assert_eq!(s.update(Action::Confirm(true)), [Effect::Close(tab), Effect::SaveSaved(vec![video("b")])]);
+        assert!(s.tabs.is_empty() && s.menu_tab.is_none());
+        // A tab from a feed: just closes, like x.
+        let mut s = with_videos(&["a", "b"]);
+        let a = play(&mut s, 0);
+        s.update(Action::GoTab(0));
+        s.focus = Focus::Menu;
+        s.menu_tab = Some(0);
+        assert_eq!(s.update(Action::MenuTrash), [Effect::Close(a)]);
+        assert!(s.confirm.is_none() && s.tabs.is_empty());
     }
 }

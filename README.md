@@ -257,6 +257,7 @@ setting.
 | `M` | show / hide the menu |
 | `L` | English / español |
 | `Q` | quit (asks first; says so if downloads are running) |
+| `R` | open My Recommendations, from anywhere (reloads only if older than 60 s, like the menu) |
 | `S` | open Settings, from anywhere |
 | `A` | open About, from anywhere |
 | `Y` | open YouTube Watch Later, from anywhere |
