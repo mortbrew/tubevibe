@@ -1148,13 +1148,15 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   same theme colour; lowercase keys are drawn regular, so Shift keys stand out.
 - Tests: `t_opens_a_tab_and_goes_to_it_shift_t_stays`,
   `uppercase_keys_are_bold_lowercase_are_not`.
+- The help key is shown as `?` everywhere (bottom bar `? Help`, Help,
+  splash) instead of `Shift+/`; the key itself is unchanged.
 
 ### One key per command: no more Ctrl+Y (`key-remap`)
 
 - The `Ctrl+Y` prefix is gone (`Ctrl+Y` alone does nothing). Every
   command is now a single key: lowercase for everyday ones, Shift for the
   bigger ones.
-  - `Shift+/` (`?`): help. `M`: show / hide the menu. `L`: English /
+  - `?`: help. `M`: show / hide the menu. `L`: English /
     español. `Q`: quit, after a yes/no question (it still says when
     downloads are running). Plain `q` does nothing; `Ctrl+C` still quits
     at once, and so does Enter on Quit in the menu. The old "go to the
@@ -1181,7 +1183,7 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   this one exits). Builds from source never restart this way.
 - Bottom bar: only action keys now; moving around (arrows, `j k`, `Tab`,
   `Esc`, "go to the menu", "back") is in the help. The last hint is
-  `Shift+/ Help`.
+  `? Help`.
 - Help, README, the website and every hint name the new keys; the help's
   first box lists the commands that work anywhere, with `Alt+,` / `Alt+.`
   and `Ctrl+C`.

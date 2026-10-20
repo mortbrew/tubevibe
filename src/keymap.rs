@@ -35,7 +35,7 @@ pub const VOLUME_STEP: i32 = 5;
 
 /// Commands that work everywhere but while typing: `(char, key name, action, what)`.
 pub const GLOBAL: &[(char, &str, Action, Text)] = &[
-    ('?', "Shift+/", Action::ToggleHelp, Text::new("esta ayuda", "this help")),
+    ('?', "?", Action::ToggleHelp, Text::new("esta ayuda", "this help")),
     ('M', "M", Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('L', "L", Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
     ('Q', "Q", Action::AskQuit, Text::new("salir (pide confirmar)", "quit (asks first)")),

@@ -1431,8 +1431,8 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
         ))
         .fg(MUTED),
         Line::from(lang.pick(
-            "Shift+/  muestra todos los atajos explicados · L  English",
-            "Shift+/  shows every shortcut, explained · L  español",
+            "?  muestra todos los atajos explicados · L  English",
+            "?  shows every shortcut, explained · L  español",
         ))
         .fg(MUTED),
     ];
@@ -2024,7 +2024,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
     // Every shortcut, explained: the one hint always shown.
-    let all_keys = key("Shift+/", "Ayuda", "Help");
+    let all_keys = key("?", "Ayuda", "Help");
     // Moving around (arrows, j k, Tab, Esc) is in the help, not the bar.
     let normal = state.confirm.is_none() && !state.help && state.context.is_none() && state.prompt.is_none();
     // `s` asks before unsubscribing; it says so when it will.
@@ -2280,7 +2280,7 @@ pub(crate) fn key_style(key: &str, color: Color) -> Style {
     if upper { Style::new().fg(color).bold() } else { Style::new().fg(color) }
 }
 
-/// As many hints as fit in the line, whole; the last one (`Shift+/`, every
+/// As many hints as fit in the line, whole; the last one (`?`, every
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
     let hint = |(key, description): &(String, String)| {
@@ -3179,12 +3179,12 @@ mod tests {
         assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
         assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
         assert!(at("Space", "Pause") < at("x", "Close the Tab"));
-        assert_eq!(keys.last().unwrap(), &("Shift+/".to_string(), "Help".to_string()));
+        assert_eq!(keys.last().unwrap(), &("?".to_string(), "Help".to_string()));
         s.update(Action::ToggleUiLang);
         let keys = hints(&s);
         assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
         assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
-        assert_eq!(keys.last().unwrap(), &("Shift+/".to_string(), "Ayuda".to_string()));
+        assert_eq!(keys.last().unwrap(), &("?".to_string(), "Ayuda".to_string()));
     }
 
     #[test]
@@ -3249,7 +3249,7 @@ mod tests {
     #[test]
     fn hints_follow_the_context() {
         let mut s = state();
-        assert_eq!(hint_keys(&s), ["/", "Shift+/"], "the menu: no moving keys");
+        assert_eq!(hint_keys(&s), ["/", "?"], "the menu: no moving keys");
         s.update(Action::FocusSearch);
         s.update(Action::Back);
         let tab = with_tab();
@@ -3257,7 +3257,7 @@ mod tests {
         let list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(
             hint_keys(&list),
-            ["Enter", "v", "w", "W", "a", "s", "g", "d", "c", "/", "Shift+/"],
+            ["Enter", "v", "w", "W", "a", "s", "g", "d", "c", "/", "?"],
             "Inicio: a feed"
         );
         let mut search = state();
@@ -3302,7 +3302,7 @@ mod tests {
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
             assert!(screen.contains("Space Mark Several"), "{screen}");
-            assert!(screen.contains("Shift+/ Help"), "whole hints only, the last one kept");
+            assert!(screen.contains("? Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -3351,7 +3351,7 @@ mod tests {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
         assert!(screen.contains("w ver después YouTube"), "{screen}");
         assert!(screen.contains("W ver después tubevibe"), "{screen}");
-        assert!(screen.contains("Shift+/ Ayuda"));
+        assert!(screen.contains("? Ayuda"));
     }
 
     #[test]
@@ -3436,7 +3436,7 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "Shift+/ Help"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "? Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
@@ -3462,7 +3462,7 @@ mod tests {
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("Shift+/ Ayuda"), "{line}");
+        assert!(line.contains("? Ayuda"), "{line}");
         assert!(line.contains("Espacio pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
@@ -4912,7 +4912,7 @@ mod tests {
             assert!(st.add_modifier.contains(Modifier::BOLD), "{key}");
             assert_eq!(st.fg, Some(CYAN));
         }
-        for key in ["q", "w", "t", "Enter", "Esc", "Shift+/", "g", "x"] {
+        for key in ["q", "w", "t", "Enter", "Esc", "?", "g", "x"] {
             assert!(!key_style(key, CYAN).add_modifier.contains(Modifier::BOLD), "{key}");
         }
         assert!(key_style("T", MUTED).add_modifier.contains(Modifier::BOLD));

@@ -138,7 +138,7 @@ Every video opens in its own tab.
   machines without a browser (servers, SSH)
 - A settings screen for everything; changes go to `config.toml`, keeping your
   comments. `$EDITOR` can open the file from the app
-- The bottom bar always shows the keys that work right now; `Shift+/` (`?`) lists
+- The bottom bar always shows the keys that work right now; `?` lists
   them all
 - English or Spanish, following the system language until you pick one
 - Short animations when pages and dialogs open, each one can be turned off
@@ -253,7 +253,7 @@ setting.
 
 | Key | Action |
 |---|---|
-| `Shift+/` (`?`) | every shortcut, explained |
+| `?` | every shortcut, explained |
 | `M` | show / hide the menu |
 | `L` | English / español |
 | `Q` | quit (asks first; says so if downloads are running) |
