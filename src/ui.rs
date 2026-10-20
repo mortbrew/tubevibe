@@ -2374,7 +2374,6 @@ fn draw_help_section(frame: &mut Frame, title: &str, rows: &[(String, &'static s
 }
 
 fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
-    let area = centered(frame.area(), 56, 5);
     let question = match confirm {
         Confirm::Unsubscribe { name, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Desuscribirte de ", "Unsubscribe from ")),
@@ -2384,7 +2383,7 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         Confirm::Quit(0) => Line::from(lang.pick("¿Salir de tubevibe?", "Quit tubevibe?")),
         Confirm::ForgetHistory(video) => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" del historial?", " from history?")),
         ]),
         Confirm::Download { title, running } => Line::from(vec![
@@ -2394,12 +2393,12 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
                 (false, Lang::Es) => "¿Quitar de la lista ",
                 (false, _) => "Take off the list ",
             }),
-            Span::styled(truncate(title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw("?"),
         ]),
         Confirm::CloseAndRemove { source, video, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Cerrar y quitar ", "Close and remove ")),
-            Span::styled(truncate(&video.title, 20), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(
                 match source {
@@ -2418,26 +2417,26 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         ]),
         Confirm::DeletePlaylist { title, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Borrar de YouTube la lista ", "Delete the playlist ")),
-            Span::styled(truncate(title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick("?", " from YouTube?")),
         ]),
         Confirm::RemoveFromLater(video) => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(lang.pick(YOUTUBE_LATER.0, YOUTUBE_LATER.1), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
         ]),
         Confirm::RemoveFromSaved(video) => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(lang.pick(LOCAL_LATER.0, LOCAL_LATER.1), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
         ]),
         Confirm::RemoveFromPlaylist { playlist, video } => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(truncate(&playlist.title, 20), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
@@ -2455,7 +2454,7 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         Confirm::TrashDownload { path, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Mandar a la papelera ", "Move to the trash ")),
             Span::styled(
-                truncate(&path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()), 30),
+                truncate(&path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()), 60),
                 Style::new().fg(MAGENTA).bold(),
             ),
             Span::raw("?"),
@@ -2467,19 +2466,129 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             };
             Line::from(vec![
                 Span::raw(lang.pick("¿Mandar a la papelera ", "Move to the trash ")),
-                Span::styled(truncate(&what, 30), Style::new().fg(MAGENTA).bold()),
+                Span::styled(what, Style::new().fg(MAGENTA).bold()),
                 Span::raw("?"),
             ])
         }
     };
-    let lines = vec![
-        Line::from(""),
-        question,
-        Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED),
-    ];
+    let (area, message) = confirm_layout(frame.area(), question);
+    let mut lines = vec![Line::from("")];
+    lines.extend(message);
+    lines.push(Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED));
     let title = lang.pick(" Confirmar ", " Confirm ");
     frame.render_widget(Clear, area);
     frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
+}
+
+/// The confirm box for `question` on `screen`: as wide as the question
+/// (at least 40, at most 72, never past the screen less a margin), the
+/// question word-wrapped by cell width keeping its coloured spans, as tall
+/// as the wrapped lines (capped to the screen). If it still would not fit,
+/// the title (the first magenta span) is shortened with `…`, so the list
+/// name and the question mark always show.
+fn confirm_layout(screen: Rect, question: Line) -> (Rect, Vec<Line<'static>>) {
+    let spans: Vec<Span<'static>> =
+        question.spans.into_iter().map(|s| Span::styled(s.content.into_owned(), s.style)).collect();
+    let natural = spans.iter().map(Span::width).sum::<usize>() as u16 + 4;
+    let max_width = screen.width.saturating_sub(4).min(72);
+    let width = natural.max(40).min(max_width).max(screen.width.min(8));
+    let text_width = usize::from(width.saturating_sub(4)).max(1);
+    // Border, blank line, hint line, border; and a line of margin each side.
+    let max_lines = usize::from(screen.height.saturating_sub(6)).max(1);
+    let mut lines = wrap_spans(&spans, text_width);
+    if lines.len() > max_lines
+        && let Some(t) = spans.iter().position(|s| s.style.fg == Some(MAGENTA))
+    {
+        let title: Vec<char> = spans[t].content.chars().collect();
+        let (mut lo, mut hi) = (0, title.len());
+        // The longest title that fits.
+        while lo < hi {
+            let mid = (lo + hi).div_ceil(2);
+            let mut shorter = spans.clone();
+            shorter[t].content = format!("{}…", title[..mid].iter().collect::<String>().trim_end()).into();
+            if wrap_spans(&shorter, text_width).len() <= max_lines { lo = mid } else { hi = mid - 1 }
+        }
+        let mut shorter = spans.clone();
+        shorter[t].content = format!("{}…", title[..lo].iter().collect::<String>().trim_end()).into();
+        lines = wrap_spans(&shorter, text_width);
+    }
+    lines.truncate(max_lines);
+    let height = (lines.len() as u16 + 4).min(screen.height);
+    (centered(screen, width, height), lines)
+}
+
+/// Greedy word wrap by cell width; styles stay with their words, and a word
+/// wider than the line is cut by cells.
+fn wrap_spans(spans: &[Span<'static>], width: usize) -> Vec<Line<'static>> {
+    use unicode_width::UnicodeWidthStr;
+    // Pieces: runs of non-space or of spaces, each with its style.
+    let mut pieces: Vec<(String, Style)> = Vec::new();
+    for span in spans {
+        let mut current = String::new();
+        for c in span.content.chars() {
+            if !current.is_empty() && (c == ' ') != current.ends_with(' ') {
+                pieces.push((std::mem::take(&mut current), span.style));
+            }
+            current.push(c);
+        }
+        if !current.is_empty() {
+            pieces.push((current, span.style));
+        }
+    }
+    let mut lines: Vec<Vec<Span<'static>>> = vec![Vec::new()];
+    let mut used = 0;
+    // Words glued across spans ("list" + "?") move together.
+    let mut k = 0;
+    while k < pieces.len() {
+        if pieces[k].0.starts_with(' ') {
+            if used > 0 {
+                let w = pieces[k].0.width();
+                if used + w <= width {
+                    lines.last_mut().unwrap().push(Span::styled(pieces[k].0.clone(), pieces[k].1));
+                    used += w;
+                } else {
+                    lines.push(Vec::new());
+                    used = 0;
+                }
+            }
+            k += 1;
+            continue;
+        }
+        let mut end = k + 1;
+        while end < pieces.len() && !pieces[end].0.starts_with(' ') {
+            end += 1;
+        }
+        let word_width: usize = pieces[k..end].iter().map(|(t, _)| t.width()).sum();
+        if used > 0 && used + word_width > width {
+            // Drop the trailing space before breaking.
+            let line = lines.last_mut().unwrap();
+            if line.last().is_some_and(|s| s.content.starts_with(' ')) {
+                line.pop();
+            }
+            lines.push(Vec::new());
+            used = 0;
+        }
+        for (text, style) in &pieces[k..end] {
+            let mut chunk = String::new();
+            for c in text.chars() {
+                let cw = c.to_string().width();
+                if used + cw > width && used > 0 {
+                    if !chunk.is_empty() {
+                        lines.last_mut().unwrap().push(Span::styled(std::mem::take(&mut chunk), *style));
+                    }
+                    lines.push(Vec::new());
+                    used = 0;
+                }
+                chunk.push(c);
+                used += cw;
+            }
+            if !chunk.is_empty() {
+                lines.last_mut().unwrap().push(Span::styled(chunk, *style));
+            }
+        }
+        k = end;
+    }
+    lines.into_iter().filter(|l| !l.is_empty()).map(Line::from).collect()
 }
 
 /// "tubevibe" in big letters (toilet's smmono12 font, 5 cells a letter).
@@ -4916,5 +5025,68 @@ mod tests {
             assert!(!key_style(key, CYAN).add_modifier.contains(Modifier::BOLD), "{key}");
         }
         assert!(key_style("T", MUTED).add_modifier.contains(Modifier::BOLD));
+    }
+
+    fn confirm_text(lines: &[Line]) -> String {
+        lines.iter().map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect::<String>()).collect::<Vec<_>>().join("\n")
+    }
+
+    fn close_remove_question(title: &str) -> Line<'static> {
+        Line::from(vec![
+            Span::raw("Close and remove "),
+            Span::styled(title.to_owned(), Style::new().fg(MAGENTA).bold()),
+            Span::raw(" from "),
+            Span::styled("YouTube Watch Later", Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
+        ])
+    }
+
+    #[test]
+    fn confirm_wraps_long_messages_at_80_columns() {
+        let screen = Rect::new(0, 0, 80, 24);
+        let (area, lines) = confirm_layout(screen, close_remove_question("[Deleted video]"));
+        assert!(area.width <= 76 && area.x >= 2, "{area:?}");
+        let text = confirm_text(&lines);
+        assert!(text.contains("[Deleted video]") && text.contains("YouTube Watch Later?"), "{text}");
+        assert_eq!(area.height as usize, lines.len() + 4);
+        // The colours stay on their words.
+        let cyan: String = lines
+            .iter()
+            .flat_map(|l| &l.spans)
+            .filter(|s| s.style.fg == Some(CYAN))
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(cyan.split_whitespace().collect::<Vec<_>>(), ["YouTube", "Watch", "Later"]);
+        // A long title wraps over several lines, nothing cut.
+        let long = "A very long video title that goes on and on about many things ".repeat(2);
+        let (area, lines) = confirm_layout(screen, close_remove_question(long.trim()));
+        assert!(lines.len() > 1 && area.height as usize == lines.len() + 4);
+        let words = confirm_text(&lines).replace('\n', " ");
+        assert!(words.contains(long.trim()) && words.ends_with("YouTube Watch Later?"), "{words}");
+        // In a full draw, the hint keeps its own line.
+        let mut s = state();
+        s.confirm = Some(Confirm::RemoveFromLater(Video { title: long.trim().into(), ..video("a") }));
+        let screen = render_screen(&s, 80, 24).join("\n");
+        assert!(screen.contains("YouTube?"), "{screen}");
+        assert!(screen.lines().any(|l| l.contains("s = sí · cualquier otra tecla = no") && !l.contains("YouTube")));
+    }
+
+    #[test]
+    fn confirm_shortens_only_the_title_on_a_narrow_screen() {
+        let long = "word ".repeat(200);
+        for (w, h) in [(40, 12), (30, 10), (24, 10)] {
+            let (area, lines) = confirm_layout(Rect::new(0, 0, w, h), close_remove_question(&long));
+            assert!(area.width <= w && area.height <= h, "{w}x{h} {area:?}");
+            let text = confirm_text(&lines).replace('\n', " ");
+            assert!(text.contains('…'), "{w}x{h}: {text}");
+            assert!(text.ends_with("Later?"), "{w}x{h}: {text}");
+        }
+        // Tiny screens never panic.
+        for (w, h) in [(0, 0), (1, 1), (3, 2), (8, 4), (10, 3)] {
+            let _ = confirm_layout(Rect::new(0, 0, w, h), close_remove_question(&long));
+            let mut s = state();
+            s.confirm = Some(Confirm::RemoveFromLater(Video { title: long.clone(), ..video("a") }));
+            let _ = render_screen(&s, w.max(1), h.max(1));
+        }
     }
 }

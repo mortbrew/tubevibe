@@ -1137,6 +1137,17 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.8)
 
+### Confirm dialogs wrap instead of cutting the question (`key-remap`)
+
+- Every yes/no box word-wraps its question by cell width, keeping the
+  coloured title and list name, and grows to fit (40–72 columns, never past
+  the screen less a margin; height capped too). Titles are no longer cut at
+  20–24 characters; only when the question would not fit the screen is the
+  title shortened with `…`, so the list name and the `?` always show. The
+  `y = yes · any other key = no` line stays on its own. No panic at tiny sizes.
+- Tests: `confirm_wraps_long_messages_at_80_columns`,
+  `confirm_shortens_only_the_title_on_a_narrow_screen`.
+
 ### S, A, Y, V open screens from anywhere (`key-remap`)
 
 - **`S`** Settings, **`A`** About, **`Y`** YouTube Watch Later, **`V`**
