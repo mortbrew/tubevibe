@@ -54,16 +54,14 @@ const MAGENTA: Color = TOKYO_NIGHT.magenta;
 /// The menu row of what the main area shows, when the cursor is elsewhere.
 const SHOWN: Color = MAGENTA;
 const GREEN: Color = TOKYO_NIGHT.green;
-const ORANGE: Color = TOKYO_NIGHT.orange;
 const YELLOW: Color = TOKYO_NIGHT.yellow;
 const RED: Color = TOKYO_NIGHT.red;
 const TEAL: Color = TOKYO_NIGHT.teal;
 const PURPLE: Color = TOKYO_NIGHT.purple;
 
 /// One colour per menu entry, in `Section::ALL` order.
-/// The menu's cursor row, sections and tabs alike: the theme's orange (My
-/// Channels' colour when each section had its own).
-const SELECTED: Color = ORANGE;
+/// The menu's cursor row, sections and tabs alike: the theme's accent.
+const SELECTED: Color = crate::theme::ACCENT_DRAWN;
 
 pub struct Icons {
     /// In `Section::ALL` order.
@@ -4427,7 +4425,7 @@ mod tests {
     }
 
     #[test]
-    fn every_menu_cursor_row_is_orange_like_my_channels_was() {
+    fn every_menu_cursor_row_is_in_the_theme_accent() {
         let gruvbox = crate::theme::parse_colors_toml(
             &std::fs::read_to_string(
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/omarchy/gruvbox/colors.toml"),
@@ -4435,7 +4433,8 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(gruvbox.orange, Color::Rgb(0xe1, 0x87, 0x5c), "colors.toml's orange");
+        assert_eq!(gruvbox.accent, Color::Rgb(0x7d, 0xae, 0xa3), "colors.toml's accent");
+        assert_eq!(crate::theme::TOKYO_NIGHT.accent, Color::Rgb(0x7a, 0xa2, 0xf7));
         for palette in [crate::theme::TOKYO_NIGHT, gruvbox] {
             let mut s = with_tab();
             s.palette = palette;
@@ -4446,14 +4445,14 @@ mod tests {
                 let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
                 terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
                 let buffer = terminal.backend().buffer();
-                // The cursor's "▌" and its text, in the palette's orange.
+                // The cursor's "▌" and its text, in the palette's accent.
                 let (x, y) = (0..40u16)
                     .flat_map(|y| (1..25u16).map(move |x| (x, y)))
                     .find(|&(x, y)| buffer[(x, y)].symbol() == "▌")
                     .unwrap_or_else(|| panic!("{:?}", s.menu_row()));
-                assert_eq!(buffer[(x, y)].fg, palette.orange, "{:?}", s.menu_row());
+                assert_eq!(buffer[(x, y)].fg, palette.accent, "{:?}", s.menu_row());
                 let text = (x + 1..25).find(|&c| buffer[(c, y)].symbol().chars().any(char::is_alphabetic)).unwrap();
-                assert_eq!(buffer[(text, y)].fg, palette.orange, "{:?}", s.menu_row());
+                assert_eq!(buffer[(text, y)].fg, palette.accent, "{:?}", s.menu_row());
                 assert_eq!(buffer[(text, y)].bg, palette.highlight);
             }
         }

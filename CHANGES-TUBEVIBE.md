@@ -442,6 +442,7 @@ polblancoo; this fork now carries its own name.
   names; magenta ← `bright_magenta`, purple ← `magenta`, teal ←
   `bright_cyan`; animations fade from `background` and flash `accent`.
   Missing or unreadable roles are mixed from foreground and background
+  (0.8.6: no more mixing; real theme colours instead, see that entry)
   (secondary text 45% of the way, the selected row 14%), and so are colours
   that would be too faint (secondary text under 2:1 contrast, or a selection
   that is louder than a row background, like Omarchy 3 Gruvbox's orange).
@@ -762,19 +763,54 @@ could not update itself either. From now on:
 - `Alt+,` / `Alt+.` and restored tabs are unchanged; going
   to a tab with them gives it the keys.
 
-### One colour for the menu's cursor row (`browser-tab-keys`)
+### The menu's cursor row in the theme's accent; no blended colours (`browser-tab-keys`)
 
-- Every row under the menu's cursor now uses the same colour, for the `▌`
-  and the text: sections, tabs, and Settings / About / Quit. Before, each
-  section had its own colour and a tab used magenta.
-- The colour is the palette's **orange** slot, the one My Channels used.
-  In Tokyo Night it's `#ff9e64`. With Omarchy colours on, it's the
-  `orange` key of the theme's colors.toml (Gruvbox: `#e1875c`). Themes
-  without one (Omarchy 3 / alacritty files) get a mix of their red and
-  yellow.
-- The pink "shown" mark is unchanged.
-- Test: `every_menu_cursor_row_is_orange_like_my_channels_was`, with Tokyo
-  Night and Gruvbox, on every row.
+- **One colour for the menu's cursor row**, both the `▌` and the text:
+  sections, tabs, and Settings / About / Quit.
+  - Before this release each section had its own colour and a tab used
+    magenta. The first try in 0.8.6 used orange.
+  - It's now the theme's **`accent`**, from colors.toml with Omarchy
+    colours on (Gruvbox `#7daea3`). Built-in Tokyo Night uses its accent,
+    `#7aa2f7`.
+  - Tokyo Night's accent is the same colour as its blue, so the interface
+    draws the accent with a stand-in one step off and the recolouring
+    turns it into the real accent, built-in theme included.
+  - The pink "shown" mark is unchanged.
+- **No more blended palette colours.** Each role now falls back only to
+  colours the theme file has:
+  - **orange:** `orange`, else `yellow` (was red and yellow mixed).
+  - **secondary text:** `dark_foreground` / alacritty `dim_foreground`,
+    else `muted`, else bright or normal black, the first readable on the
+    background; else the text colour. Before, it was mixed 45% from text to
+    background.
+  - **selected row:** `selection` / `selection_background`, else
+    `lighter_background`, else bright or normal black, the first close to
+    the background yet readable under the text. Failing that, the first of
+    those that differs from the background, else the background. Before,
+    it was mixed 14% from background to text.
+  - **dialog lines:** `muted`, else bright or normal black, else secondary
+    text. Before, it was mixed 25% from background to text.
+  - **accent:** `accent`, else `blue`, as before.
+- **What changes in the fixture themes:**
+  - Omarchy 3 and 2 Gruvbox get `#3c3836` (their black) for the selected
+    row, and their text colour for secondary text, since they have no
+    readable dim colour. Their orange is now their yellow.
+  - Themes with a full Omarchy 4 colors.toml are unchanged.
+- **Accent on the selected row (contrast):**
+
+  | Theme | Contrast |
+  |---|---|
+  | Tokyo Night (built-in) | 5.3 or more |
+  | Gruvbox v3 / v2 | 4.67 |
+  | Gruvbox | 3.55 |
+  | Catppuccin Latte | 3.18 |
+  | Rosé Pine | 2.47 |
+  | Catppuccin Latte from alacritty.toml | 2.27 (no accent: blue on its bright black) |
+
+  The two light ones are weak. The row is bold and marked with `▌`.
+- Tests: `every_menu_cursor_row_is_in_the_theme_accent` (render, Tokyo
+  Night and Gruvbox, every row), `every_colour_is_one_the_theme_file_has`
+  (all seven fixtures), and `the_accent_reads_on_the_selected_row`.
 
 ### Menu, Preview and Comments widths in Settings (`browser-tab-keys`)
 
