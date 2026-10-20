@@ -97,6 +97,9 @@ struct Cli {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Where this binary is now: after Update Now replaces it, Linux names
+    // the running one "… (deleted)", so Restart Now uses this path.
+    let exe = std::env::current_exe().ok();
     let cli = Cli::parse();
     // Renamed from tubetui: its settings, login copies, history and lists come
     // along the first time (copied; the old folders stay as they were).
@@ -138,6 +141,7 @@ fn main() -> anyhow::Result<()> {
     let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle("tubevibe"));
     set_focus_reports(true);
     let result = runtime.run(&mut terminal);
+    let restart = runtime.state.restart && result.is_ok();
     // Stop every mpv first so no frame arrives after the cleanup.
     drop(runtime);
     player::clear_images();
@@ -147,7 +151,36 @@ fn main() -> anyhow::Result<()> {
     if let Err(e) = &result {
         append(&crash_log, &format!("error: {e:#}"));
     }
+    if restart && let Some(exe) = exe {
+        // Like Update Now, never for a build from source.
+        if tubevibe::update::is_dev_build(&exe.display().to_string()) {
+            eprintln!("tubevibe: built from source, not restarting");
+        } else {
+            let error = restart_into(&exe);
+            eprintln!("tubevibe: could not restart {}: {error}", exe.display());
+            append(&crash_log, &format!("restart: {error}"));
+        }
+    }
     result
+}
+
+/// Starts `exe` with the same arguments in place of this process: on Unix
+/// it replaces it (same terminal, same pid); on Windows it starts and this
+/// one exits. Returns only on failure.
+fn restart_into(exe: &Path) -> std::io::Error {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        std::process::Command::new(exe).args(&args).exec()
+    }
+    #[cfg(not(unix))]
+    {
+        match std::process::Command::new(exe).args(&args).spawn() {
+            Ok(_) => std::process::exit(0),
+            Err(e) => e,
+        }
+    }
 }
 
 /// Launched from a window manager shortcut, the terminal closes with the

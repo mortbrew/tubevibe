@@ -106,6 +106,27 @@ pub struct SavedTab {
     pub queue: Vec<String>,
     #[serde(default)]
     pub audio_only: bool,
+    /// The list it was opened from (`X` takes the video out of it). Unknown
+    /// or damaged: none, the rest of the tab still comes back.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub source: Option<TabSource>,
+}
+
+/// A list a tab's video can be taken out of.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TabSource {
+    /// My YouTube Watch Later.
+    YouTubeLater,
+    /// The local tubevibe Watch Later.
+    Saved,
+    /// One of my YouTube playlists (or Liked videos).
+    Playlist { id: String, title: String },
+}
+
+fn lenient<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<TabSource>, D::Error> {
+    let value = <serde_json::Value as serde::Deserialize>::deserialize(d)?;
+    Ok(serde_json::from_value(value).ok())
 }
 
 pub const TABS_VERSION: u32 = 1;
@@ -374,6 +395,7 @@ mod tests {
                     video: Some(video("a")),
                     queue: vec![video("a").url()],
                     audio_only: false,
+                    source: Some(TabSource::Playlist { id: "PLx".into(), title: "Mine".into() }),
                 },
                 SavedTab {
                     title: "song.mp3".into(),
@@ -381,6 +403,7 @@ mod tests {
                     video: None,
                     queue: vec!["/m/song.mp3".into(), "/m/next.mp3".into()],
                     audio_only: true,
+                    source: None,
                 },
             ],
         };
@@ -429,5 +452,16 @@ mod tests {
         assert_eq!(std::fs::read_to_string(new.join("config.toml")).unwrap(), "changed");
         assert_eq!(moved_path(&old.join("cookies-imported.txt"), &pairs), Some(new.join("cookies-imported.txt")));
         assert_eq!(moved_path(Path::new("/elsewhere/c.txt"), &pairs), None);
+    }
+
+    #[test]
+    fn a_tab_source_it_does_not_know_is_just_dropped() {
+        let path = temp_dir("tabs-source").join("tabs.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let text = r#"{"version":1,"tabs":[{"title":"t","queue":["u"],"source":{"kind":"martian"}},
+            {"title":"u","queue":["v"],"source":{"kind":"saved"}}]}"#;
+        std::fs::write(&path, text).unwrap();
+        let tabs = load_tabs(&path).unwrap().tabs;
+        assert_eq!((tabs[0].source.clone(), tabs[1].source.clone()), (None, Some(TabSource::Saved)));
     }
 }

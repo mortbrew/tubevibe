@@ -1133,3 +1133,105 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   beside Comments Width (two fifths of the rows; left out when the tab is
   too short for them and *Up next*). Wide windows keep the side-by-side
   layout and the width settings; stacked panes take the full width.
+
+
+## 0.8.8: single-key shortcuts (no more Ctrl+Y), Restart Now, t/T tabs, wrapped dialogs and Help (2026-10-20)
+
+### Help rows never run out of their box (`key-remap`)
+
+- Help descriptions now wrap by cell width, continuing indented under the
+  description, so no row is cut at any width. Menu: `x` closes the tab under
+  the cursor, `X` closes it and removes it from its list (two rows); `Tab`
+  and `/` share one. A few long descriptions were shortened, so Help still
+  fits 40 lines at 130 columns with nothing wrapped.
+- In a window too small for it (e.g. 100x40), Help scrolls: ↑ ↓ / j k,
+  PgUp PgDn (and Space); the title says so; any other key closes it.
+- The confirm box's area (used to keep a video from drawing over it) now
+  matches its wrapped size.
+- Test: `no_help_row_is_clipped` (both languages, 130x40, 118x40, 100x40,
+  80x30).
+
+### R opens My Recommendations; X on a tab in the menu (`key-remap`)
+
+- **`R`** opens My Recommendations from anywhere, like choosing it in the
+  menu (it reloads only if older than 60 s). Not while typing. In Help it
+  shares the `R  S  A` row.
+- Fix: **`X`** (or Del) on a tab under the menu cursor did nothing. Now it
+  works like `X` in that tab: it asks, naming the list the video came from,
+  then closes the tab and takes the video out of that list. A tab with no
+  such list just closes, like `x`.
+- Tests: `capital_keys_open_sections_from_anywhere_but_not_while_typing`
+  (now with `R`), `shift_x_on_a_tab_in_the_menu_works_like_in_the_tab`.
+
+### Confirm dialogs wrap instead of cutting the question (`key-remap`)
+
+- Every yes/no box word-wraps its question by cell width, keeping the
+  coloured title and list name, and grows to fit (40–72 columns, never past
+  the screen less a margin; height capped too). Titles are no longer cut at
+  20–24 characters; only when the question would not fit the screen is the
+  title shortened with `…`, so the list name and the `?` always show. The
+  `y = yes · any other key = no` line stays on its own. No panic at tiny sizes.
+- Tests: `confirm_wraps_long_messages_at_80_columns`,
+  `confirm_shortens_only_the_title_on_a_narrow_screen`.
+
+### S, A, Y, V open screens from anywhere (`key-remap`)
+
+- **`S`** Settings, **`A`** About, **`Y`** YouTube Watch Later, **`V`**
+  tubevibe Watch Later: from any list, video tab, *Up next* or Downloads,
+  like choosing that menu item. Not while typing (they type the letter). No
+  clash: these capitals were free everywhere (`s`, `a`, `v` stay as they are).
+- Help: they share two rows of Commands (`S  A`, `Y  V`), and `M  L`,
+  `Q  Ctrl+C` now share rows too, so Help still fits a 40-line terminal. Not
+  in the bottom bar (no room).
+- Test: `capital_keys_open_sections_from_anywhere_but_not_while_typing`.
+
+### t goes to the new tab, T stays; uppercase keys in bold (`key-remap`)
+
+- **`t`** on a video (any list or *Up next*) now opens it in a new tab and
+  shows it; **`T`** opens it in a background tab without moving, as `t` did
+  before. If the video is already open, `t` goes to its tab. Both are in the
+  video's context menu too, and in Help.
+- Shortcuts that are an **uppercase letter** (`Q`, `M`, `L`, `W`, `X`, `T`,
+  `G`…) are drawn **bold** in the bottom bar, Help and context menus, in the
+  same theme colour; lowercase keys are drawn regular, so Shift keys stand out.
+- Tests: `t_opens_a_tab_and_goes_to_it_shift_t_stays`,
+  `uppercase_keys_are_bold_lowercase_are_not`.
+- The help key is shown as `?` everywhere (bottom bar `? Help`, Help,
+  splash) instead of `Shift+/`; the key itself is unchanged.
+
+### One key per command: no more Ctrl+Y (`key-remap`)
+
+- The `Ctrl+Y` prefix is gone (`Ctrl+Y` alone does nothing). Every
+  command is now a single key: lowercase for everyday ones, Shift for the
+  bigger ones.
+  - `?`: help. `M`: show / hide the menu. `L`: English /
+    español. `Q`: quit, after a yes/no question (it still says when
+    downloads are running). Plain `q` does nothing; `Ctrl+C` still quits
+    at once, and so does Enter on Quit in the menu. The old "go to the
+    menu" command is gone (`←` / `Esc` / `Tab` do that).
+  - `w`: YouTube Watch Later; `W`: tubevibe Watch Later. Plain `l` is free.
+  - `x` only ever **closes**: the tab under the cursor in the menu, or the
+    video tab you are in (Up Next too). It never deletes, trashes or
+    removes anything.
+  - `X` takes things out, **always after asking**: files to the trash in
+    My Videos / My Music / Downloads (all the marked ones with Space), a
+    video out of History, YouTube Watch Later, tubevibe Watch Later or a
+    playlist, a running download cancelled, a failed one taken off the
+    list, a playlist deleted in My Playlists. `Del` does the same in lists.
+  - `X` in a video tab: close it **and** take its video out of the list it
+    was opened from; the question names that list (YouTube Watch Later,
+    tubevibe Watch Later or the playlist). A tab opened from anywhere else
+    has nothing to take it out of, so `X` just closes it, like `x`. The
+    list is remembered in `tabs.json` (an unknown or damaged value is
+    ignored; the tab still comes back).
+- **Restart Now**: once Update Now has installed the new version, the About
+  button becomes *Restart Now*. It saves the tabs, stops playback, gives the
+  terminal back and starts the new tubevibe with the same arguments (on
+  Linux and macOS in place of the old one; on Windows a new process, then
+  this one exits). Builds from source never restart this way.
+- Bottom bar: only action keys now; moving around (arrows, `j k`, `Tab`,
+  `Esc`, "go to the menu", "back") is in the help. The last hint is
+  `? Help`.
+- Help, README, the website and every hint name the new keys; the help's
+  first box lists the commands that work anywhere, with `Alt+,` / `Alt+.`
+  and `Ctrl+C`.

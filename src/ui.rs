@@ -540,7 +540,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
             frame.render_widget(Paragraph::new(note).fg(MUTED).alignment(Alignment::Center), frame.area());
         }
         if state.help {
-            draw_help(frame, lang);
+            draw_help(frame, lang, state.help_scroll);
         }
         return;
     }
@@ -615,7 +615,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
     draw_status(frame, state, icons, view, areas.status);
     draw_hints(frame, &hints(state), areas.hints);
     if state.help {
-        draw_help(frame, lang);
+        draw_help(frame, lang, state.help_scroll);
     }
     if let Some(confirm) = &state.confirm {
         draw_confirm(frame, confirm, lang);
@@ -1431,8 +1431,8 @@ fn draw_welcome(frame: &mut Frame, state: &State, icons: &Icons, view: &View, ar
         ))
         .fg(MUTED),
         Line::from(lang.pick(
-            "Ctrl+Y ?  muestra todos los atajos explicados · Ctrl+Y l  English",
-            "Ctrl+Y ?  shows every shortcut, explained · Ctrl+Y l  español",
+            "?  muestra todos los atajos explicados · L  English",
+            "?  shows every shortcut, explained · L  español",
         ))
         .fg(MUTED),
     ];
@@ -2023,8 +2023,10 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     let lang = state.lang();
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
-    // Global commands are two keys: Ctrl+Y, let go, then the letter.
-    let all_keys = key("Ctrl+Y ?", "Ayuda", "Help");
+    // Every shortcut, explained: the one hint always shown.
+    let all_keys = key("?", "Ayuda", "Help");
+    // Moving around (arrows, j k, Tab, Esc) is in the help, not the bar.
+    let normal = state.confirm.is_none() && !state.help && state.context.is_none() && state.prompt.is_none();
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
         key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
@@ -2042,7 +2044,12 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             Confirm::Trash(_) | Confirm::TrashDownload { .. } | Confirm::TrashDownloads { .. } => {
                 key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash")
             }
+            Confirm::Quit(0) => key(lang.pick("s", "y"), "sí, salir", "yes, quit"),
             Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
+            Confirm::ForgetHistory(_) => key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it"),
+            Confirm::Download { running: true, .. } => key(lang.pick("s", "y"), "sí, cancelarla", "yes, cancel it"),
+            Confirm::Download { .. } => key(lang.pick("s", "y"), "sí, quitarla", "yes, remove it"),
+            Confirm::CloseAndRemove { .. } => key(lang.pick("s", "y"), "sí, cerrar y quitar", "yes, close and remove"),
             Confirm::DeletePlaylist { .. } => key(lang.pick("s", "y"), "sí, borrarla", "yes, delete it"),
             Confirm::RemoveFromLater(_) | Confirm::RemoveFromPlaylist { .. } | Confirm::RemoveFromSaved(_) => {
                 key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it")
@@ -2057,10 +2064,6 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             key(lang.pick("Enter / Clic", "Enter / Click"), "hacerlo", "do it"),
             key("Esc", "cerrar", "close"),
         ]
-    } else if state.prefix {
-        let mut keys = vec![key("Ctrl+Y", "ahora la tecla:", "now the key:")];
-        keys.extend(keymap::prefix_rows(lang));
-        return keys;
     } else if let Some(prompt) = &state.prompt {
         match prompt {
             Prompt::Videos { .. } => rows(keymap::IN_SEARCH),
@@ -2099,12 +2102,15 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         if state.related_shown().is_some() {
             keys.push(key("Tab", "A continuación", "Up Next"));
         }
-        keys.push(key("Ctrl+Y x", "cerrar la pestaña", "close the tab"));
+        keys.push(key("x", "cerrar la pestaña", "close the tab"));
+        if state.active_tab().is_some_and(|t| t.source.is_some()) {
+            keys.push(key("X", "cerrar y quitar de la lista", "close and remove from the list"));
+        }
         keys.push(key("v", "Cambiar calidad", "Quality Change"));
         keys.push(key("b", "Cambiar códec", "Codec Change"));
         // The rest of the tab's keys, but the ones above and Up Next's own,
         // which the help explains.
-        let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc"];
+        let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc", "x", "X"];
         keys.extend(
             keymap::IN_TAB
                 .iter()
@@ -2133,7 +2139,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                     key("v", "mostrar vistos", "show watched")
                 },
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("l", "ver después tubevibe", "tubevibe Watch Later"),
+                key("W", "ver después tubevibe", "tubevibe Watch Later"),
                 key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -2144,7 +2150,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
                 key("Enter", "ver", "play"),
-                key("Ctrl+Y x", "quitar de la lista", "remove from the list"),
+                key("X", "quitar de la lista", "remove from the list"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("a", "solo audio", "audio only"),
                 key("c", "canal", "channel"),
@@ -2152,16 +2158,29 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
                 key("Enter", "ver (sigue donde lo dejaste)", "play (resumes where you left)"),
-                key("x", "quitar del historial", "remove from history"),
+                key("X", "quitar del historial", "remove from history"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("l", "ver después tubevibe", "tubevibe Watch Later"),
+                key("W", "ver después tubevibe", "tubevibe Watch Later"),
                 key("c", "canal", "channel"),
                 back,
             ],
+            Some(Items::Videos(_))
+                if state.listing().is_some_and(|l| matches!(l.kind, ListKind::Later | ListKind::Playlist(_))) =>
+            {
+                vec![
+                    key("Enter", "ver", "play"),
+                    key("X", "quitar de la lista", "remove from the list"),
+                    key("W", "ver después tubevibe", "tubevibe Watch Later"),
+                    key("a", "solo audio", "audio only"),
+                    key("d", "descargar", "download"),
+                    key("c", "canal", "channel"),
+                    back,
+                ]
+            }
             Some(Items::Videos(_)) => vec![
                 key("Enter", "ver", "play"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
-                key("l", "ver después tubevibe", "tubevibe Watch Later"),
+                key("W", "ver después tubevibe", "tubevibe Watch Later"),
                 key("a", "solo audio", "audio only"),
                 subscribe.clone(),
                 key("g", "me gusta", "like"),
@@ -2174,7 +2193,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             Some(Items::Profiles(_)) => vec![key("Enter", "usar esta sesión", "use this login"), back],
             Some(Items::Playlists(_)) => vec![
                 key("Enter", "ver sus videos", "its videos"),
-                key("x", "borrar la lista (pide confirmar)", "delete the playlist (asks first)"),
+                key("X", "borrar la lista (pide confirmar)", "delete the playlist (asks first)"),
                 back,
             ],
             Some(Items::Files(_, kind)) => vec![
@@ -2182,22 +2201,22 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                     MediaKind::Music => key("Enter", "escuchar desde esta canción", "play from this song"),
                     MediaKind::Video => key("Enter", "ver", "play"),
                 },
-                // Several files: mark them first, then `x` sends them all.
+                // Several files: mark them first, then `X` sends them all.
                 if state.marked_files().is_empty() {
                     key(keymap::space(lang), "marcar varios", "mark several")
                 } else {
                     key(keymap::space(lang), "marcar / desmarcar", "mark / unmark")
                 },
                 if state.marked_files().is_empty() {
-                    key("x", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
+                    key("X", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
                 } else {
-                    key("x", "los marcados a la papelera (pide confirmar)", "the marked ones to the trash (asks first)")
+                    key("X", "los marcados a la papelera (pide confirmar)", "the marked ones to the trash (asks first)")
                 },
                 back,
             ],
             Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
                 key(keymap::space(lang), "marcar / desmarcar", "mark / unmark"),
-                key("x", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
+                key("X", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
                 back,
             ],
             Some(Items::Downloads(downloads)) => {
@@ -2205,13 +2224,15 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 let mut keys = Vec::new();
                 match selected {
                     Some(DownloadState::Running { .. }) => {
-                        keys.push(key("x", "cancelar la descarga", "cancel the download"))
+                        keys.push(key("X", "cancelar la descarga (pide confirmar)", "cancel the download (asks first)"))
                     }
                     Some(DownloadState::Done(_)) => {
                         keys.push(key("Enter", "ver", "play"));
-                        keys.push(key("x", "a la papelera (pide confirmar)", "move to trash (asks first)"));
+                        keys.push(key("X", "a la papelera (pide confirmar)", "move to trash (asks first)"));
                     }
-                    Some(_) => keys.push(key("x", "quitar de la lista", "take off the list")),
+                    Some(_) => {
+                        keys.push(key("X", "quitar de la lista (pide confirmar)", "take off the list (asks first)"))
+                    }
                     None => {}
                 }
                 if selected.is_some() {
@@ -2221,22 +2242,49 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 keys
             }
             Some(Items::About) if about_button_ready(state) => {
-                vec![key("Enter", "actualizar ahora", "update now"), key("Tab", "ir al menú", "go to the menu"), back]
+                let press = if restart_ready(state) {
+                    key("Enter", "reiniciar ahora", "restart now")
+                } else {
+                    key("Enter", "actualizar ahora", "update now")
+                };
+                vec![press, back]
             }
             Some(Items::About) => vec![back],
             Some(Items::System) => vec![key("Enter", "revisar de nuevo", "check again"), back],
             _ => vec![key("Enter", "cambiar / abrir", "change / open"), back],
         }
     };
+    if normal {
+        // The About button is chosen with Tab: that one stays.
+        const MOVING: &[&str] = &["↑ ↓", "↑ ↓  j k", "j k", "Esc", "Esc  ←  h", "←  Esc"];
+        let menu = state.focus == Focus::Menu;
+        hints.retain(|(k, d)| {
+            let select_button = k == "Tab"
+                && (d.contains("Actualizar")
+                    || d.contains("Update")
+                    || d.contains("Reiniciar")
+                    || d.contains("Restart"));
+            !(MOVING.contains(&k.as_str()) || (k == "Tab" && !select_button) || (menu && k == "Enter"))
+        });
+    }
     hints.push(all_keys);
     hints
 }
 
-/// As many hints as fit in the line, whole; the last one (`Ctrl+Y ?`, every
+/// A shortcut's style: the theme colour, bold when the key is an uppercase
+/// letter (`Q`, `X  Del`, `G`), so Shift keys stand out from lowercase ones.
+pub(crate) fn key_style(key: &str, color: Color) -> Style {
+    let upper = key
+        .split(|c: char| c.is_whitespace() || c == '/' || c == ',')
+        .any(|t| t.len() == 1 && t.chars().all(|c| c.is_ascii_uppercase()));
+    if upper { Style::new().fg(color).bold() } else { Style::new().fg(color) }
+}
+
+/// As many hints as fit in the line, whole; the last one (`?`, every
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
     let hint = |(key, description): &(String, String)| {
-        [Span::styled(key.clone(), Style::new().fg(CYAN).bold()), Span::styled(format!(" {description}   "), MUTED)]
+        [Span::styled(key.clone(), key_style(key, CYAN)), Span::styled(format!(" {description}   "), MUTED)]
     };
     let width = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
     let Some((last, rest)) = hints.split_last() else { return };
@@ -2259,78 +2307,151 @@ pub fn dialog_area(state: &State, screen: Rect) -> Option<Rect> {
     if state.help {
         Some(help_area(screen, state.lang()))
     } else {
-        state.confirm.as_ref().map(|_| centered(screen, 56, 5))
+        state.confirm.as_ref().map(|c| confirm_layout(screen, confirm_question(c, state.lang())).0)
     }
 }
 
-/// The help screen's two balanced columns, so everything fits on a laptop screen.
-type HelpSection = (&'static str, Vec<(String, &'static str)>);
+/// A help section: its title and its rows, already wrapped to the box.
+type HelpBox = (&'static str, Vec<Line<'static>>);
 
-/// The help's sections in two columns of about the same height.
-fn help_columns(lang: Lang) -> (Vec<HelpSection>, Vec<HelpSection>) {
-    let mut sections = keymap::help(lang);
-    let sizes: Vec<usize> = sections.iter().map(|(_, rows)| help_box_height(rows.len()) as usize).collect();
+/// The help's layout for a screen `width` wide: its width, the two columns
+/// of boxes (rows wrapped, continuation lines indented under the
+/// description) and the taller column's height.
+fn help_layout(width: u16, lang: Lang) -> (u16, [Vec<HelpBox>; 2], u16) {
+    let width = width.min(118);
+    // Outer border, a gap between the columns, each box's border.
+    let column = width.saturating_sub(3) / 2;
+    let text = usize::from(column.saturating_sub(2));
+    let mut boxes: Vec<HelpBox> = keymap::help(lang)
+        .into_iter()
+        .map(|(title, rows)| (title, help_rows(&rows, text)))
+        .collect();
+    let sizes: Vec<usize> = boxes.iter().map(|(_, lines)| lines.len() + 2).collect();
     let split =
-        (1..sections.len()).min_by_key(|&k| sizes[..k].iter().sum::<usize>().max(sizes[k..].iter().sum())).unwrap_or(1);
-    let right = sections.split_off(split);
-    (sections, right)
+        (1..boxes.len()).min_by_key(|&k| sizes[..k].iter().sum::<usize>().max(sizes[k..].iter().sum())).unwrap_or(1);
+    let right = boxes.split_off(split);
+    let height = |c: &[HelpBox]| c.iter().map(|(_, l)| l.len() as u16 + 2).sum::<u16>();
+    let tallest = height(&boxes).max(height(&right));
+    (width, [boxes, right], tallest)
 }
 
-/// A section's box: its rows between two border lines.
-fn help_box_height(rows: usize) -> u16 {
-    rows as u16 + 2
+/// One section's rows in `width` cells: keys aligned, then what they do,
+/// wrapped by cell width under itself.
+fn help_rows(rows: &[(String, &'static str)], width: usize) -> Vec<Line<'static>> {
+    let keys = rows.iter().map(|(k, _)| Span::raw(k.as_str()).width()).max().unwrap_or(0) + 2;
+    let room = width.saturating_sub(keys + 1).max(1);
+    let mut lines = Vec::new();
+    for (key, description) in rows {
+        let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
+        for (n, line) in wrapped.into_iter().enumerate() {
+            let lead = if n == 0 {
+                Span::styled(format!(" {}", pad_cells(key, keys)), key_style(key, CYAN))
+            } else {
+                Span::raw(" ".repeat(keys + 1))
+            };
+            let mut spans = vec![lead];
+            spans.extend(line.spans);
+            lines.push(Line::from(spans));
+        }
+    }
+    lines
 }
 
-fn help_column_height(sections: &[HelpSection]) -> u16 {
-    sections.iter().map(|(_, rows)| help_box_height(rows.len())).sum()
-}
-
-/// The help's size: the taller column inside the outer border.
+/// The help's size: the taller column inside the outer border, capped to
+/// the screen (then it scrolls).
 fn help_area(screen: Rect, lang: Lang) -> Rect {
-    let (left, right) = help_columns(lang);
-    centered(screen, 118, help_column_height(&left).max(help_column_height(&right)) + 2)
+    let (width, _, tallest) = help_layout(screen.width, lang);
+    centered(screen, width, tallest + 2)
 }
 
-fn draw_help(frame: &mut Frame, lang: Lang) {
-    let (left, right) = help_columns(lang);
+fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
+    let (_, columns, tallest) = help_layout(frame.area().width, lang);
     let area = help_area(frame.area(), lang);
     frame.render_widget(Clear, area);
-    let title =
-        lang.pick(" ⌨  Atajos de teclado · cualquier tecla cierra ", " ⌨  Keyboard Shortcuts · Any Key Closes ");
+    let scrolls = tallest + 2 > area.height;
+    let title = match (scrolls, lang) {
+        (false, Lang::Es) => " ⌨  Atajos de teclado · cualquier tecla cierra ",
+        (false, _) => " ⌨  Keyboard Shortcuts · Any Key Closes ",
+        (true, Lang::Es) => " ⌨  Atajos · ↑ ↓ desplazar · otra tecla cierra ",
+        (true, _) => " ⌨  Shortcuts · ↑ ↓ Scroll · Other Keys Close ",
+    };
     let block = panel(title, MAGENTA);
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let columns: [Rect; 2] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).spacing(1).areas(inner);
-    for (sections, column) in [left, right].iter().zip(columns) {
-        let heights = sections.iter().map(|(_, rows)| Constraint::Length(help_box_height(rows.len())));
-        for ((title, rows), cell) in sections.iter().zip(Layout::vertical(heights).split(column).iter()) {
-            draw_help_section(frame, title, rows, *cell);
+    if inner.is_empty() {
+        return;
+    }
+    // Drawn whole off screen, then the visible rows copied in.
+    let full = Rect::new(0, 0, inner.width, tallest.max(1));
+    let mut buffer = ratatui::buffer::Buffer::empty(full);
+    let halves: [Rect; 2] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).spacing(1).areas(full);
+    for (boxes, column) in columns.iter().zip(halves) {
+        let heights = boxes.iter().map(|(_, lines)| Constraint::Length(lines.len() as u16 + 2));
+        for ((title, lines), cell) in boxes.iter().zip(Layout::vertical(heights).split(column).iter()) {
+            let block =
+                framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
+            ratatui::widgets::Widget::render(Paragraph::new(lines.clone()).block(block), *cell, &mut buffer);
+        }
+    }
+    let top = scroll.min(tallest.saturating_sub(inner.height));
+    for y in 0..inner.height.min(tallest - top) {
+        for x in 0..inner.width {
+            if let (Some(from), Some(to)) =
+                (buffer.cell((x, y + top)).cloned(), frame.buffer_mut().cell_mut((inner.x + x, inner.y + y)))
+            {
+                *to = from;
+            }
         }
     }
 }
 
-/// One section of the help in its own box: keys aligned, then what they do.
-fn draw_help_section(frame: &mut Frame, title: &str, rows: &[(String, &'static str)], area: Rect) {
-    let width = rows.iter().map(|(keys, _)| Span::raw(keys.as_str()).width()).max().unwrap_or(0) + 2;
-    let lines: Vec<Line> = rows
-        .iter()
-        .map(|(keys, description)| {
-            Line::from(vec![
-                Span::styled(format!(" {}", pad_cells(keys, width)), Style::new().fg(CYAN).bold()),
-                Span::styled(*description, FG),
-            ])
-        })
-        .collect();
-    let block = framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
+    let question = confirm_question(confirm, lang);
+    let (area, message) = confirm_layout(frame.area(), question);
+    let mut lines = vec![Line::from("")];
+    lines.extend(message);
+    lines.push(Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED));
+    let title = lang.pick(" Confirmar ", " Confirm ");
+    frame.render_widget(Clear, area);
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
 }
 
-fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
-    let area = centered(frame.area(), 56, 5);
-    let question = match confirm {
+/// The question a confirm box asks, with its coloured title and list name.
+fn confirm_question<'a>(confirm: &'a Confirm, lang: Lang) -> Line<'a> {
+    match confirm {
         Confirm::Unsubscribe { name, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Desuscribirte de ", "Unsubscribe from ")),
             Span::styled(name.as_str(), Style::new().fg(MAGENTA).bold()),
+            Span::raw("?"),
+        ]),
+        Confirm::Quit(0) => Line::from(lang.pick("¿Salir de tubevibe?", "Quit tubevibe?")),
+        Confirm::ForgetHistory(video) => Line::from(vec![
+            Span::raw(lang.pick("¿Quitar ", "Remove ")),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" del historial?", " from history?")),
+        ]),
+        Confirm::Download { title, running } => Line::from(vec![
+            Span::raw(match (running, lang) {
+                (true, Lang::Es) => "¿Cancelar la descarga de ",
+                (true, _) => "Cancel the download of ",
+                (false, Lang::Es) => "¿Quitar de la lista ",
+                (false, _) => "Take off the list ",
+            }),
+            Span::styled(title.clone(), Style::new().fg(MAGENTA).bold()),
+            Span::raw("?"),
+        ]),
+        Confirm::CloseAndRemove { source, video, .. } => Line::from(vec![
+            Span::raw(lang.pick("¿Cerrar y quitar ", "Close and remove ")),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
+            Span::raw(lang.pick(" de ", " from ")),
+            Span::styled(
+                match source {
+                    crate::app::TabSource::YouTubeLater => lang.pick(YOUTUBE_LATER.0, YOUTUBE_LATER.1).to_owned(),
+                    crate::app::TabSource::Saved => lang.pick(LOCAL_LATER.0, LOCAL_LATER.1).to_owned(),
+                    crate::app::TabSource::Playlist { title, .. } => truncate(title, 20),
+                },
+                Style::new().fg(CYAN).bold(),
+            ),
             Span::raw("?"),
         ]),
         Confirm::Quit(n) => Line::from(vec![
@@ -2340,26 +2461,26 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         ]),
         Confirm::DeletePlaylist { title, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Borrar de YouTube la lista ", "Delete the playlist ")),
-            Span::styled(truncate(title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick("?", " from YouTube?")),
         ]),
         Confirm::RemoveFromLater(video) => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(lang.pick(YOUTUBE_LATER.0, YOUTUBE_LATER.1), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
         ]),
         Confirm::RemoveFromSaved(video) => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(lang.pick(LOCAL_LATER.0, LOCAL_LATER.1), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
         ]),
         Confirm::RemoveFromPlaylist { playlist, video } => Line::from(vec![
             Span::raw(lang.pick("¿Quitar ", "Remove ")),
-            Span::styled(truncate(&video.title, 24), Style::new().fg(MAGENTA).bold()),
+            Span::styled(video.title.clone(), Style::new().fg(MAGENTA).bold()),
             Span::raw(lang.pick(" de ", " from ")),
             Span::styled(truncate(&playlist.title, 20), Style::new().fg(CYAN).bold()),
             Span::raw("?"),
@@ -2377,7 +2498,7 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
         Confirm::TrashDownload { path, .. } => Line::from(vec![
             Span::raw(lang.pick("¿Mandar a la papelera ", "Move to the trash ")),
             Span::styled(
-                truncate(&path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()), 30),
+                truncate(&path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()), 60),
                 Style::new().fg(MAGENTA).bold(),
             ),
             Span::raw("?"),
@@ -2389,19 +2510,122 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
             };
             Line::from(vec![
                 Span::raw(lang.pick("¿Mandar a la papelera ", "Move to the trash ")),
-                Span::styled(truncate(&what, 30), Style::new().fg(MAGENTA).bold()),
+                Span::styled(what, Style::new().fg(MAGENTA).bold()),
                 Span::raw("?"),
             ])
         }
-    };
-    let lines = vec![
-        Line::from(""),
-        question,
-        Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED),
-    ];
-    let title = lang.pick(" Confirmar ", " Confirm ");
-    frame.render_widget(Clear, area);
-    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
+    }
+}
+
+/// The confirm box for `question` on `screen`: as wide as the question
+/// (at least 40, at most 72, never past the screen less a margin), the
+/// question word-wrapped by cell width keeping its coloured spans, as tall
+/// as the wrapped lines (capped to the screen). If it still would not fit,
+/// the title (the first magenta span) is shortened with `…`, so the list
+/// name and the question mark always show.
+fn confirm_layout(screen: Rect, question: Line) -> (Rect, Vec<Line<'static>>) {
+    let spans: Vec<Span<'static>> =
+        question.spans.into_iter().map(|s| Span::styled(s.content.into_owned(), s.style)).collect();
+    let natural = spans.iter().map(Span::width).sum::<usize>() as u16 + 4;
+    let max_width = screen.width.saturating_sub(4).min(72);
+    let width = natural.max(40).min(max_width).max(screen.width.min(8));
+    let text_width = usize::from(width.saturating_sub(4)).max(1);
+    // Border, blank line, hint line, border; and a line of margin each side.
+    let max_lines = usize::from(screen.height.saturating_sub(6)).max(1);
+    let mut lines = wrap_spans(&spans, text_width);
+    if lines.len() > max_lines
+        && let Some(t) = spans.iter().position(|s| s.style.fg == Some(MAGENTA))
+    {
+        let title: Vec<char> = spans[t].content.chars().collect();
+        let (mut lo, mut hi) = (0, title.len());
+        // The longest title that fits.
+        while lo < hi {
+            let mid = (lo + hi).div_ceil(2);
+            let mut shorter = spans.clone();
+            shorter[t].content = format!("{}…", title[..mid].iter().collect::<String>().trim_end()).into();
+            if wrap_spans(&shorter, text_width).len() <= max_lines { lo = mid } else { hi = mid - 1 }
+        }
+        let mut shorter = spans.clone();
+        shorter[t].content = format!("{}…", title[..lo].iter().collect::<String>().trim_end()).into();
+        lines = wrap_spans(&shorter, text_width);
+    }
+    lines.truncate(max_lines);
+    let height = (lines.len() as u16 + 4).min(screen.height);
+    (centered(screen, width, height), lines)
+}
+
+/// Greedy word wrap by cell width; styles stay with their words, and a word
+/// wider than the line is cut by cells.
+fn wrap_spans(spans: &[Span<'static>], width: usize) -> Vec<Line<'static>> {
+    use unicode_width::UnicodeWidthStr;
+    // Pieces: runs of non-space or of spaces, each with its style.
+    let mut pieces: Vec<(String, Style)> = Vec::new();
+    for span in spans {
+        let mut current = String::new();
+        for c in span.content.chars() {
+            if !current.is_empty() && (c == ' ') != current.ends_with(' ') {
+                pieces.push((std::mem::take(&mut current), span.style));
+            }
+            current.push(c);
+        }
+        if !current.is_empty() {
+            pieces.push((current, span.style));
+        }
+    }
+    let mut lines: Vec<Vec<Span<'static>>> = vec![Vec::new()];
+    let mut used = 0;
+    // Words glued across spans ("list" + "?") move together.
+    let mut k = 0;
+    while k < pieces.len() {
+        if pieces[k].0.starts_with(' ') {
+            if used > 0 {
+                let w = pieces[k].0.width();
+                if used + w <= width {
+                    lines.last_mut().unwrap().push(Span::styled(pieces[k].0.clone(), pieces[k].1));
+                    used += w;
+                } else {
+                    lines.push(Vec::new());
+                    used = 0;
+                }
+            }
+            k += 1;
+            continue;
+        }
+        let mut end = k + 1;
+        while end < pieces.len() && !pieces[end].0.starts_with(' ') {
+            end += 1;
+        }
+        let word_width: usize = pieces[k..end].iter().map(|(t, _)| t.width()).sum();
+        if used > 0 && used + word_width > width {
+            // Drop the trailing space before breaking.
+            let line = lines.last_mut().unwrap();
+            if line.last().is_some_and(|s| s.content.starts_with(' ')) {
+                line.pop();
+            }
+            lines.push(Vec::new());
+            used = 0;
+        }
+        for (text, style) in &pieces[k..end] {
+            let mut chunk = String::new();
+            for c in text.chars() {
+                let cw = c.to_string().width();
+                if used + cw > width && used > 0 {
+                    if !chunk.is_empty() {
+                        lines.last_mut().unwrap().push(Span::styled(std::mem::take(&mut chunk), *style));
+                    }
+                    lines.push(Vec::new());
+                    used = 0;
+                }
+                chunk.push(c);
+                used += cw;
+            }
+            if !chunk.is_empty() {
+                lines.last_mut().unwrap().push(Span::styled(chunk, *style));
+            }
+        }
+        k = end;
+    }
+    lines.into_iter().filter(|l| !l.is_empty()).map(Line::from).collect()
 }
 
 /// "tubevibe" in big letters (toilet's smmono12 font, 5 cells a letter).
@@ -2499,7 +2723,7 @@ fn draw_context_menu(frame: &mut Frame, menu: &ContextMenu, lang: Lang) {
             let gap = width.saturating_sub(Span::raw(item.label).width() + Span::raw(item.key).width() + 2);
             let line = Line::from(vec![
                 Span::raw(format!(" {}{}", item.label, " ".repeat(gap))),
-                Span::styled(format!("{} ", item.key), Style::new().fg(MUTED)),
+                Span::styled(format!("{} ", item.key), key_style(item.key, MUTED)),
             ]);
             if i == menu.selected { line.style(Style::new().bg(HIGHLIGHT).fg(BLUE).bold()) } else { line }
         })
@@ -2635,7 +2859,12 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         // The Update Now button: focused with Tab (like a list), pressed with Enter.
         let ready = about_button_ready(state);
         let focused = state.active == 0 && state.focus == Focus::List;
-        let button = format!("  {} {}  ", icons.update, lang.pick("Actualizar Ahora", "Update Now"));
+        let label = if restart_ready(state) {
+            lang.pick("Reiniciar Ahora", "Restart Now")
+        } else {
+            lang.pick("Actualizar Ahora", "Update Now")
+        };
+        let button = format!("  {} {label}  ", icons.update);
         let style = match (ready, focused) {
             (true, true) => Style::new().fg(BG).bg(GREEN).bold(),
             (true, false) => Style::new().fg(GREEN).bg(HIGHLIGHT).bold(),
@@ -2660,8 +2889,10 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
                 lines.push(Line::from(format!("{} {text} {percent}%", icons.downloading)).fg(YELLOW).bold());
             }
             Progress::Done(version) => {
-                let text =
-                    lang.pick("instalada · reiniciá tubevibe para usarla", "Installed · Restart tubevibe to Use It");
+                let text = lang.pick(
+                    "instalada · Reiniciar Ahora la abre (tus pestañas vuelven)",
+                    "Installed · Restart Now Opens It (Your Tabs Come Back)",
+                );
                 lines.push(Line::from(format!("{} tubevibe {version} {text}", icons.up_to_date)).fg(GREEN).bold());
             }
             Progress::Failed(error) => {
@@ -2749,7 +2980,12 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
 /// this copy can be replaced, and no update is running or done.
 fn about_button_ready(state: &State) -> bool {
     state.update.as_ref().is_some_and(|u| matches!(u.replace, Replace::Ready(_)))
-        && matches!(state.self_update, Progress::Idle | Progress::Failed(_))
+        && matches!(state.self_update, Progress::Idle | Progress::Failed(_) | Progress::Done(_))
+}
+
+/// The update is in: the button restarts tubevibe into it.
+fn restart_ready(state: &State) -> bool {
+    matches!(state.self_update, Progress::Done(_))
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
@@ -3088,13 +3324,13 @@ mod tests {
         );
         assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
         assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
-        assert!(at("Space", "Pause") < at("Ctrl+Y x", "Close the Tab"));
-        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Help".to_string()));
+        assert!(at("Space", "Pause") < at("x", "Close the Tab"));
+        assert_eq!(keys.last().unwrap(), &("?".to_string(), "Help".to_string()));
         s.update(Action::ToggleUiLang);
         let keys = hints(&s);
         assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
         assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
-        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Ayuda".to_string()));
+        assert_eq!(keys.last().unwrap(), &("?".to_string(), "Ayuda".to_string()));
     }
 
     #[test]
@@ -3159,15 +3395,15 @@ mod tests {
     #[test]
     fn hints_follow_the_context() {
         let mut s = state();
-        assert_eq!(hint_keys(&s), ["↑ ↓", "Enter", "Tab", "/", "Ctrl+Y ?"]);
-        s.update(Action::Prefix);
-        assert!(hint_keys(&s).contains(&"b".to_string()) && !hint_keys(&s).contains(&"0-9".to_string()));
+        assert_eq!(hint_keys(&s), ["/", "?"], "the menu: no moving keys");
+        s.update(Action::FocusSearch);
+        s.update(Action::Back);
         let tab = with_tab();
         assert!(hint_keys(&tab).contains(&"Espacio".to_string()) && hint_keys(&tab).contains(&"[ ]".to_string()));
         let list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(
             hint_keys(&list),
-            ["Enter", "v", "w", "l", "a", "s", "g", "d", "c", "/", "Esc", "Ctrl+Y ?"],
+            ["Enter", "v", "w", "W", "a", "s", "g", "d", "c", "/", "?"],
             "Inicio: a feed"
         );
         let mut search = state();
@@ -3178,9 +3414,6 @@ mod tests {
     #[test]
     fn hints_explain_two_step_keys() {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
-        let mut s = state();
-        s.update(Action::Prefix);
-        assert_eq!(hints(&s)[0].0, "Ctrl+Y", "says the key comes next");
         let mut list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(hint(&list, "s").as_deref(), Some("suscribirse"));
         list.subs.insert("UCa".into());
@@ -3188,9 +3421,9 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
         assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar varios"));
-        assert_eq!(hint(&files, "x").as_deref(), Some("este a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("este a la papelera (pide confirmar)"));
         files.update(Action::ToggleMark);
-        assert_eq!(hint(&files, "x").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
         files.update(Action::Trash);
         assert_eq!(hint(&files, "s").as_deref(), Some("sí, a la papelera"));
     }
@@ -3215,7 +3448,7 @@ mod tests {
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
             assert!(screen.contains("Space Mark Several"), "{screen}");
-            assert!(screen.contains("Ctrl+Y ? Help"), "whole hints only, the last one kept");
+            assert!(screen.contains("? Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -3233,7 +3466,7 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
         assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
-        assert_eq!(hint(&s, "x").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
         assert_eq!(hint(&s, "Space").as_deref(), Some("Mark / Unmark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
@@ -3250,7 +3483,7 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let done = Download { id: 0, video: video("a"), state: DownloadState::Done("/v/a.mp4".into()) };
         let mut s = with_items(Items::Downloads(vec![done]));
-        assert_eq!(hint(&s, "x").as_deref(), Some("a la papelera (pide confirmar)"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("a la papelera (pide confirmar)"));
         s.confirm = Some(Confirm::TrashDownload { id: 0, path: "/v/a.mp4".into() });
         assert_eq!(hint(&s, "s").as_deref(), Some("sí, a la papelera"));
         s.update(Action::ToggleUiLang);
@@ -3263,8 +3496,8 @@ mod tests {
     fn hint_bar_shows_keys_with_descriptions() {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
         assert!(screen.contains("w ver después YouTube"), "{screen}");
-        assert!(screen.contains("l ver después tubevibe"), "{screen}");
-        assert!(screen.contains("Ctrl+Y ? Ayuda"));
+        assert!(screen.contains("W ver después tubevibe"), "{screen}");
+        assert!(screen.contains("? Ayuda"));
     }
 
     #[test]
@@ -3349,7 +3582,7 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "Ctrl+Y ? Help"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "? Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
@@ -3375,7 +3608,7 @@ mod tests {
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("Ctrl+Y ? Ayuda"), "{line}");
+        assert!(line.contains("? Ayuda"), "{line}");
         assert!(line.contains("Espacio pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
@@ -4009,7 +4242,11 @@ mod tests {
         assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
         let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        assert_eq!((hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()), ("Espacio", "Tab"), "Space before Tab");
+        assert_eq!(
+            (hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()),
+            ("Espacio", "x"),
+            "Space, then x (Tab to Up Next is in the help)"
+        );
         s.update(Action::ToggleFocus);
         let screen = render_with(&s, &view);
         assert!(screen.contains("A continuación · 2 "), "{screen}");
@@ -4074,8 +4311,13 @@ mod tests {
         assert!(s.update(Action::Enter).is_empty(), "one at a time");
         s.update(Action::SelfUpdated(Ok("9.9.9".into())));
         let screen = render(&s);
-        assert!(screen.contains("✔ tubevibe 9.9.9 Installed · Restart tubevibe to Use It"), "{screen}");
+        assert!(screen.contains("✔ tubevibe 9.9.9 Installed · Restart Now Opens It"), "{screen}");
         assert!(!screen.contains("Update with:"), "no command once done: {screen}");
+        // The button is now Restart Now: Enter quits so the runtime starts the new one.
+        assert!(screen.contains("Restart Now") && !screen.contains("Update Now  "), "{screen}");
+        assert_eq!(hints(&s)[0], ("Enter".to_string(), "Restart Now".to_string()));
+        assert!(s.update(Action::Enter).is_empty());
+        assert!(s.restart && s.quit);
     }
 
     #[test]
@@ -4520,7 +4762,7 @@ mod tests {
         };
         let shown = s.tabs[34].id;
         assert_eq!(s.update(x(&s).unwrap()), vec![Effect::Close(shown)]);
-        // The shown tab is gone: the previous one is shown, like Ctrl+Y x, and has the cursor.
+        // The shown tab is gone: the previous one is shown, like x in it, and has the cursor.
         assert_eq!((s.tabs.len(), s.active, s.menu_row()), (34, 34, MenuRow::Tab(33)));
         // Not the shown tab: the next one gets the cursor, the shown one stays.
         s.update(Action::Up);
@@ -4805,6 +5047,111 @@ mod tests {
         }
         for (w, h) in [(1, 1), (30, 8), (60, 15)] {
             tab_screen(&s, w, h);
+        }
+    }
+
+    #[test]
+    fn uppercase_keys_are_bold_lowercase_are_not() {
+        use ratatui::style::Modifier;
+        for key in ["Q", "M", "L", "W", "X  Del", "T", "G"] {
+            let st = key_style(key, CYAN);
+            assert!(st.add_modifier.contains(Modifier::BOLD), "{key}");
+            assert_eq!(st.fg, Some(CYAN));
+        }
+        for key in ["q", "w", "t", "Enter", "Esc", "?", "g", "x"] {
+            assert!(!key_style(key, CYAN).add_modifier.contains(Modifier::BOLD), "{key}");
+        }
+        assert!(key_style("T", MUTED).add_modifier.contains(Modifier::BOLD));
+    }
+
+    fn confirm_text(lines: &[Line]) -> String {
+        lines.iter().map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect::<String>()).collect::<Vec<_>>().join("\n")
+    }
+
+    fn close_remove_question(title: &str) -> Line<'static> {
+        Line::from(vec![
+            Span::raw("Close and remove "),
+            Span::styled(title.to_owned(), Style::new().fg(MAGENTA).bold()),
+            Span::raw(" from "),
+            Span::styled("YouTube Watch Later", Style::new().fg(CYAN).bold()),
+            Span::raw("?"),
+        ])
+    }
+
+    #[test]
+    fn confirm_wraps_long_messages_at_80_columns() {
+        let screen = Rect::new(0, 0, 80, 24);
+        let (area, lines) = confirm_layout(screen, close_remove_question("[Deleted video]"));
+        assert!(area.width <= 76 && area.x >= 2, "{area:?}");
+        let text = confirm_text(&lines);
+        assert!(text.contains("[Deleted video]") && text.contains("YouTube Watch Later?"), "{text}");
+        assert_eq!(area.height as usize, lines.len() + 4);
+        // The colours stay on their words.
+        let cyan: String = lines
+            .iter()
+            .flat_map(|l| &l.spans)
+            .filter(|s| s.style.fg == Some(CYAN))
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(cyan.split_whitespace().collect::<Vec<_>>(), ["YouTube", "Watch", "Later"]);
+        // A long title wraps over several lines, nothing cut.
+        let long = "A very long video title that goes on and on about many things ".repeat(2);
+        let (area, lines) = confirm_layout(screen, close_remove_question(long.trim()));
+        assert!(lines.len() > 1 && area.height as usize == lines.len() + 4);
+        let words = confirm_text(&lines).replace('\n', " ");
+        assert!(words.contains(long.trim()) && words.ends_with("YouTube Watch Later?"), "{words}");
+        // In a full draw, the hint keeps its own line.
+        let mut s = state();
+        s.confirm = Some(Confirm::RemoveFromLater(Video { title: long.trim().into(), ..video("a") }));
+        let screen = render_screen(&s, 80, 24).join("\n");
+        assert!(screen.contains("YouTube?"), "{screen}");
+        assert!(screen.lines().any(|l| l.contains("s = sí · cualquier otra tecla = no") && !l.contains("YouTube")));
+    }
+
+    #[test]
+    fn confirm_shortens_only_the_title_on_a_narrow_screen() {
+        let long = "word ".repeat(200);
+        for (w, h) in [(40, 12), (30, 10), (24, 10)] {
+            let (area, lines) = confirm_layout(Rect::new(0, 0, w, h), close_remove_question(&long));
+            assert!(area.width <= w && area.height <= h, "{w}x{h} {area:?}");
+            let text = confirm_text(&lines).replace('\n', " ");
+            assert!(text.contains('…'), "{w}x{h}: {text}");
+            assert!(text.ends_with("Later?"), "{w}x{h}: {text}");
+        }
+        // Tiny screens never panic.
+        for (w, h) in [(0, 0), (1, 1), (3, 2), (8, 4), (10, 3)] {
+            let _ = confirm_layout(Rect::new(0, 0, w, h), close_remove_question(&long));
+            let mut s = state();
+            s.confirm = Some(Confirm::RemoveFromLater(Video { title: long.clone(), ..video("a") }));
+            let _ = render_screen(&s, w.max(1), h.max(1));
+        }
+    }
+
+    #[test]
+    fn no_help_row_is_clipped() {
+        for lang in [Lang::Es, Lang::En] {
+            // 130x40: everything at once, no scrolling.
+            let (_, _, tallest) = help_layout(130, lang);
+            assert!(tallest + 2 <= 40, "{lang:?}: {tallest}");
+            for (w, h) in [(130u16, 40u16), (118, 40), (100, 40), (80, 30)] {
+                let (width, columns, tallest) = help_layout(w, lang);
+                let text = usize::from((width - 3) / 2 - 2);
+                let mut s = state();
+                s.config.ui.lang = Some(lang);
+                s.help = true;
+                let mut seen = String::new();
+                for scroll in 0..=tallest {
+                    s.help_scroll = scroll;
+                    seen.push_str(&render_screen(&s, w, h).join("\n"));
+                }
+                for (title, lines) in columns.iter().flatten() {
+                    for line in lines {
+                        assert!(line.width() <= text, "{lang:?} {w}: {title}: {line:?}");
+                        let words: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+                        assert!(seen.contains(words.trim()), "{lang:?} {w}x{h}: {title}: {words}");
+                    }
+                }
+            }
         }
     }
 }
