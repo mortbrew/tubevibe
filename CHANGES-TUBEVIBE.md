@@ -1093,3 +1093,18 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 - Tests: every set has every icon; Nerd and Unicode have no emoji and Nerd
   stays in the v3 Font Awesome / Material Design ranges; a status line
   follows the chosen set.
+
+
+## Unreleased (0.8.7)
+
+### Title Case bottom bar, Up Next titles cut with … (`titlecase-and-upnext-ellipsis`)
+
+- Every English label in the bottom key bar is now Title Case, like
+  *Quality Change* and *Help* ("Pause", "Close the Tab", "YouTube Watch
+  Later", "Mark / Unmark"…). Short joining words (to, the, of…) stay
+  lowercase, *tubevibe* stays lowercase, key names are untouched. Spanish
+  is unchanged.
+- Up Next: a long title is cut with a single `…` so the video length always
+  shows whole at the right edge, lined up row to row. Measured in screen
+  cells, so wide characters and emoji don't push it out. Very narrow panes
+  cut the title first, then the date and channel; the length goes last.

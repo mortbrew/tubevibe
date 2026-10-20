@@ -855,7 +855,9 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up Next"), related.len()),
     };
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
-    let list = List::new(related.iter().map(|v| video_row(state, icons, view, v)))
+    // Inside the borders, less the cursor column.
+    let row_width = usize::from(layout.related.width.saturating_sub(3));
+    let list = List::new(related.iter().map(|v| up_next_row(state, icons, view, v, row_width)))
         .block(focus_panel(title, focused))
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
@@ -1593,12 +1595,76 @@ fn draw_channel_preview(frame: &mut Frame, state: &State, icons: &Icons, channel
     frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }), inner);
 }
 
-fn video_row<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video) -> ListItem<'a> {
-    video_row_dated(state, icons, view, v, false)
-}
-
 /// `watched_date`: the date column says when I watched it (Historial).
 fn video_row_dated<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, watched_date: bool) -> ListItem<'a> {
+    let (mut spans, title, tail) = video_row_parts(state, icons, view, v, watched_date);
+    spans.push(title);
+    spans.extend(tail);
+    ListItem::new(Line::from(spans))
+}
+
+/// An Up Next row `width` cells wide: a long title is cut with `…` so the
+/// length always shows whole at the right edge.
+fn up_next_row<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, width: usize) -> ListItem<'a> {
+    let (head, title, tail) = video_row_parts(state, icons, view, v, false);
+    ListItem::new(Line::from(fit_row(head, title, tail, width)))
+}
+
+/// `head` + `title` + `tail` in `width` cells, `tail` flush right. The title
+/// gives way first, then the head; the tail only when nothing else is left.
+fn fit_row<'a>(head: Vec<Span<'a>>, title: Span<'a>, tail: Vec<Span<'a>>, width: usize) -> Vec<Span<'a>> {
+    let cells = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
+    let tail_width = cells(&tail);
+    if tail_width >= width {
+        let mut out = head;
+        out.push(title);
+        out.extend(tail);
+        return out;
+    }
+    let room = width - tail_width;
+    let mut out = Vec::new();
+    let mut used = 0;
+    for span in head.into_iter().chain(std::iter::once(title)) {
+        let w = span.width();
+        if used + w <= room {
+            used += w;
+            out.push(span);
+            continue;
+        }
+        let (text, w) = cut_cells(&span.content, room - used);
+        used += w;
+        out.push(Span::styled(text, span.style));
+        break;
+    }
+    out.push(Span::raw(" ".repeat(room - used)));
+    out.extend(tail);
+    out
+}
+
+/// The text cut to at most `max` cells, ending in `…` when it was cut; and
+/// the cells it takes.
+fn cut_cells(text: &str, max: usize) -> (String, usize) {
+    use unicode_width::UnicodeWidthChar;
+    if max == 0 {
+        return (String::new(), 0);
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for c in text.chars() {
+        let w = c.width().unwrap_or(0);
+        if used + w > max - 1 {
+            out.push('…');
+            return (out, used + 1);
+        }
+        used += w;
+        out.push(c);
+    }
+    (out, used)
+}
+
+type RowParts<'a> = (Vec<Span<'a>>, Span<'a>, Vec<Span<'a>>);
+
+fn video_row_parts<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, watched_date: bool) -> RowParts<'a> {
     let lang = state.lang();
     let watched_at = watched_date.then(|| state.watched_at(&v.id)).flatten();
     let live = if watched_at.is_some() { Live::No } else { v.live };
@@ -1630,15 +1696,13 @@ fn video_row_dated<'a>(state: &State, icons: &Icons, view: &View, v: &'a Video, 
     if state.watched.contains(&v.id) {
         // Already seen: marked and dimmed.
         spans.push(Span::styled(format!("{} ", icons.watched), MUTED));
-        spans.push(Span::styled(v.title.as_str(), MUTED));
-    } else {
-        spans.push(Span::styled(v.title.as_str(), FG));
     }
-    spans.push(Span::styled(format!("  {}", v.duration_label()), MUTED));
+    let title = Span::styled(v.title.as_str(), if state.watched.contains(&v.id) { MUTED } else { FG });
+    let mut tail = vec![Span::styled(format!("  {}", v.duration_label()), MUTED)];
     if let Some(at) = state.resume_at(&v.id) {
-        spans.extend(resume_bar(at, v.duration));
+        tail.extend(resume_bar(at, v.duration));
     }
-    ListItem::new(Line::from(spans))
+    (spans, title, tail)
 }
 
 /// How far I got: `  ━━━━─────` (or `  ▸ 12:34` when the length is unknown).
@@ -1850,8 +1914,49 @@ fn draw_status(frame: &mut Frame, state: &State, icons: &Icons, view: &View, are
     frame.render_widget(Paragraph::new(right).fg(BLUE).alignment(Alignment::Right), right_area);
 }
 
-/// Keys that work right now, each with what it does.
-pub fn hints(state: &State) -> Vec<(String, &'static str)> {
+/// Keys that work right now, each with what it does; English labels in
+/// Title Case.
+pub fn hints(state: &State) -> Vec<(String, String)> {
+    let english = state.lang().pick(false, true);
+    hint_rows(state)
+        .into_iter()
+        .map(|(k, d)| (k, if english { title_case(d) } else { d.to_owned() }))
+        .collect()
+}
+
+/// `"back to the video"` → `"Back to the Video"`. Short joining words stay
+/// lowercase (but never the first one); `tubevibe` and words that already
+/// carry capitals (YouTube, PgUp) are left as they are.
+fn title_case(text: &str) -> String {
+    const SMALL: &[&str] = &["a", "an", "the", "to", "of", "from", "in", "on", "and", "or", "for", "at", "by", "as"];
+    let mut out = String::with_capacity(text.len());
+    let mut first = true;
+    for (i, word) in text.split(' ').enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        let bare = word.trim_start_matches(|c: char| !c.is_alphanumeric());
+        let keep = bare.is_empty()
+            || bare.starts_with("tubevibe")
+            || bare.chars().any(char::is_uppercase)
+            || (!first && !word.starts_with('(') && SMALL.contains(&bare.trim_end_matches(|c: char| !c.is_alphanumeric())));
+        if keep {
+            out.push_str(word);
+        } else {
+            let lead = &word[..word.len() - bare.len()];
+            let mut chars = bare.chars();
+            out.push_str(lead);
+            out.extend(chars.next().map(|c| c.to_uppercase()).into_iter().flatten());
+            out.push_str(chars.as_str());
+        }
+        if !bare.is_empty() {
+            first = false;
+        }
+    }
+    out
+}
+
+fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     let lang = state.lang();
     let rows = |table| keymap::rows(table, lang);
     let key = |k: &str, es, en| (k.to_string(), lang.pick(es, en));
@@ -2066,8 +2171,8 @@ pub fn hints(state: &State) -> Vec<(String, &'static str)> {
 
 /// As many hints as fit in the line, whole; the last one (`Ctrl+Y ?`, every
 /// shortcut) is always kept.
-fn draw_hints(frame: &mut Frame, hints: &[(String, &str)], area: Rect) {
-    let hint = |(key, description): &(String, &str)| {
+fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
+    let hint = |(key, description): &(String, String)| {
         [Span::styled(key.clone(), Style::new().fg(CYAN).bold()), Span::styled(format!(" {description}   "), MUTED)]
     };
     let width = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
@@ -2912,21 +3017,21 @@ mod tests {
     fn video_tab_bar_is_short_and_ordered() {
         let mut s = with_tab();
         s.update(Action::ToggleUiLang);
-        let keys: Vec<(String, &str)> = hints(&s);
+        let keys: Vec<(String, String)> = hints(&s);
         let at = |k: &str, d: &str| keys.iter().position(|(key, desc)| key == k && *desc == d);
         assert_eq!(
             keys.iter().filter(|(k, _)| k == "Enter").count(),
-            keys.iter().filter(|(_, d)| d.starts_with("play")).count()
+            keys.iter().filter(|(_, d)| d.starts_with("Play")).count()
         );
         assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
         assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
-        assert!(at("Space", "pause") < at("Ctrl+Y x", "close the tab"));
-        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Help"));
+        assert!(at("Space", "Pause") < at("Ctrl+Y x", "Close the Tab"));
+        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Help".to_string()));
         s.update(Action::ToggleUiLang);
         let keys = hints(&s);
         assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
         assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
-        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Ayuda"));
+        assert_eq!(keys.last().unwrap(), &("Ctrl+Y ?".to_string(), "Ayuda".to_string()));
     }
 
     #[test]
@@ -3014,17 +3119,17 @@ mod tests {
         s.update(Action::Prefix);
         assert_eq!(hints(&s)[0].0, "Ctrl+Y", "says the key comes next");
         let mut list = with_items(Items::Videos(vec![video("a")]));
-        assert_eq!(hint(&list, "s"), Some("suscribirse"));
+        assert_eq!(hint(&list, "s").as_deref(), Some("suscribirse"));
         list.subs.insert("UCa".into());
-        assert_eq!(hint(&list, "s"), Some("desuscribirse (pide confirmar)"));
+        assert_eq!(hint(&list, "s").as_deref(), Some("desuscribirse (pide confirmar)"));
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
-        assert_eq!(hint(&files, "Espacio"), Some("marcar varios"));
-        assert_eq!(hint(&files, "x"), Some("este a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar varios"));
+        assert_eq!(hint(&files, "x").as_deref(), Some("este a la papelera (pide confirmar)"));
         files.update(Action::ToggleMark);
-        assert_eq!(hint(&files, "x"), Some("los marcados a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "x").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
         files.update(Action::Trash);
-        assert_eq!(hint(&files, "s"), Some("sí, a la papelera"));
+        assert_eq!(hint(&files, "s").as_deref(), Some("sí, a la papelera"));
     }
 
     #[test]
@@ -3033,7 +3138,7 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
         for kind in [MediaKind::Video, MediaKind::Music] {
             let s = with_items(Items::Files(vec![file("a")], kind));
-            assert_eq!(hint(&s, "Espacio"), Some("marcar varios"), "{kind:?}");
+            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar varios"), "{kind:?}");
             assert!(render_sized(&s, &VIEW, 100).contains("Espacio marcar varios"), "{kind:?} fits at 100 columns");
         }
         let states = [
@@ -3043,10 +3148,10 @@ mod tests {
         ];
         for state in states {
             let mut s = with_items(Items::Downloads(vec![Download { id: 0, video: video("a"), state }]));
-            assert_eq!(hint(&s, "Espacio"), Some("marcar varios"));
+            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar varios"));
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
-            assert!(screen.contains("Space mark several"), "{screen}");
+            assert!(screen.contains("Space Mark Several"), "{screen}");
             assert!(screen.contains("Ctrl+Y ? Help"), "whole hints only, the last one kept");
         }
     }
@@ -3065,14 +3170,14 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
         assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
-        assert_eq!(hint(&s, "x"), Some("the marked ones: trash (asks first)"));
-        assert_eq!(hint(&s, "Space"), Some("mark / unmark"));
+        assert_eq!(hint(&s, "x").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
+        assert_eq!(hint(&s, "Space").as_deref(), Some("Mark / Unmark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
         assert!(render(&s).contains("Move 3 files to the trash?"));
-        assert_eq!(hint(&s, "y"), Some("yes, to the trash"));
+        assert_eq!(hint(&s, "y").as_deref(), Some("Yes, to the Trash"));
         s.confirm = Some(Confirm::TrashDownloads { files, cancel: vec![7], remove: Vec::new() });
-        assert_eq!(hint(&s, "y"), Some("yes (the other marked ones get cancelled or taken off)"));
+        assert_eq!(hint(&s, "y").as_deref(), Some("Yes (The Other Marked Ones Get Cancelled or Taken Off)"));
         s.update(Action::ToggleUiLang);
         assert!(render(&s).contains("¿Mandar 3 archivos a la papelera?"));
     }
@@ -3082,13 +3187,13 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let done = Download { id: 0, video: video("a"), state: DownloadState::Done("/v/a.mp4".into()) };
         let mut s = with_items(Items::Downloads(vec![done]));
-        assert_eq!(hint(&s, "x"), Some("a la papelera (pide confirmar)"));
+        assert_eq!(hint(&s, "x").as_deref(), Some("a la papelera (pide confirmar)"));
         s.confirm = Some(Confirm::TrashDownload { id: 0, path: "/v/a.mp4".into() });
-        assert_eq!(hint(&s, "s"), Some("sí, a la papelera"));
+        assert_eq!(hint(&s, "s").as_deref(), Some("sí, a la papelera"));
         s.update(Action::ToggleUiLang);
         let screen = render(&s);
         assert!(screen.contains("Move to the trash a.mp4?"), "{screen}");
-        assert_eq!(hint(&s, "x"), None, "the question owns the bar");
+        assert_eq!(hint(&s, "x").as_deref(), None, "the question owns the bar");
     }
 
     #[test]
@@ -3630,7 +3735,7 @@ mod tests {
         assert!(cx > up_next_x + 40, "on the right");
         // Clicks on Up next find the rows where they were drawn.
         let screen_area = Rect::new(0, 0, 130, 40);
-        let (x, y) = find(&screen, "title r2  1:00");
+        let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
         // Without one: the heading says so, Up next right below.
         let (plain, plain_screen) = details_tab(None);
@@ -3638,7 +3743,7 @@ mod tests {
         assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
         assert_eq!(hy + 2, find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
         assert_eq!(hx, find(&plain_screen, "┌ A continuación").0);
-        let (x, y2) = find(&plain_screen, "title r2  1:00");
+        let (x, y2) = find(&plain_screen, "title r2 ");
         assert!(y2 < y, "Up next moves up without a summary");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
     }
@@ -3658,7 +3763,7 @@ mod tests {
         s.update(Action::Watched(tab, Ok(Watch { related: vec![video("r1")], ..Watch::default() })));
         let screen = render_with(&s, &view);
         assert!(!screen.contains("✦"), "live: never asked: {screen}");
-        let (x, y) = find(&screen, "title r1  1:00");
+        let (x, y) = find(&screen, "title r1 ");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
     }
 
@@ -3706,7 +3811,7 @@ mod tests {
         let (s, screen) = details_tab(Some(&long));
         assert!(screen.contains("A continuación") && screen.contains("title r1"), "{screen}");
         assert!(screen.contains("palabra…"), "cut with the mark: {screen}");
-        let (x, y) = find(&screen, "title r1  1:00");
+        let (x, y) = find(&screen, "title r1 ");
         assert_eq!(spot(&s, None, Rect::new(0, 0, 130, 40), x, y), Some(Spot::Row(0)));
     }
 
@@ -3834,7 +3939,7 @@ mod tests {
         let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
         assert_eq!(id, "a");
         assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
-        let (x, y) = find(&screen, "title r2  1:00");
+        let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
         assert_eq!((hints(&s)[0].0.as_str(), hints(&s)[1].0.as_str()), ("Espacio", "Tab"), "Space before Tab");
         s.update(Action::ToggleFocus);
@@ -3878,13 +3983,13 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("▶   ↑ Update Now   ◀"), "focused: {screen}");
         assert!(!screen.contains("Update with:") && !screen.contains("Shift + drag"), "the button does it: {screen}");
-        assert_eq!(hints(&s)[0], ("Enter".to_string(), "update now"));
+        assert_eq!(hints(&s)[0], ("Enter".to_string(), "Update Now".to_string()));
         s.update(Action::ToggleFocus);
         assert_eq!(s.focus, Focus::Menu);
         let screen = render(&s);
         assert!(!screen.contains("◀") && screen.contains("↑ Update Now"), "{screen}");
         assert!(screen.contains("(Tab to Select, Enter to Press)"), "{screen}");
-        assert_eq!(hints(&s)[0], ("Tab".to_string(), "select Update Now"));
+        assert_eq!(hints(&s)[0], ("Tab".to_string(), "Select Update Now".to_string()));
         s.update(Action::ToggleFocus);
         assert_eq!(
             s.update(Action::Enter),
@@ -4493,5 +4598,29 @@ mod tests {
         assert!(!screen.iter().any(|l| l.contains(down)) && screen.iter().any(|l| l.contains(up)));
         s.update(Action::Back);
         assert!(render(&s).contains("title new  1:00"), "the list stays in front");
+    }
+
+    #[test]
+    fn english_hints_are_title_case() {
+        assert_eq!(title_case("back to the video"), "Back to the Video");
+        assert_eq!(title_case("tubevibe Watch Later"), "tubevibe Watch Later");
+        assert_eq!(title_case("the marked ones: trash (asks first)"), "The Marked Ones: Trash (Asks First)");
+        assert_eq!(title_case("change / open"), "Change / Open");
+    }
+
+    #[test]
+    fn up_next_rows_cut_the_title_and_keep_the_length() {
+        let text = |spans: Vec<Span>| spans.iter().map(|s| s.content.to_string()).collect::<String>();
+        let row = |title: &'static str, w| {
+            text(fit_row(vec![Span::raw("head ")], Span::raw(title), vec![Span::raw("  12:34")], w))
+        };
+        assert_eq!(row("short", 20), "head short     12:34");
+        assert_eq!(row("a very long title indeed", 20), "head a very …  12:34");
+        let wide = row("日本語のとても長いタイトル", 20);
+        assert!(wide.ends_with("…  12:34") || wide.ends_with("…   12:34"), "{wide}");
+        assert_eq!(Line::from(wide.clone()).width(), 20, "{wide}");
+        assert_eq!(row("title", 8), "…  12:34");
+        assert!(row("title", 7).ends_with("  12:34"));
+        assert_eq!(row("title", 3), "head title  12:34", "too narrow: left for the screen to clip");
     }
 }
