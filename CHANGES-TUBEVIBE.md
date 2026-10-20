@@ -1123,3 +1123,13 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 - Menu: **Watch Later** now sits right above **Subscriptions** (My
   Recommendations, Watch Later, Subscriptions, History, …). Icons, keys and
   the shown mark follow the new order.
+- Narrow windows: the **preview** goes under the list (across it) when the
+  list would keep fewer than 50 columns beside a Preview Width panel, so
+  it is no longer cut off; the list keeps at least 10 rows and the preview
+  takes up to 16 (with fewer than 6 to spare it is left out, never
+  squeezed in). Its thumbnail stays 16:9 and takes at most half its rows.
+- Likewise the **comments** in a video tab go under the details and *Up
+  next*, across the tab, when those would keep fewer than 50 columns
+  beside Comments Width (two fifths of the rows; left out when the tab is
+  too short for them and *Up next*). Wide windows keep the side-by-side
+  layout and the width settings; stacked panes take the full width.
