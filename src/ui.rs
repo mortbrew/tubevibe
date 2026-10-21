@@ -540,7 +540,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
             frame.render_widget(Paragraph::new(note).fg(MUTED).alignment(Alignment::Center), frame.area());
         }
         if state.help {
-            draw_help(frame, lang, state.help_scroll);
+            draw_help(frame, icons, lang, state.help_scroll);
         }
         return;
     }
@@ -615,7 +615,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
     draw_status(frame, state, icons, view, areas.status);
     draw_hints(frame, &hints(state), areas.hints);
     if state.help {
-        draw_help(frame, lang, state.help_scroll);
+        draw_help(frame, icons, lang, state.help_scroll);
     }
     if let Some(confirm) = &state.confirm {
         draw_confirm(frame, confirm, lang);
@@ -1208,13 +1208,20 @@ fn tab_offset(state: &State, total: usize, rows: usize) -> usize {
 /// How far the rule above Settings stays from each side of the menu.
 const SEPARATOR_INSET: &str = "  ";
 
-fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
-    let items = sidebar_items(state, icons, framed().inner(area)).into_iter().map(|(item, _)| item);
-    let title = Line::from(vec![
+/// The logo as the menu's title shows it: ` ▶ tube` in red, `vibe` in the text colour, bold.
+fn logo_spans(icons: &Icons) -> Vec<Span<'static>> {
+    vec![
         Span::styled(format!(" {} ", icons.logo), Style::new().fg(RED).bold()),
         Span::styled("tube", Style::new().fg(RED).bold()),
-        Span::styled("vibe ", Style::new().fg(FG).bold()),
-    ]);
+        Span::styled("vibe", Style::new().fg(FG).bold()),
+    ]
+}
+
+fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
+    let items = sidebar_items(state, icons, framed().inner(area)).into_iter().map(|(item, _)| item);
+    let mut spans = logo_spans(icons);
+    spans.push(Span::raw(" "));
+    let title = Line::from(spans);
     let mut block = focus_panel(title.clone(), menu_focused(state));
     // The version, right-aligned on the same border, only when it fits beside
     // the logo with a cell of border between them (the logo always wins).
@@ -2376,18 +2383,21 @@ fn help_area(screen: Rect, lang: Lang) -> Rect {
     centered(screen, width, tallest + 2)
 }
 
-fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
+fn draw_help(frame: &mut Frame, icons: &Icons, lang: Lang, scroll: u16) {
     let (_, columns, tallest) = help_layout(frame.area().width, lang);
     let area = help_area(frame.area(), lang);
     frame.render_widget(Clear, area);
     let scrolls = tallest + 2 > area.height;
-    let title = match (scrolls, lang) {
-        (false, Lang::Es) => " ⌨  Atajos de teclado · cualquier tecla cierra ",
-        (false, _) => " ⌨  Keyboard Shortcuts · Any Key Closes ",
-        (true, Lang::Es) => " ⌨  Atajos · ↑ ↓ desplazar · otra tecla cierra ",
-        (true, _) => " ⌨  Shortcuts · ↑ ↓ Scroll · Other Keys Close ",
+    // The menu's logo, then what this is and how to leave it.
+    let rest = match (scrolls, lang) {
+        (false, Lang::Es) => " Ayuda · cualquier tecla cierra ",
+        (false, _) => " Help · Any Key Closes ",
+        (true, Lang::Es) => " Ayuda · ↑ ↓ desplazar · otra tecla cierra ",
+        (true, _) => " Help · ↑ ↓ Scroll · Other Keys Close ",
     };
-    let block = panel(title, MAGENTA);
+    let mut title = logo_spans(icons);
+    title.push(Span::raw(rest));
+    let block = panel(Line::from(title), MAGENTA);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     if inner.is_empty() {
@@ -3605,7 +3615,8 @@ mod tests {
         }
         assert!(!screen.contains("Ver después"), "{screen}");
         s.update(Action::ToggleHelp);
-        assert!(render(&s).contains("Keyboard Shortcuts"));
+        let screen = render(&s);
+        assert!(screen.contains("▶ tubevibe Help · Any Key Closes"), "{screen}");
     }
 
     #[test]
@@ -4823,6 +4834,21 @@ mod tests {
         assert!(s.tabs.is_empty() && s.active == 0);
         assert!(matches!(s.menu_row(), MenuRow::Section(_)));
         render(&s);
+    }
+
+    #[test]
+    fn help_title_is_the_menu_logo_then_help() {
+        let mut s = state();
+        s.update(Action::ToggleHelp);
+        let mut terminal = Terminal::new(TestBackend::new(130, 45)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let area = help_area(buffer.area, Lang::Es);
+        let top: String = (area.x..area.right()).map(|x| buffer[(x, area.y)].symbol().to_owned()).collect();
+        assert!(top.starts_with("┌ ▶ tubevibe Ayuda · cualquier tecla cierra "), "{top:?}");
+        let cell = |dx: u16| &buffer[(area.x + dx, area.y)];
+        assert_eq!((cell(2).fg, cell(4).fg, cell(8).fg), (RED, RED, FG), "▶ tube red, vibe text colour");
+        assert!(cell(4).modifier.contains(Modifier::BOLD) && cell(8).modifier.contains(Modifier::BOLD));
     }
 
     #[test]
