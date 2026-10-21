@@ -2029,7 +2029,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     let normal = state.confirm.is_none() && !state.help && state.context.is_none() && state.prompt.is_none();
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
-        key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
+        key("s", "desuscribirse", "unsubscribe")
     } else {
         key("s", "suscribirse", "subscribe")
     };
@@ -2042,10 +2042,10 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 "yes (the other marked ones get cancelled or taken off)",
             ),
             Confirm::Trash(_) | Confirm::TrashDownload { .. } | Confirm::TrashDownloads { .. } => {
-                key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash")
+                key(lang.pick("s", "y"), "sí, a la papelera", "yes, trash")
             }
             Confirm::Quit(0) => key(lang.pick("s", "y"), "sí, salir", "yes, quit"),
-            Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
+            Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortar descargas", "yes, quit and stop downloads"),
             Confirm::ForgetHistory(_) => key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it"),
             Confirm::Download { running: true, .. } => key(lang.pick("s", "y"), "sí, cancelarla", "yes, cancel it"),
             Confirm::Download { .. } => key(lang.pick("s", "y"), "sí, quitarla", "yes, remove it"),
@@ -2079,14 +2079,14 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         vec![
             key("Enter", "ver", "play"),
             key("↑ ↓", "elegir", "choose"),
-            key("Tab", "volver al video", "back to the video"),
+            key("Tab", "volver al video", "back to video"),
             key("w", "ver después YouTube", "YouTube Watch Later"),
             key("l", "ver después tubevibe", "tubevibe Watch Later"),
             key("c", "canal", "channel"),
             if state.active_tab().is_some_and(|t| t.ended && !t.started) {
                 key(keymap::space(lang), "reproducir", "play")
             } else if state.active_tab().is_some_and(|t| t.ended) {
-                key(keymap::space(lang), "volver a verlo", "play it again")
+                key(keymap::space(lang), "repetir", "replay")
             } else {
                 key(keymap::space(lang), "pausa", "pause")
             },
@@ -2096,18 +2096,18 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         if state.active_tab().is_some_and(|t| t.ended && !t.started) {
             keys.push(key("Enter", "reproducir", "play"));
         } else if state.active_tab().is_some_and(|t| t.ended) {
-            keys.push(key("Enter", "volver a verlo", "play it again"));
+            keys.push(key("Enter", "repetir", "replay"));
         }
         keys.push(key(keymap::space(lang), "pausa", "pause"));
         if state.related_shown().is_some() {
             keys.push(key("Tab", "A continuación", "Up Next"));
         }
-        keys.push(key("x", "cerrar la pestaña", "close the tab"));
+        keys.push(key("x", "cerrar pestaña", "close tab"));
         if state.active_tab().is_some_and(|t| t.source.is_some()) {
-            keys.push(key("X", "cerrar y quitar de la lista", "close and remove from the list"));
+            keys.push(key("X", "cerrar, quitar de la lista", "close, remove from list"));
         }
-        keys.push(key("v", "Cambiar calidad", "Quality Change"));
-        keys.push(key("b", "Cambiar códec", "Codec Change"));
+        keys.push(key("v", "Cambiar resolución", "Change Resolution"));
+        keys.push(key("b", "Cambiar códec", "Change Codec"));
         // The rest of the tab's keys, but the ones above and Up Next's own,
         // which the help explains.
         let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc", "x", "X"];
@@ -2150,14 +2150,14 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
                 key("Enter", "ver", "play"),
-                key("X", "quitar de la lista", "remove from the list"),
+                key("X", "quitar de la lista", "remove from list"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("a", "solo audio", "audio only"),
                 key("c", "canal", "channel"),
                 back,
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
-                key("Enter", "ver (sigue donde lo dejaste)", "play (resumes where you left)"),
+                key("Enter", "seguir viendo", "resume"),
                 key("X", "quitar del historial", "remove from history"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("W", "ver después tubevibe", "tubevibe Watch Later"),
@@ -2169,7 +2169,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             {
                 vec![
                     key("Enter", "ver", "play"),
-                    key("X", "quitar de la lista", "remove from the list"),
+                    key("X", "quitar de la lista", "remove from list"),
                     key("W", "ver después tubevibe", "tubevibe Watch Later"),
                     key("a", "solo audio", "audio only"),
                     key("d", "descargar", "download"),
@@ -2189,34 +2189,34 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 key("/", "buscar", "search"),
                 back,
             ],
-            Some(Items::Channels(_)) => vec![key("Enter", "ver sus videos", "its videos"), subscribe, back],
+            Some(Items::Channels(_)) => vec![key("Enter", "abrir canal", "open channel"), subscribe, back],
             Some(Items::Profiles(_)) => vec![key("Enter", "usar esta sesión", "use this login"), back],
             Some(Items::Playlists(_)) => vec![
-                key("Enter", "ver sus videos", "its videos"),
-                key("X", "borrar la lista (pide confirmar)", "delete the playlist (asks first)"),
+                key("Enter", "abrir canal", "open channel"),
+                key("X", "borrar la lista", "delete playlist"),
                 back,
             ],
             Some(Items::Files(_, kind)) => vec![
                 match kind {
-                    MediaKind::Music => key("Enter", "escuchar desde esta canción", "play from this song"),
+                    MediaKind::Music => key("Enter", "escuchar desde acá", "play from here"),
                     MediaKind::Video => key("Enter", "ver", "play"),
                 },
                 // Several files: mark them first, then `X` sends them all.
                 if state.marked_files().is_empty() {
-                    key(keymap::space(lang), "marcar varios", "mark several")
+                    key(keymap::space(lang), "marcar", "mark")
                 } else {
-                    key(keymap::space(lang), "marcar / desmarcar", "mark / unmark")
+                    key(keymap::space(lang), "marcar", "mark")
                 },
                 if state.marked_files().is_empty() {
-                    key("X", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
+                    key("X", "a la papelera", "trash")
                 } else {
-                    key("X", "los marcados a la papelera (pide confirmar)", "the marked ones to the trash (asks first)")
+                    key("X", "marcados a la papelera", "trash marked")
                 },
                 back,
             ],
             Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
-                key(keymap::space(lang), "marcar / desmarcar", "mark / unmark"),
-                key("X", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
+                key(keymap::space(lang), "marcar", "mark"),
+                key("X", "marcadas a la papelera", "trash marked"),
                 back,
             ],
             Some(Items::Downloads(downloads)) => {
@@ -2224,19 +2224,19 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 let mut keys = Vec::new();
                 match selected {
                     Some(DownloadState::Running { .. }) => {
-                        keys.push(key("X", "cancelar la descarga (pide confirmar)", "cancel the download (asks first)"))
+                        keys.push(key("X", "cancelar descarga", "cancel download"))
                     }
                     Some(DownloadState::Done(_)) => {
                         keys.push(key("Enter", "ver", "play"));
-                        keys.push(key("X", "a la papelera (pide confirmar)", "move to trash (asks first)"));
+                        keys.push(key("X", "a la papelera", "trash"));
                     }
                     Some(_) => {
-                        keys.push(key("X", "quitar de la lista (pide confirmar)", "take off the list (asks first)"))
+                        keys.push(key("X", "quitar de la lista", "remove from list"))
                     }
                     None => {}
                 }
                 if selected.is_some() {
-                    keys.push(key(keymap::space(lang), "marcar varios", "mark several"));
+                    keys.push(key(keymap::space(lang), "marcar", "mark"));
                 }
                 keys.push(back);
                 keys
@@ -2284,7 +2284,8 @@ pub(crate) fn key_style(key: &str, color: Color) -> Style {
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
     let hint = |(key, description): &(String, String)| {
-        [Span::styled(key.clone(), key_style(key, CYAN)), Span::styled(format!(" {description}   "), MUTED)]
+        // A key cap: the theme's background on its text colour, then what it does.
+        [Span::styled(format!(" {key} "), key_style(key, BG).bg(FG)), Span::styled(format!(" {description}  "), FG)]
     };
     let width = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
     let Some((last, rest)) = hints.split_last() else { return };
@@ -3323,12 +3324,12 @@ mod tests {
             keys.iter().filter(|(_, d)| d.starts_with("Play")).count()
         );
         assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
-        assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
-        assert!(at("Space", "Pause") < at("x", "Close the Tab"));
+        assert!(at("v", "Change Resolution").is_some() && at("b", "Change Codec").is_some(), "{keys:?}");
+        assert!(at("Space", "Pause") < at("x", "Close Tab"));
         assert_eq!(keys.last().unwrap(), &("?".to_string(), "Help".to_string()));
         s.update(Action::ToggleUiLang);
         let keys = hints(&s);
-        assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
+        assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar resolución"));
         assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
         assert_eq!(keys.last().unwrap(), &("?".to_string(), "Ayuda".to_string()));
     }
@@ -3417,13 +3418,13 @@ mod tests {
         let mut list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(hint(&list, "s").as_deref(), Some("suscribirse"));
         list.subs.insert("UCa".into());
-        assert_eq!(hint(&list, "s").as_deref(), Some("desuscribirse (pide confirmar)"));
+        assert_eq!(hint(&list, "s").as_deref(), Some("desuscribirse"));
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
-        assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar varios"));
-        assert_eq!(hint(&files, "X").as_deref(), Some("este a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("a la papelera"));
         files.update(Action::ToggleMark);
-        assert_eq!(hint(&files, "X").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("marcados a la papelera"));
         files.update(Action::Trash);
         assert_eq!(hint(&files, "s").as_deref(), Some("sí, a la papelera"));
     }
@@ -3434,8 +3435,8 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
         for kind in [MediaKind::Video, MediaKind::Music] {
             let s = with_items(Items::Files(vec![file("a")], kind));
-            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar varios"), "{kind:?}");
-            assert!(render_sized(&s, &VIEW, 100).contains("Espacio marcar varios"), "{kind:?} fits at 100 columns");
+            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar"), "{kind:?}");
+            assert!(render_sized(&s, &VIEW, 100).contains(" Espacio  marcar"), "{kind:?} fits at 100 columns");
         }
         let states = [
             DownloadState::Done("/v/a.mp4".into()),
@@ -3444,11 +3445,11 @@ mod tests {
         ];
         for state in states {
             let mut s = with_items(Items::Downloads(vec![Download { id: 0, video: video("a"), state }]));
-            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar varios"));
+            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar"));
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
-            assert!(screen.contains("Space Mark Several"), "{screen}");
-            assert!(screen.contains("? Help"), "whole hints only, the last one kept");
+            assert!(screen.contains(" Space  Mark"), "{screen}");
+            assert!(screen.contains(" ?  Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -3466,12 +3467,12 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
         assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
-        assert_eq!(hint(&s, "X").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
-        assert_eq!(hint(&s, "Space").as_deref(), Some("Mark / Unmark"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("Trash Marked"));
+        assert_eq!(hint(&s, "Space").as_deref(), Some("Mark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
         assert!(render(&s).contains("Move 3 files to the trash?"));
-        assert_eq!(hint(&s, "y").as_deref(), Some("Yes, to the Trash"));
+        assert_eq!(hint(&s, "y").as_deref(), Some("Yes, Trash"));
         s.confirm = Some(Confirm::TrashDownloads { files, cancel: vec![7], remove: Vec::new() });
         assert_eq!(hint(&s, "y").as_deref(), Some("Yes (The Other Marked Ones Get Cancelled or Taken Off)"));
         s.update(Action::ToggleUiLang);
@@ -3483,7 +3484,7 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let done = Download { id: 0, video: video("a"), state: DownloadState::Done("/v/a.mp4".into()) };
         let mut s = with_items(Items::Downloads(vec![done]));
-        assert_eq!(hint(&s, "X").as_deref(), Some("a la papelera (pide confirmar)"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("a la papelera"));
         s.confirm = Some(Confirm::TrashDownload { id: 0, path: "/v/a.mp4".into() });
         assert_eq!(hint(&s, "s").as_deref(), Some("sí, a la papelera"));
         s.update(Action::ToggleUiLang);
@@ -3495,9 +3496,9 @@ mod tests {
     #[test]
     fn hint_bar_shows_keys_with_descriptions() {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
-        assert!(screen.contains("w ver después YouTube"), "{screen}");
-        assert!(screen.contains("W ver después tubevibe"), "{screen}");
-        assert!(screen.contains("? Ayuda"));
+        assert!(screen.contains(" w  ver después YouTube"), "{screen}");
+        assert!(screen.contains(" W  ver después tubevibe"), "{screen}");
+        assert!(screen.contains(" ?  Ayuda"));
     }
 
     #[test]
@@ -3533,7 +3534,7 @@ mod tests {
         let mut s = with_items(Items::Files(vec![file("Tema uno"), file("Tema dos")], MediaKind::Music));
         let screen = render(&s);
         assert!(screen.contains("♫ Disco"), "{screen}");
-        assert!(screen.contains("escuchar desde esta canción"));
+        assert!(screen.contains("escuchar desde acá"));
         s.update(Action::Enter);
         let screen = render(&s);
         assert!(screen.contains("2 canciones en la cola"), "{screen}");
@@ -3582,7 +3583,7 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "? Help"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", " ?  Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
@@ -3603,13 +3604,28 @@ mod tests {
     }
 
     #[test]
+    fn hint_keys_are_key_caps_with_bold_only_for_capitals() {
+        let mut terminal = Terminal::new(TestBackend::new(60, 1)).unwrap();
+        let hints = vec![("x".to_string(), "Close Tab".to_string()), ("X".to_string(), "Remove".to_string())];
+        terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
+        let buffer = terminal.backend().buffer();
+        let line: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(line.starts_with("  x  Close Tab   X  Remove"), "{line}");
+        let (x, label, big) = (&buffer[(2, 0)], &buffer[(5, 0)], &buffer[(17, 0)]);
+        assert_eq!((x.fg, x.bg), (BG, FG), "cap: background on text colour");
+        assert_eq!((buffer[(1, 0)].bg, buffer[(3, 0)].bg), (FG, FG), "padded cap");
+        assert_eq!(label.fg, FG, "labels in the text colour");
+        assert!(!x.modifier.contains(Modifier::BOLD) && big.modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
     fn hints_fit_whole_and_keep_the_help_key() {
         let mut terminal = Terminal::new(TestBackend::new(60, 1)).unwrap();
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("? Ayuda"), "{line}");
-        assert!(line.contains("Espacio pausa"), "{line}");
+        assert!(line.contains(" ?  Ayuda"), "{line}");
+        assert!(line.contains(" Espacio  pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
 
