@@ -162,6 +162,12 @@ impl Size {
         if value >= self.max || up > self.max { self.min } else { up.max(self.min) }
     }
 
+    /// One step narrower (`dir < 0`) or wider, within the limits.
+    pub fn step_by(self, value: u16, dir: i8) -> u16 {
+        let v = if dir < 0 { value.saturating_sub(self.step) } else { value.saturating_add(self.step) };
+        v.clamp(self.min, self.max)
+    }
+
     pub fn contains(self, value: u16) -> bool {
         (self.min..=self.max).contains(&value)
     }

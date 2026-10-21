@@ -1179,6 +1179,14 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   for both (under 23 columns) the version is left out and the logo stays.
 - Version bumped to 0.8.9.
 
+### `{` and `}` resize the menu (from boxvibe)
+
+- `{` makes the left menu 2 columns narrower and `}` 2 columns wider, live,
+  between 20 and 40 columns (and never more than half the screen, as before).
+  Saved right away as `[ui] menu_width` in config.toml, the same value as
+  Settings → Menu Width. The status bar says the new width. Works anywhere
+  but in the search box; Help lists it on the `M { }` row.
+
 ## 0.8.8: single-key shortcuts (no more Ctrl+Y), Restart Now, t/T tabs, wrapped dialogs and Help (2026-10-20)
 
 ### Help rows never run out of their box (`key-remap`)

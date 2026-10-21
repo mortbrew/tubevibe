@@ -38,6 +38,8 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
     ('?', "?", Action::ToggleHelp, Text::new("esta ayuda", "this help")),
     ('M', "M", Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('L', "L", Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
+    ('{', "{", Action::ResizeMenu(-1), Text::new("menú más angosto (se guarda)", "menu narrower (saved)")),
+    ('}', "}", Action::ResizeMenu(1), Text::new("menú más ancho (se guarda)", "menu wider (saved)")),
     ('Q', "Q", Action::AskQuit, Text::new("salir", "quit")),
     ('R', "R", Action::GoSection(Section::Inicio), Text::new("abrir Mis recomendados", "open My Recommendations")),
     ('S', "S", Action::GoSection(Section::Configuracion), Text::new("abrir Configuración", "open Settings")),
@@ -163,8 +165,8 @@ pub fn global_rows(lang: Lang) -> Vec<(String, &'static str)> {
     // Keys share rows so the help still fits 40 lines.
     let pick = |es, en| lang.pick(es, en);
     vec![
-        ("?".into(), pick("esta ayuda", "this help")),
-        ("M  L".into(), pick("menú sí / no · idioma: English", "menu on / off · language: español")),
+        ("?  L".into(), pick("esta ayuda · idioma: English", "this help · language: español")),
+        ("M  {  }".into(), pick("menú sí / no · más angosto / ancho", "menu on / off · narrower / wider")),
         ("Q  Ctrl+C".into(), pick("salir / salir ya", "quit / quit now")),
         ("R  S  A".into(), pick("Recomendados, Configuración, Acerca de", "My Recommendations, Settings, About")),
         ("Y  V".into(), pick("abrir Ver después: YouTube / tubevibe", "open Watch Later: YouTube / tubevibe")),
@@ -460,6 +462,8 @@ mod tests {
             assert_eq!(map(shift('?'), ctx), Some(Action::ToggleHelp), "{ctx:?}");
             assert_eq!(map(char('?'), ctx), Some(Action::ToggleHelp), "{ctx:?}");
             assert_eq!(map(shift('M'), ctx), Some(Action::ToggleSidebar), "{ctx:?}");
+            assert_eq!(map(shift('{'), ctx), Some(Action::ResizeMenu(-1)), "{ctx:?}");
+            assert_eq!(map(char('}'), ctx), Some(Action::ResizeMenu(1)), "{ctx:?}");
             assert_eq!(map(shift('L'), ctx), Some(Action::ToggleUiLang), "{ctx:?}");
             assert_eq!(map(shift('Q'), ctx), Some(Action::AskQuit), "{ctx:?}");
             assert_ne!(map(char('q'), ctx), Some(Action::Quit), "q is a no-op: {ctx:?}");

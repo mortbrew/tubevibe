@@ -511,6 +511,8 @@ pub enum Action {
     /// `Q`: quit, after asking.
     AskQuit,
     ToggleSidebar,
+    /// `{` / `}`: the menu a step narrower or wider, saved as `[ui] menu_width`.
+    ResizeMenu(i8),
     ToggleHelp,
     Up,
     Down,
@@ -1512,6 +1514,17 @@ impl State {
             Action::ToggleSidebar => {
                 self.sidebar = !self.sidebar;
                 self.focus = if self.sidebar && self.stack.is_empty() { Focus::Menu } else { Focus::List };
+            }
+            Action::ResizeMenu(dir) => {
+                let size = crate::config::MENU_WIDTH;
+                let next = size.step_by(self.config.ui.menu_width, dir);
+                self.config.ui.menu_width = next;
+                self.status = format!(
+                    "{}: {next} {}",
+                    self.tr("Ancho del menú", "Menu Width"),
+                    self.tr("columnas ({ y } lo cambian)", "Columns ({ and } Change It)")
+                );
+                return vec![Effect::SaveSetting { table: "ui", key: size.key, value: SettingValue::Number(next.into()) }];
             }
             Action::ToggleHelp => {
                 self.help = !self.help;
@@ -4657,6 +4670,27 @@ mod tests {
     use crate::domain::{channel, video};
 
     /// Upstream's behavior, which most tests describe: Enter plays at once.
+    #[test]
+    fn braces_resize_the_menu_within_its_limits_and_save_it() {
+        let mut s = state();
+        s.config.ui.menu_width = 26;
+        let saved = |e: &[Effect]| match e {
+            [Effect::SaveSetting { table: "ui", key: "menu_width", value: SettingValue::Number(n) }] => *n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(saved(&s.update(Action::ResizeMenu(1))), 28);
+        assert_eq!(s.config.ui.menu_width, 28);
+        assert!(s.status.contains("28"), "{}", s.status);
+        for _ in 0..20 {
+            s.update(Action::ResizeMenu(1));
+        }
+        assert_eq!(s.config.ui.menu_width, 40, "never wider than 40");
+        for _ in 0..20 {
+            s.update(Action::ResizeMenu(-1));
+        }
+        assert_eq!(saved(&s.update(Action::ResizeMenu(-1))), 20, "never narrower than 20");
+    }
+
     fn state() -> State {
         let mut config = Config::default();
         config.player.autoplay = true;
