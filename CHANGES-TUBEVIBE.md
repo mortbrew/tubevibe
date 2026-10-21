@@ -3,6 +3,11 @@
 Changes made in this fork, [mortbrew/tubevibe](https://github.com/mortbrew/tubevibe),
 on top of upstream [polblancoo/tubetui](https://github.com/polblancoo/tubetui) v0.7.7.
 
+## Unreleased (0.8.9)
+
+- **Confirm dialogs** have a blank line below the hint as well as above the
+  question, so the text sits in the middle of the box.
+
 ## Watch Later is YouTube's own Watch Later (`watch-later-online`)
 
 Before, the **Ver después / Watch Later** entry of the left menu was a list kept
