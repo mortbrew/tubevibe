@@ -1215,7 +1215,15 @@ fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         Span::styled("tube", Style::new().fg(RED).bold()),
         Span::styled("vibe ", Style::new().fg(FG).bold()),
     ]);
-    frame.render_widget(List::new(items).block(focus_panel(title, menu_focused(state))), area);
+    let mut block = focus_panel(title.clone(), menu_focused(state));
+    // The version, right-aligned on the same border, only when it fits beside
+    // the logo with a cell of border between them (the logo always wins).
+    let version = format!(" v{} ", env!("CARGO_PKG_VERSION"));
+    let needed = 1 + title.width() + 1 + Span::raw(version.as_str()).width() + 1;
+    if usize::from(area.width) >= needed {
+        block = block.title(Line::from(Span::styled(version, MUTED)).alignment(Alignment::Right));
+    }
+    frame.render_widget(List::new(items).block(block), area);
 }
 
 /// "In YouTube Watch Later" / "In tubevibe Watch Later" lines of a video's preview.
@@ -3802,6 +3810,13 @@ mod tests {
         // Sidebar title: `┌ ▶ tubevibe ┐`.
         let row: String = (0..14).map(|x| buffer[(x, 0)].symbol().to_owned()).collect();
         assert!(row.starts_with("┌ ▶ tubevibe "), "{row:?}");
+        // The version on the right of the same border, in the muted colour.
+        let top: String = (0..buffer.area.width).map(|x| buffer[(x, 0)].symbol().to_owned()).collect();
+        let menu_top = top.split('┐').next().unwrap().to_owned();
+        let version = format!(" v{} ", env!("CARGO_PKG_VERSION"));
+        assert!(menu_top.ends_with(&version), "{menu_top:?}");
+        let at = menu_top.chars().count() - version.chars().count() + 1;
+        assert_eq!(buffer[(at as u16, 0)].fg, MUTED);
         assert_eq!(buffer[(2, 0)].fg, RED, "▶ in the red of \"tube\"");
         assert_eq!(buffer[(4, 0)].fg, RED);
         // Welcome screen and About: `▶ tubevibe`, one space.
@@ -4808,6 +4823,21 @@ mod tests {
         assert!(s.tabs.is_empty() && s.active == 0);
         assert!(matches!(s.menu_row(), MenuRow::Section(_)));
         render(&s);
+    }
+
+    #[test]
+    fn menu_version_shows_when_it_fits_and_drops_before_the_logo() {
+        let s = state();
+        let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+        for (width, shown) in [(26, true), (23, true), (22, false), (20, false), (12, false)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
+            terminal.draw(|f| draw_sidebar(f, &s, &icons(s.config.ui.icons), f.area())).unwrap();
+            let top: String = (0..width).map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_owned()).collect();
+            assert_eq!(top.contains(&version), shown, "{width}: {top:?}");
+            if width >= 14 {
+                assert!(top.starts_with("┌ ▶ tubevibe "), "{width}: {top:?}");
+            }
+        }
     }
 
     #[test]

@@ -1172,6 +1172,13 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   *Open Channel*, *Trash Marked*, *Resume*, *Search In*. No more "(Asks First)":
   the confirm dialog already asks.
 
+### Version on the menu border
+
+- The left menu's top border shows the version (`v0.8.9`, muted colour)
+  right-aligned, on the same line as the ▶ tubevibe logo. On a menu too narrow
+  for both (under 23 columns) the version is left out and the logo stays.
+- Version bumped to 0.8.9.
+
 ## 0.8.8: single-key shortcuts (no more Ctrl+Y), Restart Now, t/T tabs, wrapped dialogs and Help (2026-10-20)
 
 ### Help rows never run out of their box (`key-remap`)
