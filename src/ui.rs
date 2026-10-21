@@ -2414,6 +2414,8 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
     let mut lines = vec![Line::from("")];
     lines.extend(message);
     lines.push(Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED));
+    // The same blank line below as above.
+    lines.push(Line::from(""));
     let title = lang.pick(" Confirmar ", " Confirm ");
     frame.render_widget(Clear, area);
     frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
@@ -2533,8 +2535,8 @@ fn confirm_layout(screen: Rect, question: Line) -> (Rect, Vec<Line<'static>>) {
     let max_width = screen.width.saturating_sub(4).min(72);
     let width = natural.max(40).min(max_width).max(screen.width.min(8));
     let text_width = usize::from(width.saturating_sub(4)).max(1);
-    // Border, blank line, hint line, border; and a line of margin each side.
-    let max_lines = usize::from(screen.height.saturating_sub(6)).max(1);
+    // Border, blank line, hint line, blank line, border; and a line of margin each side.
+    let max_lines = usize::from(screen.height.saturating_sub(7)).max(1);
     let mut lines = wrap_spans(&spans, text_width);
     if lines.len() > max_lines
         && let Some(t) = spans.iter().position(|s| s.style.fg == Some(MAGENTA))
@@ -2553,7 +2555,7 @@ fn confirm_layout(screen: Rect, question: Line) -> (Rect, Vec<Line<'static>>) {
         lines = wrap_spans(&shorter, text_width);
     }
     lines.truncate(max_lines);
-    let height = (lines.len() as u16 + 4).min(screen.height);
+    let height = (lines.len() as u16 + 5).min(screen.height);
     (centered(screen, width, height), lines)
 }
 
@@ -5091,7 +5093,7 @@ mod tests {
         assert!(area.width <= 76 && area.x >= 2, "{area:?}");
         let text = confirm_text(&lines);
         assert!(text.contains("[Deleted video]") && text.contains("YouTube Watch Later?"), "{text}");
-        assert_eq!(area.height as usize, lines.len() + 4);
+        assert_eq!(area.height as usize, lines.len() + 5);
         // The colours stay on their words.
         let cyan: String = lines
             .iter()
@@ -5103,7 +5105,7 @@ mod tests {
         // A long title wraps over several lines, nothing cut.
         let long = "A very long video title that goes on and on about many things ".repeat(2);
         let (area, lines) = confirm_layout(screen, close_remove_question(long.trim()));
-        assert!(lines.len() > 1 && area.height as usize == lines.len() + 4);
+        assert!(lines.len() > 1 && area.height as usize == lines.len() + 5);
         let words = confirm_text(&lines).replace('\n', " ");
         assert!(words.contains(long.trim()) && words.ends_with("YouTube Watch Later?"), "{words}");
         // In a full draw, the hint keeps its own line.
@@ -5112,6 +5114,20 @@ mod tests {
         let screen = render_screen(&s, 80, 24).join("\n");
         assert!(screen.contains("YouTube?"), "{screen}");
         assert!(screen.lines().any(|l| l.contains("s = sí · cualquier otra tecla = no") && !l.contains("YouTube")));
+    }
+
+    #[test]
+    fn confirm_has_a_blank_line_above_and_below() {
+        let mut s = state();
+        s.confirm = Some(Confirm::Quit(0));
+        let area = dialog_area(&s, Rect::new(0, 0, 80, 24)).unwrap();
+        let screen = render_screen(&s, 80, 24);
+        let row = |y: u16| -> String {
+            screen[usize::from(y)].chars().skip(usize::from(area.x) + 1).take(usize::from(area.width) - 2).collect()
+        };
+        let (first, last) = (area.y + 1, area.y + area.height - 2);
+        assert!(row(first).trim().is_empty() && !row(first + 1).trim().is_empty(), "{}", screen.join("\n"));
+        assert!(row(last).trim().is_empty() && !row(last - 1).trim().is_empty(), "{}", screen.join("\n"));
     }
 
     #[test]
