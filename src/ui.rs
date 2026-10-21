@@ -2068,7 +2068,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         };
         vec![yes, key(lang.pick("Otra tecla", "Other Key"), "no", "no")]
     } else if state.help {
-        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar la ayuda", "close the help")]
+        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar ayuda", "close help")]
     } else if state.context.is_some() {
         vec![
             key("↑ ↓", "elegir", "choose"),
