@@ -2125,7 +2125,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             keys.push(key("x", "Cerrar pestaña", "Close Tab"));
         }
         if state.listing().is_some_and(|l| l.items == Items::About) && about_button_ready(state) {
-            keys.insert(0, key("Tab", "elegir Actualizar Ahora", "select Update Now"));
+            keys.insert(0, key("Tab", "Actualizar Ahora", "Update Now"));
         }
         keys
     } else {
@@ -2251,7 +2251,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             }
             Some(Items::About) => vec![back],
             Some(Items::System) => vec![key("Enter", "revisar de nuevo", "check again"), back],
-            _ => vec![key("Enter", "cambiar / abrir", "change / open"), back],
+            _ => vec![key("Enter", "cambiar", "change"), back],
         }
     };
     if normal {
@@ -4310,7 +4310,7 @@ mod tests {
         let screen = render(&s);
         assert!(!screen.contains("◀") && screen.contains("↑ Update Now"), "{screen}");
         assert!(screen.contains("(Tab to Select, Enter to Press)"), "{screen}");
-        assert_eq!(hints(&s)[0], ("Tab".to_string(), "Select Update Now".to_string()));
+        assert_eq!(hints(&s)[0], ("Tab".to_string(), "Update Now".to_string()));
         s.update(Action::ToggleFocus);
         assert_eq!(
             s.update(Action::Enter),

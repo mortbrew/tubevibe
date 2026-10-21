@@ -3249,8 +3249,8 @@ impl State {
                 }
                 if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_) | ListKind::Saved) {
                     items.push(item(
-                        "Quitar de esta lista (pide confirmar)",
-                        "Remove from This List (Asks First)",
+                        "Quitar de la lista",
+                        "Remove From List",
                         "X",
                         Action::RemoveFromList,
                     ));
@@ -3277,8 +3277,8 @@ impl State {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
                     items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
                     items.push(item(
-                        "A la papelera (pide confirmar)",
-                        "Move to Trash (Asks First)",
+                        "A la papelera",
+                        "Trash",
                         "X",
                         Action::Trash,
                     ));
@@ -3336,7 +3336,7 @@ impl State {
     fn subscribe_item(&self) -> Option<MenuItem> {
         let (id, ..) = self.selected_channel()?;
         let (es, en) = if self.subs.contains(&id) {
-            ("Desuscribirse (pide confirmar)", "Unsubscribe (Asks First)")
+            ("Desuscribirse", "Unsubscribe")
         } else {
             ("Suscribirse", "Subscribe")
         };

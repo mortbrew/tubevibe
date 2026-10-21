@@ -72,10 +72,10 @@ pub const ON_VIDEO: &[(&str, Text)] = &[
 ];
 
 pub const IN_MENU: &[(&str, Text)] = &[
-    ("↑ ↓", Text::new("elegir sección o pestaña", "choose a section or tab")),
+    ("↑ ↓", Text::new("elegir", "choose")),
     ("Enter", Text::new("abrir", "open")),
-    ("Tab", Text::new("ir a la lista", "go to the list")),
-    ("/", Text::new("buscar videos", "search videos")),
+    ("Tab", Text::new("lista", "list")),
+    ("/", Text::new("buscar", "search")),
 ];
 
 pub const IN_LISTS: &[(&str, Text)] = &[
@@ -376,7 +376,7 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
             // Tab and / share a row so the help fits 40 lines.
             menu.truncate(2);
-            menu.push(("Tab  /".into(), lang.pick("ir a la lista / buscar videos", "go to the list / search videos")));
+            menu.push(("Tab  /".into(), lang.pick("lista / buscar", "list / search")));
             menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
             menu.push(("X".into(), lang.pick("cerrarla y quitarla de su lista", "close the tab and remove it from its list")));
             menu
