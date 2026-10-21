@@ -1227,6 +1227,16 @@ impl State {
     }
 
     /// `es` or `en`, in the interface language.
+    /// "Needs Kitty Terminal" next to a setting that needs kitty, when this isn't kitty.
+    pub fn kitty_note(&self, setting: Setting) -> Option<&'static str> {
+        let wants_kitty = match setting {
+            Setting::VideoMode => self.config.player.mode == PlayerMode::Embedded,
+            Setting::Thumbnails => self.config.ui.thumbnails,
+            _ => false,
+        };
+        kitty_note(wants_kitty, kitty_detected(), self.lang())
+    }
+
     fn tr(&self, es: &'static str, en: &'static str) -> &'static str {
         self.lang().pick(es, en)
     }
@@ -1328,14 +1338,17 @@ impl State {
             Setting::Language => language_label(player.language, lang).into(),
             Setting::SubLang => language_name(&player.sub_lang, lang),
             Setting::Quality => format!("{}p", player.max_height),
-            Setting::VideoMode => match player.mode {
+            Setting::VideoMode => {
+                let label: String = match player.mode {
                 PlayerMode::Auto => self.tr("Automático (integrado en kitty)", "Automatic (Embedded in kitty)").into(),
                 PlayerMode::Embedded => self.tr("Integrado", "Embedded").into(),
                 PlayerMode::Window => self.tr("Ventana aparte", "Separate Window").into(),
                 PlayerMode::Overlay => {
                     self.tr("Superpuesto: ventana sobre la app (X11)", "Overlay: a Window over the App (X11)").into()
                 }
-            },
+                };
+                label
+            }
             Setting::BackgroundAudio => {
                 if player.background_audio {
                     self.tr("Sigue sonando", "Keeps Playing").into()
@@ -4600,6 +4613,19 @@ fn effect_flag(effects: &mut EffectsConfig, setting: Setting) -> Option<(&'stati
 }
 
 /// "Sí"/"No", "On"/"Off".
+/// kitty is the terminal (not inside a multiplexer): embedded video and thumbnails work.
+fn kitty_detected() -> bool {
+    crate::player::resolve_mode(PlayerMode::Auto, |key| std::env::var(key).ok()) == crate::player::Mode::Embedded
+}
+
+/// Adds the "Needs Kitty Terminal" note to a setting's value.
+fn kitty_note(wants_kitty: bool, kitty: bool, lang: Lang) -> Option<&'static str> {
+    (wants_kitty && !kitty).then_some(match lang {
+        Lang::Es => "Requiere la terminal kitty",
+        Lang::En => "Needs Kitty Terminal",
+    })
+}
+
 fn on_off(on: bool) -> (&'static str, &'static str) {
     if on { ("Sí", "On") } else { ("No", "Off") }
 }
@@ -5494,6 +5520,13 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(s.prompt, None);
+    }
+
+    #[test]
+    fn kitty_note_only_without_kitty() {
+        assert_eq!(kitty_note(true, false, Lang::En), Some("Needs Kitty Terminal"));
+        assert_eq!(kitty_note(true, true, Lang::En), None);
+        assert_eq!(kitty_note(false, false, Lang::En), None);
     }
 
     #[test]

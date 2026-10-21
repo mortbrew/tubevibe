@@ -1951,6 +1951,9 @@ fn setting_row(state: &State, icon: &str, setting: Setting) -> ListItem<'static>
     if !value.is_empty() {
         spans.push(Span::styled(value, Style::new().fg(YELLOW).bold()));
     }
+    if let Some(note) = state.kitty_note(setting) {
+        spans.push(Span::styled(format!("  {note}"), RED));
+    }
     ListItem::new(Line::from(spans))
 }
 

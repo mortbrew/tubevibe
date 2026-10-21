@@ -3,6 +3,14 @@
 Changes made in this fork, [mortbrew/tubevibe](https://github.com/mortbrew/tubevibe),
 on top of upstream [polblancoo/tubetui](https://github.com/polblancoo/tubetui) v0.7.7.
 
+## Unreleased (0.8.9)
+
+- **Settings → Player Mode and Video Thumbnails** show **Needs Kitty Terminal**
+  (in the theme's red) when they need kitty and the app isn't running in kitty:
+  Player Mode set to Embedded, or Thumbnails turned on. Embedded video and
+  thumbnails are drawn with kitty's graphics protocol, which terminals like
+  Alacritty don't have.
+
 ## Watch Later is YouTube's own Watch Later (`watch-later-online`)
 
 Before, the **Ver después / Watch Later** entry of the left menu was a list kept
