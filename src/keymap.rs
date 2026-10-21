@@ -38,7 +38,7 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
     ('?', "?", Action::ToggleHelp, Text::new("esta ayuda", "this help")),
     ('M', "M", Action::ToggleSidebar, Text::new("mostrar / ocultar el menú", "show / hide the menu")),
     ('L', "L", Action::ToggleUiLang, Text::new("idioma: pasar a English", "language: switch to español")),
-    ('Q', "Q", Action::AskQuit, Text::new("salir (pide confirmar)", "quit (asks first)")),
+    ('Q', "Q", Action::AskQuit, Text::new("salir", "quit")),
     ('R', "R", Action::GoSection(Section::Inicio), Text::new("abrir Mis recomendados", "open My Recommendations")),
     ('S', "S", Action::GoSection(Section::Configuracion), Text::new("abrir Configuración", "open Settings")),
     ('A', "A", Action::GoSection(Section::AcercaDe), Text::new("abrir Acerca de", "open About")),
@@ -58,24 +58,24 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
 
 /// Keys that act on the selected video, in lists and in video tabs.
 pub const ON_VIDEO: &[(&str, Text)] = &[
-    ("w", Text::new("a Ver después de YouTube (ya está: lo dice)", "save to YouTube Watch Later (if there: says so)")),
+    ("w", Text::new("Ver después de YouTube", "YouTube Watch Later")),
     (
         "W",
-        Text::new("a Ver después de tubevibe (ya está: lo dice)", "save to tubevibe Watch Later (if there: says so)"),
+        Text::new("Ver después de tubevibe", "tubevibe Watch Later"),
     ),
-    ("s", Text::new("suscribirse / desuscribirse (pide confirmar)", "subscribe / unsubscribe (asks first)")),
-    ("g", Text::new("me gusta (otra vez: lo quita)", "like (again: take it back)")),
-    ("G", Text::new("no me gusta (otra vez: lo quita)", "dislike (again: take it back)")),
-    ("d", Text::new("descargar (con subtítulos)", "download (with subtitles)")),
-    ("a", Text::new("escuchar solo el audio / volver al video", "audio only / back to the video")),
-    ("c", Text::new("ver los videos del canal", "the channel's videos")),
+    ("s", Text::new("suscribirse / desuscribirse", "subscribe / unsubscribe")),
+    ("g", Text::new("me gusta", "like")),
+    ("G", Text::new("no me gusta", "dislike")),
+    ("d", Text::new("descargar", "download")),
+    ("a", Text::new("solo audio / video", "audio only / video")),
+    ("c", Text::new("abrir canal", "open channel")),
 ];
 
 pub const IN_MENU: &[(&str, Text)] = &[
-    ("↑ ↓", Text::new("elegir sección o pestaña", "choose a section or tab")),
+    ("↑ ↓", Text::new("elegir", "choose")),
     ("Enter", Text::new("abrir", "open")),
-    ("Tab", Text::new("ir a la lista", "go to the list")),
-    ("/", Text::new("buscar videos", "search videos")),
+    ("Tab", Text::new("lista", "list")),
+    ("/", Text::new("buscar", "search")),
 ];
 
 pub const IN_LISTS: &[(&str, Text)] = &[
@@ -87,7 +87,7 @@ pub const IN_LISTS: &[(&str, Text)] = &[
     ("v", Text::new("mostrar / ocultar los ya vistos (Inicio…)", "show / hide watched (My Recommendations…)")),
     ("Espacio", Text::new("marcar varios (videos, música, descargas)", "mark several (videos, music, downloads)")),
     ("f", Text::new("pantalla completa del video en curso", "fullscreen the video playing")),
-    ("X  Supr", Text::new("quitar de la lista o a la papelera (pide s)", "remove from the list or trash (asks y)")),
+    ("X  Supr", Text::new("quitar de la lista o a la papelera", "remove from list or trash")),
 ];
 
 pub const WITH_MOUSE: &[(&str, Text)] = &[
@@ -101,31 +101,31 @@ pub const WITH_MOUSE: &[(&str, Text)] = &[
 ];
 
 pub const IN_SEARCH: &[(&str, Text)] = &[
-    ("Enter", Text::new("buscar / aceptar", "search / accept")),
-    ("Tab", Text::new("dónde buscar: todo / mis canales / canal", "where: everywhere / my channels / channel")),
+    ("Enter", Text::new("buscar", "search")),
+    ("Tab", Text::new("buscar en: todo / mis canales / canal", "search in: everywhere / my channels / channel")),
     ("Esc", Text::new("cancelar", "cancel")),
 ];
 
 pub const IN_TAB: &[(&str, Text)] = &[
     ("Espacio", Text::new("pausa", "pause")),
     ("Enter", Text::new("reproducir · en A continuación: ese video", "play · in Up Next: the selected video")),
-    ("v", Text::new("calidad: 360p → 480p → 720p → 1080p …", "quality: 360p → 480p → 720p → 1080p …")),
-    ("b", Text::new("compresión: H.264 → VP9 → AV1 → cualquiera", "codec: H.264 → VP9 → AV1 → any")),
-    ("f  Esc", Text::new("pantalla completa / salir", "fullscreen / leave")),
-    ("←  Esc", Text::new("ir al menú", "go to the menu")),
-    ("Shift+← →", Text::new("retroceder / avanzar 5 s (o solo →)", "back / forward 5 s (or → alone)")),
+    ("v", Text::new("cambiar resolución", "change resolution")),
+    ("b", Text::new("cambiar códec", "change codec")),
+    ("f  Esc", Text::new("pantalla completa / salir", "fullscreen / exit")),
+    ("←  Esc", Text::new("menú", "menu")),
+    ("Shift+← →", Text::new("saltar ±5s", "seek ±5s")),
     ("[ ]", Text::new("capítulo anterior / siguiente", "previous / next chapter")),
-    ("↑ ↓  m", Text::new("subir / bajar volumen · silenciar", "volume up / down · mute")),
-    ("j", Text::new("subtítulos sí / no", "subtitles on / off")),
-    ("i", Text::new("modo: subtítulos → original → doblado", "mode: subtitles → original → dubbed")),
-    ("o", Text::new("otro idioma (es → en → pt …)", "another language (es → en → pt …)")),
+    ("↑ ↓  m", Text::new("volumen · silenciar", "volume · mute")),
+    ("j", Text::new("subtítulos", "subtitles")),
+    ("i", Text::new("modo de audio", "audio mode")),
+    ("o", Text::new("idioma", "language")),
     (". ,", Text::new("música: siguiente / anterior", "music: next / previous")),
-    ("Tab", Text::new("ir a A continuación (en modo ventana)", "go to Up Next (window mode)")),
+    ("Tab", Text::new("A continuación", "Up Next")),
     ("j k", Text::new("moverse en A continuación", "move in Up Next")),
     ("Esc", Text::new("en A continuación: volver al video", "in Up Next: back to the video")),
-    ("PgUp PgDn", Text::new("recorrer los comentarios (en ventana)", "scroll the comments (in a window)")),
-    ("x", Text::new("cerrar la pestaña", "close the tab")),
-    ("X", Text::new("cerrar y quitar de su lista (pide s)", "close + remove from its list (asks y)")),
+    ("PgUp PgDn", Text::new("recorrer comentarios", "scroll comments")),
+    ("x", Text::new("cerrar pestaña", "close tab")),
+    ("X", Text::new("cerrar, quitar de la lista", "close, remove from list")),
 ];
 
 /// `(keys, description)` rows of a table, in `lang`.
@@ -165,7 +165,7 @@ pub fn global_rows(lang: Lang) -> Vec<(String, &'static str)> {
     vec![
         ("?".into(), pick("esta ayuda", "this help")),
         ("M  L".into(), pick("menú sí / no · idioma: English", "menu on / off · language: español")),
-        ("Q  Ctrl+C".into(), pick("salir (pide confirmar) / salir ya", "quit (asks first) / quit now")),
+        ("Q  Ctrl+C".into(), pick("salir / salir ya", "quit / quit now")),
         ("R  S  A".into(), pick("Recomendados, Configuración, Acerca de", "My Recommendations, Settings, About")),
         ("Y  V".into(), pick("abrir Ver después: YouTube / tubevibe", "open Watch Later: YouTube / tubevibe")),
     ]
@@ -376,7 +376,7 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             menu[1] = ("Enter  →".into(), lang.pick("abrir (Salir: solo Enter)", "open (Quit: Enter only)"));
             // Tab and / share a row so the help fits 40 lines.
             menu.truncate(2);
-            menu.push(("Tab  /".into(), lang.pick("ir a la lista / buscar videos", "go to the list / search videos")));
+            menu.push(("Tab  /".into(), lang.pick("lista / buscar", "list / search")));
             menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
             menu.push(("X".into(), lang.pick("cerrarla y quitarla de su lista", "close the tab and remove it from its list")));
             menu

@@ -3,6 +3,16 @@
 Changes made in this fork, [mortbrew/tubevibe](https://github.com/mortbrew/tubevibe),
 on top of upstream [polblancoo/tubetui](https://github.com/polblancoo/tubetui) v0.7.7.
 
+## Unreleased (0.8.9)
+
+- **Key-cap bottom bar**: each key is a solid cap (the theme's background on its
+  text colour, exact theme colours), followed by its label in the text colour.
+  Capital keys stay bold. `? Help` always fits.
+- **Shorter labels** in the bottom bar and Help, e.g. *Close Tab*, *Close, Remove
+  From List*, *Change Resolution*, *Change Codec*, *Replay*, *Seek ±5s*,
+  *Open Channel*, *Trash Marked*, *Resume*, *Search In*. No more "(Asks First)":
+  the confirm dialog already asks.
+
 ## Watch Later is YouTube's own Watch Later (`watch-later-online`)
 
 Before, the **Ver después / Watch Later** entry of the left menu was a list kept
