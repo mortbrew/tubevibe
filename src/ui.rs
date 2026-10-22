@@ -697,8 +697,9 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
         Constraint::Length(card_rows),
         Constraint::Length(summary_rows),
         Constraint::Length(1),
-        Constraint::Fill(1),
+        Constraint::Max(UP_NEXT_MAX_ROWS + 2),
     ])
+    .flex(ratatui::layout::Flex::Start)
     .areas(left);
     let [thumbnail, _, details] =
         Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
@@ -709,6 +710,9 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
 /// Rows "Up next" keeps at least (its border and five videos), however long
 /// the summary: past that the summary is cut with "…".
 const UP_NEXT_MIN_ROWS: u16 = 7;
+/// Videos "Up next" ever lists: the pane is never taller than these plus its
+/// border, and scrolls (keeping the selection in view) when shorter.
+const UP_NEXT_MAX_ROWS: u16 = 21;
 
 /// `text` broken into lines of at most `width` columns: its own line breaks
 /// kept, words kept whole when they fit, longer ones cut.
@@ -5102,6 +5106,25 @@ mod tests {
         for (w, h) in [(1, 1), (30, 8), (60, 15)] {
             tab_screen(&s, w, h);
         }
+    }
+
+    #[test]
+    fn up_next_is_at_most_21_rows_and_scrolls_when_shorter() {
+        let (s, _) = details_tab(Some("Corto."));
+        for (w, h) in [(80, 30), (120, 40), (120, 60), (200, 50), (200, 90), (100, 120)] {
+            tab_screen(&s, w, h);
+            let inner = Block::bordered().inner(screen_areas(Rect::new(0, 0, w, h), &s).content);
+            let layout = tab_layout(s.active_tab().unwrap(), inner, s.config.ui.comments_width);
+            assert!(layout.related.height <= UP_NEXT_MAX_ROWS + 2, "{w}x{h}: {}", layout.related.height);
+            assert!(layout.related.bottom() <= layout.left.bottom(), "{w}x{h}");
+            if let Some(c) = layout.comments.filter(|c| c.x > inner.x) {
+                assert_eq!(c.height, inner.height, "comments keep full height at {w}x{h}");
+            }
+        }
+        // A short pane scrolls so the selection (last of 21) stays on screen.
+        let inner = Rect::new(0, 0, 40, 5);
+        assert_eq!(list_row(inner, 20, 21, Position::new(0, 4)), Some(Spot::Row(20)));
+        assert_eq!(list_row(inner, 20, 21, Position::new(0, 0)), Some(Spot::Row(16)));
     }
 
     #[test]
