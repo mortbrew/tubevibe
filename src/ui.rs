@@ -657,6 +657,7 @@ thread_local! {
     static CARD_ROWS: std::cell::Cell<Option<DrawnCard>> = const { std::cell::Cell::new(None) };
 }
 
+#[cfg(test)]
 fn watch_layout(inner: Rect, comments: u16) -> WatchLayout {
     watch_layout_with(inner, comments, (0, 0))
 }
@@ -708,6 +709,28 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
     WatchLayout { thumbnail, details, summary, related, comments, left }
 }
 
+/// Cell height over width ×100 (the font's, when the terminal said).
+static CELL_ASPECT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(200);
+
+/// Tells the layout how tall a cell is for its width (2.0 when unknown), so
+/// thumbnail areas match the picture drawn in them.
+pub fn set_cell_aspect(aspect: f32) {
+    let x100 = (aspect * 100.0).round().clamp(100.0, 400.0) as u32;
+    CELL_ASPECT.store(x100, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Columns that hold a 16:9 picture `rows` tall.
+fn columns_16_9(rows: u16) -> u16 {
+    let aspect = CELL_ASPECT.load(std::sync::atomic::Ordering::Relaxed);
+    (u32::from(rows) * aspect * 16 / 900) as u16
+}
+
+/// Rows that hold a 16:9 picture `columns` wide.
+fn rows_16_9(columns: u16) -> u16 {
+    let aspect = CELL_ASPECT.load(std::sync::atomic::Ordering::Relaxed);
+    (u32::from(columns) * 900 / (aspect * 16)) as u16
+}
+
 /// Columns the details and summary keep beside the thumbnail on a video tab.
 const WATCH_TEXT_MIN_WIDTH: u16 = 40;
 
@@ -717,8 +740,8 @@ const WATCH_TEXT_MIN_WIDTH: u16 = 40;
 /// [`WATCH_TEXT_MIN_WIDTH`]; none under 14x4.
 fn watch_thumbnail_size(rows: u16, columns: u16) -> (u16, u16) {
     let most = columns.saturating_sub(WATCH_TEXT_MIN_WIDTH + 2);
-    let rows = rows.min((u32::from(most) * 9 / 32) as u16);
-    let width = (u32::from(rows) * 32 / 9) as u16;
+    let rows = rows.min(rows_16_9(most));
+    let width = columns_16_9(rows);
     if rows < 4 { (0, 0) } else { (width, rows) }
 }
 
@@ -1308,13 +1331,13 @@ fn thumbnail_cells(preview: Rect) -> Rect {
     let inner = Block::bordered().inner(preview);
     // At most half the rows (a preview under the list is wide and short),
     // narrowed to stay 16:9 when that cuts it.
-    let full = (inner.width as u32 * 9 / 32) as u16;
+    let full = rows_16_9(inner.width);
     let rows = if full > inner.height / 2 && inner.width > inner.height {
         (inner.height / 2).max(1)
     } else {
         full.min(inner.height)
     };
-    let width = if rows < full { ((u32::from(rows) * 32 / 9) as u16).min(inner.width) } else { inner.width };
+    let width = if rows < full { columns_16_9(rows).min(inner.width) } else { inner.width };
     Rect { height: rows, width, ..inner }
 }
 
@@ -5148,7 +5171,7 @@ mod tests {
                 assert_eq!(t.y, l.left.y, "{w}x{h}: from the top");
                 let full = t.y + t.height == related_top;
                 assert!(full || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
-                assert_eq!(t.width, (u32::from(t.height) * 32 / 9) as u16, "{w}x{h}: 16:9");
+                assert_eq!(t.width, columns_16_9(t.height), "{w}x{h}: 16:9");
                 assert_eq!(l.details.x, t.x + t.width + 2, "{w}x{h}: text beside it");
             }
             assert!(l.details.width >= WATCH_TEXT_MIN_WIDTH, "{w}x{h}: text keeps its width: {l:?}");

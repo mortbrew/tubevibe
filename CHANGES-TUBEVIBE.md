@@ -1137,6 +1137,17 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### Thumbnails fill their area, in high resolution
+
+- The picture now scales up (not only down) to fill its area, 16:9, from the
+  top-left corner: on a video tab it starts at the top and meets Up Next, with
+  the text 2 columns to its right; in the preview pane it fills the top.
+- Areas follow the font's real cell shape when the terminal reports it.
+- Big areas (10 rows or more) get YouTube's largest thumbnail: maxres, else
+  sd or hq (black bars cut off), else the small one; cached on disk as
+  `<id>-hd.jpg`. Smaller previews keep the small mqdefault. Pixelation applies
+  to both.
+
 ### A big thumbnail on video tabs
 
 - The video tab's thumbnail now runs from the top of the left column down to

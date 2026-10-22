@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use image::DynamicImage;
 use image::imageops::FilterType;
@@ -26,6 +26,9 @@ use crate::config::{Pixelation, ThumbMode};
 const CACHE: usize = 64;
 /// The disk cache is trimmed (oldest first) to this many bytes.
 pub const DISK_CAP: u64 = 30 * 1024 * 1024;
+/// A new thumbnail waits this long after the selection last moved, so
+/// scrolling a list does not send a picture per row.
+pub const SETTLE: Duration = Duration::from_millis(120);
 /// Smaller than this many cells, no thumbnail (it would be a smudge).
 const MIN_CELLS: (u16, u16) = (8, 3);
 
@@ -47,18 +50,22 @@ struct Shown {
     id: String,
     mode: ThumbMode,
     pixelation: Pixelation,
+    big: bool,
     protocol: StatefulProtocol,
 }
 
 pub struct Thumbnails {
     /// The terminal's graphics, when it has any (Picture).
     graphics: Option<Picker>,
-    cache: HashMap<String, DynamicImage>,
+    /// Each with whether it is the big one (video tabs).
+    cache: HashMap<String, (DynamicImage, bool)>,
     order: VecDeque<String>,
     requested: HashSet<String>,
-    jobs: Option<mpsc::Sender<String>>,
-    done: Option<mpsc::Receiver<(String, Option<DynamicImage>)>>,
+    jobs: Option<mpsc::Sender<(String, bool)>>,
+    done: Option<mpsc::Receiver<(String, bool, Option<DynamicImage>)>>,
     shown: RefCell<Option<Shown>>,
+    /// The thumbnail asked for, and since when, while it settles.
+    pending: RefCell<Option<(String, Instant)>>,
     /// A picture (not blocks) was on screen and went: clear the screen once.
     pub needs_clear: Cell<bool>,
 }
@@ -79,19 +86,20 @@ impl Thumbnails {
             jobs: None,
             done: None,
             shown: RefCell::new(None),
+            pending: RefCell::new(None),
             needs_clear: Cell::new(false),
         }
     }
 
     fn with_disk(dir: Option<PathBuf>) -> Self {
-        let (jobs, queue) = mpsc::channel::<String>();
+        let (jobs, queue) = mpsc::channel::<(String, bool)>();
         let (finished, done) = mpsc::channel();
         std::thread::spawn(move || {
             if let Some(dir) = &dir {
                 trim_cache(dir, DISK_CAP);
             }
-            for id in queue {
-                if finished.send((id.clone(), fetch(&id, dir.as_deref()))).is_err() {
+            for (id, big) in queue {
+                if finished.send((id.clone(), big, fetch(&id, big, dir.as_deref()))).is_err() {
                     return;
                 }
             }
@@ -109,10 +117,34 @@ impl Thumbnails {
         for id in ids {
             if !id.is_empty() && !self.cache.contains_key(id) && self.requested.insert(id.to_owned()) {
                 if let Some(jobs) = &self.jobs {
-                    let _ = jobs.send(id.to_owned());
+                    let _ = jobs.send((id.to_owned(), false));
                 }
             }
         }
+    }
+
+    /// Downloads the big thumbnail of `id` (for a big area), unless here or on the way.
+    pub fn want_big(&mut self, id: &str) {
+        let key = format!("{id}#hd");
+        if !id.is_empty() && !self.cache.get(id).is_some_and(|c| c.1) && self.requested.insert(key) {
+            if let Some(jobs) = &self.jobs {
+                let _ = jobs.send((id.to_owned(), true));
+            }
+        }
+    }
+
+    /// Cell height over width: the font's when the terminal said, else 2.
+    pub fn cell_aspect(&self) -> f32 {
+        self.graphics
+            .as_ref()
+            .map(Picker::font_size)
+            .filter(|f| f.width > 0 && f.height > 0)
+            .map_or(2.0, |f| f32::from(f.height) / f32::from(f.width))
+    }
+
+    /// A thumbnail is waiting for the selection to settle: draw again soon.
+    pub fn settling(&self) -> bool {
+        self.pending.borrow().is_some()
     }
 
     /// Takes the finished downloads; whether any arrived.
@@ -123,18 +155,28 @@ impl Thumbnails {
                 arrived.push(one);
             }
         }
-        let any = arrived.iter().any(|(_, t)| t.is_some());
-        for (id, thumb) in arrived {
-            self.arrived(id, thumb);
+        let any = arrived.iter().any(|(_, _, t)| t.is_some());
+        for (id, big, thumb) in arrived {
+            self.arrived_as(id, big, thumb);
         }
         any
     }
 
+    #[cfg(test)]
     fn arrived(&mut self, id: String, thumb: Option<DynamicImage>) {
-        self.requested.remove(&id);
+        self.arrived_as(id, false, thumb);
+    }
+
+    fn arrived_as(&mut self, id: String, big: bool, thumb: Option<DynamicImage>) {
+        self.requested.remove(&if big { format!("{id}#hd") } else { id.clone() });
         let Some(thumb) = thumb else { return };
-        self.order.push_back(id.clone());
-        self.cache.insert(id, thumb);
+        if self.cache.get(&id).is_some_and(|c| c.1 && !big) {
+            return;
+        }
+        if !self.cache.contains_key(&id) {
+            self.order.push_back(id.clone());
+        }
+        self.cache.insert(id, (thumb, big));
         while self.order.len() > CACHE {
             if let Some(old) = self.order.pop_front() {
                 self.cache.remove(&old);
@@ -142,9 +184,15 @@ impl Thumbnails {
         }
     }
 
-    /// Draws the thumbnail of `target` (video id, cells), centred and keeping
-    /// its shape; nothing when it isn't here yet, is off, or the cells are too few.
+    /// Draws the thumbnail of `target` (video id, cells) from the top-left
+    /// corner, scaled up or down to fill them keeping its shape; nothing when
+    /// it isn't here yet, is off, or the cells are too few. A different
+    /// video waits [`SETTLE`] after the selection last moved.
     pub fn draw(&self, frame: &mut Frame, target: Option<(String, Rect)>, mode: ThumbMode, pixelation: Pixelation) {
+        self.draw_at(frame, target, mode, pixelation, Instant::now());
+    }
+
+    fn draw_at(&self, frame: &mut Frame, target: Option<(String, Rect)>, mode: ThumbMode, pixelation: Pixelation, now: Instant) {
         let target = target.filter(|(id, area)| {
             mode != ThumbMode::Off
                 && self.cache.contains_key(id)
@@ -152,12 +200,33 @@ impl Thumbnails {
                 && area.height >= MIN_CELLS.1
         });
         let Some((id, area)) = target else {
+            self.pending.borrow_mut().take();
             self.hide();
             return;
         };
+        let big = self.cache[&id].1;
         let mut shown = self.shown.borrow_mut();
-        let current = shown.as_ref().is_some_and(|s| s.id == id && s.mode == mode && s.pixelation == pixelation);
+        let same_video = shown.as_ref().is_some_and(|s| s.id == id);
+        let current = shown.as_ref().is_some_and(|s| s.id == id && s.mode == mode && s.pixelation == pixelation && s.big == big);
         if !current {
+            if !same_video {
+                let mut pending = self.pending.borrow_mut();
+                let since = match pending.as_ref() {
+                    Some((p, t)) if *p == id => *t,
+                    _ => {
+                        *pending = Some((id.clone(), now));
+                        now
+                    }
+                };
+                if now.duration_since(since) < SETTLE {
+                    // Still scrolling: the old picture goes, the new one waits.
+                    drop(pending);
+                    drop(shown);
+                    self.hide();
+                    return;
+                }
+                pending.take();
+            }
             if shown.take().is_some_and(|s| !is_blocks(&s.protocol)) {
                 self.needs_clear.set(true);
             }
@@ -165,14 +234,13 @@ impl Thumbnails {
                 (ThumbMode::Picture, Some(p)) => p.clone(),
                 _ => Picker::halfblocks(),
             };
-            let protocol = picker.new_resize_protocol(pixelate(&self.cache[&id], pixelation));
-            *shown = Some(Shown { id, mode, pixelation, protocol });
+            let protocol = picker.new_resize_protocol(pixelate(&self.cache[&id].0, pixelation));
+            *shown = Some(Shown { id, mode, pixelation, big, protocol });
         }
         let Some(s) = shown.as_mut() else { return };
-        let fit = s.protocol.size_for(Resize::Fit(None), area.as_size());
-        let (w, h) = (fit.width.min(area.width), fit.height.min(area.height));
-        let at = Rect::new(area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h);
-        frame.render_stateful_widget(StatefulImage::default(), at, &mut s.protocol);
+        let fit = s.protocol.size_for(Resize::Scale(None), area.as_size());
+        let at = Rect::new(area.x, area.y, fit.width.min(area.width), fit.height.min(area.height));
+        frame.render_stateful_widget(StatefulImage::default().resize(Resize::Scale(None)), at, &mut s.protocol);
     }
 
     /// Nothing to show: a picture left on screen goes.
@@ -191,6 +259,11 @@ impl Thumbnails {
     /// Whether `id` is in memory.
     pub fn has(&self, id: &str) -> bool {
         self.cache.contains_key(id)
+    }
+
+    #[cfg(test)]
+    fn shown_id(&self) -> Option<String> {
+        self.shown.borrow().as_ref().map(|s| s.id.clone())
     }
 }
 
@@ -212,28 +285,43 @@ pub fn pixelate(image: &DynamicImage, pixelation: Pixelation) -> DynamicImage {
     image.resize_exact(gw, gh, FilterType::Nearest).resize_exact(w, h, FilterType::Nearest)
 }
 
-/// From the disk cache, else from YouTube (and then kept on disk).
-fn fetch(id: &str, dir: Option<&Path>) -> Option<DynamicImage> {
-    let path = dir.map(|d| d.join(format!("{}.jpg", file_name(id))));
+/// From the disk cache, else from YouTube (and then kept on disk). `big`:
+/// the largest YouTube has (maxres, then sd, hq), else the small one.
+fn fetch(id: &str, big: bool, dir: Option<&Path>) -> Option<DynamicImage> {
+    let name = if big { format!("{}-hd.jpg", file_name(id)) } else { format!("{}.jpg", file_name(id)) };
+    let path = dir.map(|d| d.join(name));
     if let Some(bytes) = path.as_ref().and_then(|p| std::fs::read(p).ok())
         && let Some(image) = decode(&bytes)
     {
-        return Some(image);
+        return Some(crop_letterbox(image));
     }
-    let bytes = download(id).ok()?;
-    let image = decode(&bytes)?;
+    let sizes: &[&str] = if big { &["maxresdefault", "sddefault", "hqdefault", "mqdefault"] } else { &["mqdefault"] };
+    let (bytes, image) = sizes.iter().find_map(|size| {
+        let bytes = download(id, size).ok()?;
+        let image = decode(&bytes)?;
+        Some((bytes, image))
+    })?;
     if let (Some(dir), Some(path)) = (dir, path) {
         let _ = std::fs::create_dir_all(dir).and_then(|()| std::fs::write(path, &bytes));
     }
-    Some(image)
+    Some(crop_letterbox(image))
 }
 
-fn download(id: &str) -> Result<Vec<u8>, String> {
-    let url = format!("https://i.ytimg.com/vi/{id}/mqdefault.jpg");
+/// sd and hq thumbnails are 4:3 with black bars around a 16:9 picture: cut
+/// to the middle 16:9.
+pub fn crop_letterbox(image: DynamicImage) -> DynamicImage {
+    let (w, h) = (image.width(), image.height());
+    let wanted = w * 9 / 16;
+    if h > wanted + 2 { image.crop_imm(0, (h - wanted) / 2, w, wanted) } else { image }
+}
+
+fn download(id: &str, size: &str) -> Result<Vec<u8>, String> {
+    let url = format!("https://i.ytimg.com/vi/{id}/{size}.jpg");
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(10))).build().into();
     let mut jpeg = Vec::new();
+    // A missing size is a 404: an error, and the next size is tried.
     let reply = agent.get(&url).call().map_err(|e| e.to_string())?;
-    reply.into_body().into_reader().take(1 << 20).read_to_end(&mut jpeg).map_err(|e| e.to_string())?;
+    reply.into_body().into_reader().take(4 << 20).read_to_end(&mut jpeg).map_err(|e| e.to_string())?;
     Ok(jpeg)
 }
 
@@ -299,7 +387,10 @@ mod tests {
 
     fn screen(thumbs: &Thumbnails, target: Option<(String, Rect)>, mode: ThumbMode) -> String {
         let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
-        terminal.draw(|f| thumbs.draw(f, target.clone(), mode, Pixelation::Off)).unwrap();
+        // Once to ask, once after it settled.
+        let t = Instant::now();
+        terminal.draw(|f| thumbs.draw_at(f, target.clone(), mode, Pixelation::Off, t)).unwrap();
+        terminal.draw(|f| thumbs.draw_at(f, target.clone(), mode, Pixelation::Off, t + SETTLE)).unwrap();
         // A painted cell shows as '▀' (half blocks may draw a flat cell as a
         // coloured space, so count colours, not glyphs).
         let buf = terminal.backend().buffer();
@@ -350,5 +441,78 @@ mod tests {
         assert!(!dir.join("a").exists() && dir.join("b").exists() && dir.join("c").exists());
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(file_name("ab-_C1/../x"), "ab-_C1x");
+    }
+
+    fn painted(terminal: &Terminal<TestBackend>) -> Vec<(u16, u16)> {
+        let buf = terminal.backend().buffer();
+        let mut cells = Vec::new();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                let c = &buf[(x, y)];
+                if c.fg != ratatui::style::Color::Reset || c.bg != ratatui::style::Color::Reset {
+                    cells.push((x, y));
+                }
+            }
+        }
+        cells
+    }
+
+    #[test]
+    fn the_picture_scales_up_to_fill_its_cells_from_the_top_left() {
+        let mut thumbs = Thumbnails::empty();
+        thumbs.arrived("a".into(), Some(stripes()));
+        // 320x180 pixels in 64x18 cells (half blocks: 1x2 px a cell would be
+        // 64x36 px): bigger than the picture, it grows to fill them.
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let area = Rect::new(3, 2, 64, 18);
+        let t = Instant::now();
+        for now in [t, t + SETTLE] {
+            terminal.draw(|f| thumbs.draw_at(f, Some(("a".into(), area)), ThumbMode::Blocks, Pixelation::Off, now)).unwrap();
+        }
+        let cells = painted(&terminal);
+        let (x0, y0) = (cells.iter().map(|c| c.0).min().unwrap(), cells.iter().map(|c| c.1).min().unwrap());
+        let (x1, y1) = (cells.iter().map(|c| c.0).max().unwrap(), cells.iter().map(|c| c.1).max().unwrap());
+        assert_eq!((x0, y0), (3, 2), "top-left, not centred");
+        assert!(x1 >= 3 + 60 || y1 >= 2 + 16, "fills the area: {x1},{y1}");
+        assert!(x1 < 3 + 64 && y1 < 2 + 18, "inside it");
+    }
+
+    #[test]
+    fn a_new_thumbnail_waits_for_the_selection_to_settle() {
+        let mut thumbs = Thumbnails::empty();
+        thumbs.arrived("a".into(), Some(stripes()));
+        thumbs.arrived("b".into(), Some(stripes()));
+        let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
+        let area = Rect::new(0, 0, 32, 9);
+        let t = Instant::now();
+        let mut draw = |id: &str, now: Instant| {
+            terminal.draw(|f| thumbs.draw_at(f, Some((id.into(), area)), ThumbMode::Blocks, Pixelation::Off, now)).unwrap();
+        };
+        draw("a", t);
+        draw("a", t + SETTLE);
+        assert_eq!(thumbs.shown_id().as_deref(), Some("a"));
+        // Scrolling past b to a and back, quickly: nothing is encoded.
+        draw("b", t + SETTLE * 2);
+        assert!(thumbs.settling() && thumbs.shown_id().is_none());
+        draw("b", t + SETTLE * 2 + SETTLE / 2);
+        assert!(thumbs.shown_id().is_none(), "still settling");
+        draw("b", t + SETTLE * 3);
+        assert_eq!(thumbs.shown_id().as_deref(), Some("b"));
+        assert!(!thumbs.settling());
+        assert!(!thumbs.needs_clear.get(), "blocks never ask for a clear");
+    }
+
+    #[test]
+    fn big_thumbnails_replace_small_ones_and_letterboxes_are_cut() {
+        let mut thumbs = Thumbnails::empty();
+        thumbs.arrived_as("a".into(), true, Some(DynamicImage::new_rgb8(1280, 720)));
+        thumbs.arrived_as("a".into(), false, Some(DynamicImage::new_rgb8(320, 180)));
+        assert_eq!(thumbs.cache["a"].0.width(), 1280, "the small one never replaces the big one");
+        thumbs.requested.insert("a#hd".into());
+        thumbs.want_big("a");
+        let cut = crop_letterbox(DynamicImage::new_rgb8(640, 480));
+        assert_eq!((cut.width(), cut.height()), (640, 360));
+        let kept = crop_letterbox(DynamicImage::new_rgb8(1280, 720));
+        assert_eq!((kept.width(), kept.height()), (1280, 720));
     }
 }

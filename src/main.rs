@@ -96,6 +96,9 @@ struct Cli {
     config: Option<PathBuf>,
 }
 
+/// Thumbnail areas this tall or more get YouTube's big picture.
+const BIG_THUMB_ROWS: u16 = 10;
+
 fn main() -> anyhow::Result<()> {
     // Where this binary is now: after Update Now replaces it, Linux names
     // the running one "… (deleted)", so Restart Now uses this path.
@@ -140,6 +143,7 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = ratatui::init();
     // Before reading keys: the terminal answers on stdin.
     runtime.thumbs.set_graphics(tubevibe::thumbs::detect());
+    ui::set_cell_aspect(runtime.thumbs.cell_aspect());
     let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle("tubevibe"));
     set_focus_reports(true);
     let result = runtime.run(&mut terminal);
@@ -448,6 +452,12 @@ impl Runtime {
                 if self.thumbs.needs_clear.take() {
                     terminal.clear()?;
                 }
+                // A big area (a video tab, a large preview) gets the big picture.
+                if let Some((id, area)) = &target
+                    && area.height >= BIG_THUMB_ROWS
+                {
+                    self.thumbs.want_big(id);
+                }
                 let t = Instant::now();
                 self.animations.observe(&self.state, terminal.size()?.into());
                 terminal.draw(|f| {
@@ -460,7 +470,7 @@ impl Runtime {
                 self.place_videos(terminal.size()?.into());
                 dbg(format!("place {:?}", t.elapsed()));
                 // A sixel / iTerm2 thumbnail went: the next frame clears it away.
-                dirty = self.thumbs.needs_clear.get();
+                dirty = self.thumbs.needs_clear.get() || self.thumbs.settling();
             }
             self.state.video_window = self.mode() == Mode::Window;
             if self.mode() == Mode::Overlay
