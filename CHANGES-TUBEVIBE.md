@@ -1140,8 +1140,8 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 ### Up Next is at most 21 rows tall
 
 - The Up Next pane on a video tab is capped at 21 videos plus its border
-  (it never lists more); the spare rows below it stay empty instead of
-  stretching an empty box. On short windows it keeps scrolling so the
+  (it never lists more) and sits at the bottom of the left column; spare
+  rows go above it, under the details and AI summary. On short windows it keeps scrolling so the
   selected video stays visible. Comments keep their full height.
 
 ### → from the menu opens a tab on its video

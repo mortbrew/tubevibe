@@ -693,13 +693,16 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
     let width = WATCH_THUMBNAIL_WIDTH.min(left.width * 2 / 5);
     let rows = (u32::from(width) * 9 / 32) as u16;
     let card_rows = rows.max(detail_rows);
+    // "Up next" sits at the bottom of the column, at most its cap tall: any
+    // spare rows go above it, under the details and summary.
+    let rest = left.height.saturating_sub(card_rows.min(left.height)).saturating_sub(summary_rows);
+    let related_rows = rest.saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
     let [card, summary, _, related] = Layout::vertical([
         Constraint::Length(card_rows),
         Constraint::Length(summary_rows),
-        Constraint::Length(1),
-        Constraint::Max(UP_NEXT_MAX_ROWS + 2),
+        Constraint::Fill(1),
+        Constraint::Length(related_rows),
     ])
-    .flex(ratatui::layout::Flex::Start)
     .areas(left);
     let [thumbnail, _, details] =
         Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
@@ -4078,14 +4081,14 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        // Without one: the heading says so, Up next right below.
+        // Without one: the heading says so, Up next below it (pinned to the bottom).
         let (plain, plain_screen) = details_tab(None);
         let (hx, hy) = find(&plain_screen, "✦ Resumen IA · no disponible para este video");
         assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
-        assert_eq!(hy + 2, find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
+        assert!(hy + 2 <= find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
         assert_eq!(hx, find(&plain_screen, "┌ A continuación").0);
         let (x, y2) = find(&plain_screen, "title r2 ");
-        assert!(y2 < y, "Up next moves up without a summary");
+        assert!(y2 <= y, "Up next stays pinned to the bottom");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
     }
 
@@ -4139,7 +4142,7 @@ mod tests {
         let (s, _) = details_tab(Some("Corto."));
         let screen = tab_screen(&s, 130, 40);
         let summary = row_of(&screen, "Corto.");
-        assert_eq!(row_of(&screen, "┌ A continuación"), summary + 2, "{}", screen.join("\n"));
+        assert!(row_of(&screen, "┌ A continuación") >= summary + 2, "{}", screen.join("\n"));
         // Narrow: the comments go under Up next, which takes the whole width.
         let screen = tab_screen(&s, 100, 40);
         assert!(row_of(&screen, "┌ Comentarios") > row_of(&screen, "┌ A continuación"), "{}", screen.join("\n"));
@@ -5116,7 +5119,7 @@ mod tests {
             let inner = Block::bordered().inner(screen_areas(Rect::new(0, 0, w, h), &s).content);
             let layout = tab_layout(s.active_tab().unwrap(), inner, s.config.ui.comments_width);
             assert!(layout.related.height <= UP_NEXT_MAX_ROWS + 2, "{w}x{h}: {}", layout.related.height);
-            assert!(layout.related.bottom() <= layout.left.bottom(), "{w}x{h}");
+            assert_eq!(layout.related.bottom(), layout.left.bottom(), "Up next pinned to the bottom at {w}x{h}");
             if let Some(c) = layout.comments.filter(|c| c.x > inner.x) {
                 assert_eq!(c.height, inner.height, "comments keep full height at {w}x{h}");
             }
