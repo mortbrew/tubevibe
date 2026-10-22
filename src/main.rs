@@ -449,9 +449,6 @@ impl Runtime {
                     );
                 }
                 let target = thumbnails.then(|| ui::thumbnail_area(&self.state, terminal.size().map(Rect::from).unwrap_or_default())).flatten();
-                if self.thumbs.needs_clear.take() {
-                    terminal.clear()?;
-                }
                 // A big area (a video tab, a large preview) gets the big picture.
                 if let Some((id, area)) = &target
                     && area.height >= BIG_THUMB_ROWS
@@ -469,8 +466,11 @@ impl Runtime {
                 let t = Instant::now();
                 self.place_videos(terminal.size()?.into());
                 dbg(format!("place {:?}", t.elapsed()));
-                // A sixel / iTerm2 thumbnail went: the next frame clears it away.
-                dirty = self.thumbs.needs_clear.get() || self.thumbs.settling();
+                // No whole-screen clears (they flicker): a picture that goes
+                // is overwritten by the cells ratatui writes back over it.
+                self.thumbs.needs_clear.set(false);
+                // A new thumbnail settling after the selection moved: draw again.
+                dirty = self.thumbs.settling();
             }
             self.state.video_window = self.mode() == Mode::Window;
             if self.mode() == Mode::Overlay

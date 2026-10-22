@@ -1137,6 +1137,14 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### No flicker when scrolling past thumbnails
+
+- Moving the selection no longer clears the whole screen: a picture that goes
+  is overwritten by the cells drawn over it, and a new thumbnail waits until
+  the selection has settled for 120 ms, so scrolling fast sends no picture per row.
+- An image is encoded and sent only when the video, its size or a setting
+  changes.
+
 ### Thumbnails fill their area, in high resolution
 
 - The picture now scales up (not only down) to fill its area, 16:9, from the
