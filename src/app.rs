@@ -175,6 +175,7 @@ pub enum Setting {
     RestoreTabs,
     OmarchyTheme,
     Thumbnails,
+    ThumbPixelation,
     Mouse,
     Splash,
     FxStartup,
@@ -195,7 +196,7 @@ pub enum Setting {
 }
 
 impl Setting {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -216,6 +217,7 @@ impl Setting {
         Self::RestoreTabs,
         Self::OmarchyTheme,
         Self::Thumbnails,
+        Self::ThumbPixelation,
         Self::Mouse,
         Self::Splash,
         Self::FxStartup,
@@ -258,7 +260,8 @@ impl Setting {
             Self::CommentsWidth => ("Ancho de los comentarios", "Comments Width"),
             Self::RestoreTabs => ("Recuperar las pestañas al abrir", "Restore Tabs on Startup"),
             Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
-            Self::Thumbnails => ("Portadas de los videos (kitty)", "Video Thumbnails (kitty)"),
+            Self::Thumbnails => ("Miniaturas de los videos", "Video Thumbnails"),
+            Self::ThumbPixelation => ("Pixelado de las miniaturas", "Thumbnail Pixelation"),
             Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to Copy Text: Shift)"),
             Self::Splash => ("Logo al abrir la app", "Logo When the App Opens"),
             Self::FxStartup => ("Animación al abrir la app", "Animation When the App Starts"),
@@ -1233,7 +1236,6 @@ impl State {
     pub fn kitty_note(&self, setting: Setting) -> Option<&'static str> {
         let wants_kitty = match setting {
             Setting::VideoMode => self.config.player.mode == PlayerMode::Embedded,
-            Setting::Thumbnails => self.config.ui.thumbnails,
             _ => false,
         };
         kitty_note(wants_kitty, kitty_detected(), self.lang())
@@ -1378,10 +1380,8 @@ impl State {
                 let (es, en) = on_off(self.config.ui.restore_tabs);
                 self.tr(es, en).into()
             }
-            Setting::Thumbnails => {
-                let (es, en) = on_off(self.config.ui.thumbnails);
-                self.tr(es, en).into()
-            }
+            Setting::Thumbnails => self.config.ui.thumbnails.label(lang).into(),
+            Setting::ThumbPixelation => self.config.ui.thumb_pixelation.label(lang).into(),
             Setting::Mouse => {
                 let (es, en) = on_off(self.config.ui.mouse);
                 self.tr(es, en).into()
@@ -2544,8 +2544,12 @@ impl State {
                 save("ui", "border_style", SettingValue::Text(self.config.ui.border_style.as_str().into()))
             }
             Setting::Thumbnails => {
-                self.config.ui.thumbnails = !self.config.ui.thumbnails;
-                save("ui", "thumbnails", SettingValue::Bool(self.config.ui.thumbnails))
+                self.config.ui.thumbnails = self.config.ui.thumbnails.next();
+                save("ui", "thumbnails", SettingValue::Text(self.config.ui.thumbnails.as_str().into()))
+            }
+            Setting::ThumbPixelation => {
+                self.config.ui.thumb_pixelation = self.config.ui.thumb_pixelation.next();
+                save("ui", "thumb_pixelation", SettingValue::Text(self.config.ui.thumb_pixelation.as_str().into()))
             }
             Setting::Mouse => {
                 self.config.ui.mouse = !self.config.ui.mouse;
@@ -4640,7 +4644,7 @@ fn effect_flag(effects: &mut EffectsConfig, setting: Setting) -> Option<(&'stati
 }
 
 /// "Sí"/"No", "On"/"Off".
-/// kitty is the terminal (not inside a multiplexer): embedded video and thumbnails work.
+/// kitty is the terminal (not inside a multiplexer): embedded video works.
 fn kitty_detected() -> bool {
     crate::player::resolve_mode(PlayerMode::Auto, |key| std::env::var(key).ok()) == crate::player::Mode::Embedded
 }

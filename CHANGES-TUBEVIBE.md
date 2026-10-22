@@ -1137,6 +1137,20 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### Thumbnails in any terminal
+
+- Thumbnails are drawn with ratatui-image instead of the kitty-only code: real
+  pictures in kitty, sixel and iTerm2 terminals, coloured half blocks
+  elsewhere (Alacritty, and always inside tmux/Zellij). In lists the thumbnail
+  sits at the top of the preview pane; on a video tab, left of the details.
+  It is skipped when the space is too small.
+- Settings: **Video Thumbnails** is now Picture / Blocks / Off (the old
+  `thumbnails = true/false` still reads), and **Thumbnail Pixelation**
+  (Off/Low/Medium/High/Max, `[ui] thumb_pixelation`).
+- Images are fetched once (the same mqdefault URL) and cached in memory and in
+  `~/.cache/tubevibe/thumbs` (capped at 30 MB).
+- Only embedded video still needs kitty; the note no longer shows on Thumbnails.
+
 ### Up Next is at most 21 rows tall
 
 - The Up Next pane on a video tab is capped at 21 videos plus its border

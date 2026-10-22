@@ -54,7 +54,7 @@ Every video opens in its own tab.
 - **Search** videos in all of YouTube (about a second, more results load as
   you scroll), only in your channels, or inside a channel (`Tab` switches the
   scope); search channels (with their description, whole in the side panel)
-- A **preview** of the selected video with its **thumbnail** (in kitty), its
+- A **preview** of the selected video with its **thumbnail** (any terminal: real pictures in kitty, sixel and iTerm2 terminals, coloured half blocks elsewhere, e.g. Alacritty), its
   length and **what it weighs** to download at your quality
   (*💾 Download ≈ 84 MB (1080p)*), asked to yt-dlp once the selection rests
   on it, and YouTube's **AI summary** of it (*✦ AI Summary*) when it has one
@@ -364,7 +364,8 @@ comments_width = 46      # comments in a video tab, in columns: 30–78, step 4 
 restore_tabs = true      # reopen the tabs that were open last time (kept in ~/.local/share/tubevibe/tabs.json)
 omarchy_theme = true     # use the current Omarchy theme's colours (Tokyo Night when off or not on Omarchy)
 lang = "en"              # en | es (unset: the system language)
-thumbnails = true        # thumbnail in the preview panel (kitty)
+thumbnails = "picture"   # "picture" (best the terminal can do), "blocks" (half blocks) or "off"
+thumb_pixelation = "off" # "off", "low", "medium", "high" or "max"
 mouse = true             # clicks and wheel; hold Shift to select text
 splash = true            # the tubevibe logo for a moment when it opens (any key skips it)
 check_updates = true     # on startup, tell me about new versions and how to install them here

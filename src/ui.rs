@@ -72,7 +72,7 @@ pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
     /// In `Setting::ALL` order.
-    pub settings: [&'static str; 37],
+    pub settings: [&'static str; 38],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -148,7 +148,7 @@ const EMOJI: Icons = Icons {
     ],
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📏", "🔭", "💭", "📑",
-        "🎨", "📷", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
+        "🎨", "📷", "🧩", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
         "📝",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
@@ -231,7 +231,7 @@ const NERD: Icons = Icons {
         "\u{f086}",
         "\u{f2d2}",
         "\u{f1fc}",
-        "\u{f03e}",
+        "\u{f03e}", "\u{f00a}",
         "\u{f245}",
         "\u{f04b}",
         "\u{f0d0}",
@@ -296,7 +296,7 @@ const NERD: Icons = Icons {
 const UNICODE: Icons = Icons {
     sections: ["⌂", "◷", "▣", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "➚", "◆",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "░", "➚", "◆",
         "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
     ],
     logo: "▶",
