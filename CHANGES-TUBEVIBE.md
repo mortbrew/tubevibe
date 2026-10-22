@@ -1137,6 +1137,11 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### → from the menu opens a tab on its video
+
+- Pressing → on a video tab in the menu now focuses the video pane
+  instead of Up Next (the tab used to keep its last Up Next focus).
+
 ### Linux-only releases (`linux-only-releases`)
 
 - The release workflow builds only `tubevibe-x86_64-linux.tar.gz`,

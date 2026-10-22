@@ -1546,6 +1546,14 @@ impl State {
                 if self.menu_row() == MenuRow::Section(Self::section_index(Section::Salir)) {
                     return Vec::new();
                 }
+                // → on a tab lands on its video, not on Up Next where the tab last was.
+                if let MenuRow::Tab(i) = self.menu_row() {
+                    self.show_tab(i + 1);
+                    if let Some(tab) = self.active_tab_mut() {
+                        tab.on_related = false;
+                    }
+                    return Vec::new();
+                }
                 return self.enter();
             }
             Action::AskBrowser => {
@@ -7053,6 +7061,19 @@ mod tests {
             s.update(Action::Back);
             assert_eq!((s.focus, s.menu_row()), (Focus::Menu, MenuRow::Section(expected)), "{section:?}");
         }
+    }
+
+    #[test]
+    fn right_on_a_tab_focuses_the_video_not_up_next() {
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        s.tabs[0].on_related = true;
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        s.update(Action::MenuOpen);
+        assert_eq!((s.active, s.focus, s.tabs[0].on_related), (1, Focus::List, false));
+        s.update(Action::FocusMenu);
+        assert_eq!(s.focus, Focus::Menu, "← back to the menu");
     }
 
     #[test]
