@@ -1137,6 +1137,17 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### A big thumbnail on video tabs
+
+- The video tab's thumbnail now runs from the top of the left column down to
+  Up Next (no gap), 16:9, with the details and the AI Summary in a column to
+  its right (the summary under the stats, wrapped, all of it while Up Next
+  keeps its rows).
+- The text column keeps at least 40 columns: on smaller windows the thumbnail
+  shrinks (height and width), and under 4 rows it is left out and the text
+  takes the whole column. Up Next stays pinned at the bottom (21 rows at
+  most), the comments full height, narrow windows still stack.
+
 ### Thumbnails in any terminal
 
 - Thumbnails are drawn with ratatui-image instead of the kitty-only code: real

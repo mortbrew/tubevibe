@@ -626,6 +626,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
 }
 
 /// Cells of a video tab whose video plays in its own window.
+#[derive(Debug)]
 struct WatchLayout {
     thumbnail: Rect,
     details: Rect,
@@ -689,25 +690,36 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
             (inner, None)
         }
     };
-    // Two fifths of the left column, at most 36 columns.
-    let width = WATCH_THUMBNAIL_WIDTH.min(left.width * 2 / 5);
-    let rows = (u32::from(width) * 9 / 32) as u16;
-    let card_rows = rows.max(detail_rows);
-    // "Up next" sits at the bottom of the column, at most its cap tall: any
-    // spare rows go above it, under the details and summary.
-    let rest = left.height.saturating_sub(card_rows.min(left.height)).saturating_sub(summary_rows);
-    let related_rows = rest.saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
-    let [card, summary, _, related] = Layout::vertical([
-        Constraint::Length(card_rows),
-        Constraint::Length(summary_rows),
-        Constraint::Fill(1),
-        Constraint::Length(related_rows),
-    ])
-    .areas(left);
-    let [thumbnail, _, details] =
-        Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
-    let thumbnail = Rect { height: rows.min(card.height), ..thumbnail };
+    // "Up next" sits at the bottom of the column, at most its cap tall; the
+    // rows above it are the thumbnail's, with the details and summary beside.
+    let text_rows = detail_rows.saturating_add(summary_rows).min(left.height);
+    let related_rows = left.height.saturating_sub(text_rows).saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
+    let [top, related] = Layout::vertical([Constraint::Fill(1), Constraint::Length(related_rows)]).areas(left);
+    let (width, rows) = watch_thumbnail_size(top.height, left.width);
+    let thumbnail = Rect { width, height: rows, ..top };
+    let gap = if width > 0 { width + 2 } else { 0 };
+    let text = Rect { x: top.x + gap, width: top.width.saturating_sub(gap), ..top };
+    let details = Rect { height: detail_rows.min(text.height), ..text };
+    let summary = Rect {
+        y: details.y + details.height,
+        height: summary_rows.min(text.height - details.height),
+        ..text
+    };
     WatchLayout { thumbnail, details, summary, related, comments, left }
+}
+
+/// Columns the details and summary keep beside the thumbnail on a video tab.
+const WATCH_TEXT_MIN_WIDTH: u16 = 40;
+
+/// Columns and rows of the video tab's thumbnail in `rows` above "Up next" of
+/// a `columns`-wide column: all the rows, 16:9 (a cell is about twice as tall
+/// as wide), smaller when the text beside would get under
+/// [`WATCH_TEXT_MIN_WIDTH`]; none under 14x4.
+fn watch_thumbnail_size(rows: u16, columns: u16) -> (u16, u16) {
+    let most = columns.saturating_sub(WATCH_TEXT_MIN_WIDTH + 2);
+    let rows = rows.min((u32::from(most) * 9 / 32) as u16);
+    let width = (u32::from(rows) * 32 / 9) as u16;
+    if rows < 4 { (0, 0) } else { (width, rows) }
 }
 
 /// Rows "Up next" keeps at least (its border and five videos), however long
@@ -786,16 +798,6 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let lang = state.lang();
     let Some(video) = &tab.playback.video else { return };
     let comments_width = state.config.ui.comments_width;
-    let mut layout = watch_layout(inner, comments_width);
-    let details = if view.thumbnails {
-        let middle = Rect { y: layout.thumbnail.y + layout.thumbnail.height / 2, height: 1, ..layout.thumbnail };
-        frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
-        layout.details
-    } else {
-        // No thumbnail: the details take the left column's whole width.
-        let left = layout.related;
-        Rect { x: left.x, width: left.width, ..layout.details }
-    };
     let watch = tab.watch.as_ref();
     let mut channel = vec![Span::styled(video.channel.as_str(), MAGENTA)];
     if let Some(subscribers) = watch.and_then(|w| w.subscribers.as_deref()) {
@@ -849,24 +851,47 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     if let Some(elapsed) = view.opening {
         lines.push(Line::from(loading_text(lang.pick("el video", "the video"), elapsed, lang)).fg(YELLOW));
     }
-    // The details card grows to hold them all, up to what leaves "Up next" its rows.
+    // Beside the thumbnail (the whole column without one): the details, then
+    // the AI summary, all of it as long as "Up next" keeps its rows (then cut
+    // with "…"). The text's width follows the thumbnail, which follows the
+    // rows the text takes: settled in a few rounds.
+    let text_area = |layout: &WatchLayout| {
+        if view.thumbnails { layout.details } else { Rect { x: layout.left.x, width: layout.left.width, ..layout.details } }
+    };
     let paragraph = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true });
-    let most_card = layout.left.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
-    let detail_rows = (paragraph.line_count(details.width) as u16).min(most_card);
-    layout = watch_layout_with(inner, comments_width, (detail_rows, 0));
-    let details = Rect { y: layout.details.y, height: layout.details.height, ..details };
+    let summary = state.tab_summary_lookup(tab);
+    let most_text = inner.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
+    let mut rows = (0, 0);
+    let mut layout = watch_layout_with(inner, comments_width, rows);
+    let mut summary_text = Vec::new();
+    for _ in 0..4 {
+        let width = text_area(&layout).width;
+        let most = most_text.min(layout.left.height.saturating_sub(1 + UP_NEXT_MIN_ROWS));
+        let detail_rows = (paragraph.line_count(width) as u16).min(most);
+        let mut summary_rows = 0;
+        if let Some(summary) = summary {
+            summary_text = summary_lines(summary, width, usize::from(most - detail_rows), lang, icons.summary);
+            let wrapped = Paragraph::new(summary_text.clone()).wrap(ratatui::widgets::Wrap { trim: true });
+            summary_rows = (wrapped.line_count(width) as u16).min(most - detail_rows);
+        }
+        let settled = rows == (detail_rows, summary_rows);
+        rows = (detail_rows, summary_rows);
+        layout = watch_layout_with(inner, comments_width, rows);
+        if settled {
+            break;
+        }
+    }
+    let (detail_rows, summary_rows) = rows;
+    if view.thumbnails && layout.thumbnail.width > 0 {
+        let t = layout.thumbnail;
+        let middle = Rect { y: t.y + t.height / 2, height: 1, ..t };
+        frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
+    }
+    let details = text_area(&layout);
     frame.render_widget(paragraph, details);
-    // The AI summary across the left column, all of it, as long as "Up next"
-    // keeps its rows (then cut with "…").
-    let mut summary_rows = 0;
-    if let Some(summary) = state.tab_summary_lookup(tab) {
-        let width = layout.related.width;
-        let most = layout.left.height.saturating_sub(layout.details.height + 1 + UP_NEXT_MIN_ROWS);
-        let lines = summary_lines(summary, width, usize::from(most), lang, icons.summary);
-        let wrapped = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true });
-        summary_rows = (wrapped.line_count(width) as u16).min(most);
-        layout = watch_layout_with(inner, comments_width, (detail_rows, summary_rows));
-        frame.render_widget(wrapped, layout.summary);
+    if summary.is_some() {
+        let area = Rect { y: layout.summary.y, height: layout.summary.height, ..details };
+        frame.render_widget(Paragraph::new(summary_text).wrap(ratatui::widgets::Wrap { trim: true }), area);
     }
     CARD_ROWS.with(|c| c.set(Some((tab.id, inner, (detail_rows, summary_rows)))));
 
@@ -1301,7 +1326,7 @@ pub fn thumbnail_area(state: &State, screen: Rect) -> Option<(String, Rect)> {
     if let Some(tab) = state.active_tab() {
         let video = tab.playback.video.as_ref().filter(|_| state.details_shown(tab) && !state.fullscreen)?;
         let inner = Block::bordered().inner(screen_areas(screen, state).content);
-        let cells = watch_layout(inner, state.config.ui.comments_width).thumbnail;
+        let cells = tab_layout(tab, inner, state.config.ui.comments_width).thumbnail;
         return under_context_menu(state, screen, cells).filter(|c| c.height > 0).map(|c| (video.id.clone(), c));
     }
     let video = state.videos_from_selection(0).first()?;
@@ -4064,10 +4089,10 @@ mod tests {
         let (_, status) = find(&screen, "▶ Enter lo reproduce");
         let (x, heading) = find(&screen, "✦ Resumen IA");
         assert_eq!(heading, status + 2, "one blank line under the status line:\n{screen}");
-        // Across the left column, under the thumbnail, all of it; Up next one
+        // In the text column, under the details, all of it; Up next one
         // blank row below its last line.
         let (up_next_x, up_next) = find(&screen, "┌ A continuación");
-        assert_eq!(x, up_next_x, "the left column's width:\n{screen}");
+        assert_eq!(x, find(&screen, "title a  ").0, "the details' column:\n{screen}");
         assert!(screen.contains("UFD Tech explores") && screen.contains("THE END."), "whole: {screen}");
         assert_eq!(find(&screen, "THE END.").1 + 2, up_next, "Up next right below it:\n{screen}");
         // The comments run the whole height of the tab, on the right.
@@ -4283,9 +4308,9 @@ mod tests {
         }
         assert!(!screen.contains("ventana de mpv"));
         let screen_area = Rect::new(0, 0, 130, 40);
-        let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
-        assert_eq!(id, "a");
-        assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
+        // 56 columns beside the comments: the text keeps its 40, no room left
+        // for a thumbnail of at least 4 rows.
+        assert_eq!(thumbnail_area(&s, screen_area), None);
         let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
         assert_eq!(
@@ -5109,6 +5134,42 @@ mod tests {
         for (w, h) in [(1, 1), (30, 8), (60, 15)] {
             tab_screen(&s, w, h);
         }
+    }
+
+    #[test]
+    fn the_video_tab_thumbnail_runs_down_to_up_next_and_shrinks_for_the_text() {
+        // (inner width, height): wide windows, a short one, narrow ones.
+        for (w, h, rows) in [(200u16, 60u16, (6u16, 10u16)), (200, 30, (6, 4)), (120, 30, (8, 0)), (100, 50, (6, 12))] {
+            let inner = Rect::new(1, 1, w, h);
+            let l = watch_layout_with(inner, 44, rows);
+            let t = l.thumbnail;
+            let related_top = l.related.y;
+            if t.width > 0 {
+                assert_eq!(t.y, l.left.y, "{w}x{h}: from the top");
+                let full = t.y + t.height == related_top;
+                assert!(full || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
+                assert_eq!(t.width, (u32::from(t.height) * 32 / 9) as u16, "{w}x{h}: 16:9");
+                assert_eq!(l.details.x, t.x + t.width + 2, "{w}x{h}: text beside it");
+            }
+            assert!(l.details.width >= WATCH_TEXT_MIN_WIDTH, "{w}x{h}: text keeps its width: {l:?}");
+            assert_eq!(l.summary.x, l.details.x, "{w}x{h}: summary under the details");
+            assert_eq!(l.summary.y, l.details.y + rows.0, "{w}x{h}");
+            assert_eq!(l.summary.height, rows.1, "{w}x{h}: all of the summary");
+            assert_eq!(l.related.y + l.related.height, l.left.y + l.left.height, "{w}x{h}: Up next at the bottom");
+            assert!(l.related.height <= UP_NEXT_MAX_ROWS + 2);
+        }
+        // 200x60: tall, the text's 40 columns cap it; 200x30 reaches Up next.
+        let big = watch_layout_with(Rect::new(1, 1, 200, 60), 44, (6, 10));
+        assert!(big.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{big:?}");
+        assert!(big.thumbnail.width > 100, "{big:?}");
+        let mid = watch_layout_with(Rect::new(1, 1, 200, 30), 44, (6, 4));
+        assert_eq!(mid.thumbnail.y + mid.thumbnail.height, mid.related.y, "{mid:?}");
+        // Smaller windows, smaller thumbnails, then none.
+        let sizes: Vec<u16> =
+            [200u16, 160, 130, 110, 100].iter().map(|&w| watch_layout_with(Rect::new(1, 1, w, 60), 44, (6, 10)).thumbnail.width).collect();
+        assert!(sizes.windows(2).all(|p| p[0] >= p[1]), "{sizes:?}");
+        assert_eq!(*sizes.last().unwrap(), 0, "{sizes:?}");
+        assert_eq!(watch_thumbnail_size(3, 200), (0, 0), "under 4 rows: none");
     }
 
     #[test]
