@@ -8,6 +8,7 @@
 pub mod anim;
 pub mod app;
 pub mod config;
+pub mod desktop;
 pub mod doctor;
 pub mod domain;
 pub mod i18n;
