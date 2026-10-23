@@ -707,10 +707,13 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
     let text_rows = detail_rows.saturating_add(summary_rows).min(left.height);
     let related_rows = left.height.saturating_sub(text_rows).saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
     let [top, related] = Layout::vertical([Constraint::Fill(1), Constraint::Length(related_rows)]).areas(left);
-    let (width, rows) = watch_thumbnail_size(top.height, left.width);
-    let thumbnail = Rect { width, height: rows, ..top };
-    let gap = if width > 0 { width + 2 } else { 0 };
-    let text = Rect { x: top.x + gap, width: top.width.saturating_sub(gap), ..top };
+    // The picture sits a cell in from the top and left borders and meets
+    // "Up next"; the text keeps a 2-column gap after it and a column before
+    // the right edge (1 column in from the left without a picture).
+    let (width, rows) = watch_thumbnail_size(top.height.saturating_sub(1), left.width);
+    let thumbnail = Rect { x: top.x + 1, y: top.y + 1, width, height: rows };
+    let gap = if width > 0 { 1 + width + 2 } else { 1 };
+    let text = Rect { x: top.x + gap, width: top.width.saturating_sub(gap + 1), ..top };
     let details = Rect { height: detail_rows.min(text.height), ..text };
     let summary = Rect {
         y: details.y + details.height,
@@ -750,7 +753,8 @@ const WATCH_TEXT_MIN_WIDTH: u16 = 40;
 /// as wide), smaller when the text beside would get under
 /// [`WATCH_TEXT_MIN_WIDTH`]; none under 14x4.
 fn watch_thumbnail_size(rows: u16, columns: u16) -> (u16, u16) {
-    let most = columns.saturating_sub(WATCH_TEXT_MIN_WIDTH + 2);
+    // Left margin, gap and right padding around the picture and the text.
+    let most = columns.saturating_sub(WATCH_TEXT_MIN_WIDTH + 4);
     let rows = rows.min(rows_16_9(most));
     let width = columns_16_9(rows);
     if rows < 4 { (0, 0) } else { (width, rows) }
@@ -890,7 +894,11 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     // with "…"). The text's width follows the thumbnail, which follows the
     // rows the text takes: settled in a few rounds.
     let text_area = |layout: &WatchLayout| {
-        if view.thumbnails { layout.details } else { Rect { x: layout.left.x, width: layout.left.width, ..layout.details } }
+        if view.thumbnails {
+            layout.details
+        } else {
+            Rect { x: layout.left.x + 1, width: layout.left.width.saturating_sub(2), ..layout.details }
+        }
     };
     let paragraph = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true });
     let summary = state.tab_summary_lookup(tab);
@@ -938,10 +946,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up Next"), related.len()),
     };
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
-    // Inside the borders, less the cursor column.
-    let row_width = usize::from(layout.related.width.saturating_sub(3));
+    // Inside the borders, less the cursor column and a blank column on the right.
+    let row_width = usize::from(layout.related.width.saturating_sub(4));
     let list = List::new(related.iter().map(|v| video_row_dated(state, icons, view, v, false, row_width)))
-        .block(focus_panel(title, focused))
+        .block(focus_panel(title, focused).padding(ratatui::widgets::Padding::right(1)))
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
     let selected = (!related.is_empty()).then_some(tab.related);
@@ -979,7 +987,8 @@ fn draw_comments(frame: &mut Frame, tab: &Tab, icons: &Icons, lang: Lang, area: 
         lines.extend(comment.text.lines().map(|l| Line::from(l.to_owned()).fg(FG)));
         lines.push(Line::from(""));
     }
-    let comments = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }).block(panel(title, MUTED));
+    let comments = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true })
+        .block(panel(title, MUTED).padding(ratatui::widgets::Padding::horizontal(1)));
     frame.render_widget(comments, area);
 }
 
@@ -1133,7 +1142,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
                 top.push((ListItem::new(""), None));
             }
             group = Some(section.group());
-            top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()), None));
+            top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(ORANGE).bold()), None));
         }
         let mut label = section.label(lang).to_owned();
         // Only a count YouTube's whole list backs up.
@@ -1200,10 +1209,10 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
             let shown = tab_rows.min(total);
             let offset = tab_offset(state, total, shown);
             let chevron = |icon: &str| format!("{}{icon}", " ".repeat(Span::raw(title).width() + 1));
-            let mut head = Line::from(title.to_owned()).fg(MUTED).bold();
+            let mut head = Line::from(title.to_owned()).fg(ORANGE).bold();
             if offset > 0 {
                 head = Line::from(vec![Span::raw(title.to_owned()), Span::raw(format!(" {}", icons.more_above))])
-                    .fg(MUTED)
+                    .fg(ORANGE)
                     .bold();
             }
             items.push((ListItem::new(""), None));
@@ -1226,7 +1235,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     let mut items = top;
     if !tabs.is_empty() {
         items.push((ListItem::new(""), None));
-        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
+        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(ORANGE).bold()), None));
         items.extend(tabs);
     }
     items.push((ListItem::new(""), None));
@@ -1336,10 +1345,15 @@ fn split_preview(area: Rect, width: u16) -> (Rect, Option<Rect>) {
     (list, Some(preview))
 }
 
+/// `area` less one cell on every side (nothing left when it is too small).
+fn pad_rect(area: Rect) -> Rect {
+    area.inner(ratatui::layout::Margin { horizontal: 1, vertical: 1 })
+}
+
 /// The cells of the thumbnail inside a preview panel: 16:9, taking terminal
 /// cells as about twice as tall as wide.
 fn thumbnail_cells(preview: Rect) -> Rect {
-    let inner = Block::bordered().inner(preview);
+    let inner = pad_rect(Block::bordered().inner(preview));
     // At most half the rows (a preview under the list is wide and short),
     // narrowed to stay 16:9 when that cuts it.
     let full = rows_16_9(inner.width);
@@ -1621,7 +1635,8 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
 fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, video: Option<&Video>, area: Rect) {
     let lang = state.lang();
     let block = panel(lang.pick(" Vista previa ", " Preview "), MUTED);
-    let inner = block.inner(area);
+    // A blank cell inside the border all round.
+    let inner = pad_rect(block.inner(area));
     frame.render_widget(block, area);
     let Some(v) = video else { return };
     let text_area = if view.thumbnails {
@@ -3454,6 +3469,21 @@ mod tests {
     }
 
     #[test]
+    fn menu_section_headers_are_orange_like_settings() {
+        let s = state();
+        let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let rows: Vec<String> =
+            buffer.content.chunks(130).map(|row| row.iter().map(|c| c.symbol()).collect()).collect();
+        let y = rows.iter().position(|l| l.contains("YOUTUBE")).unwrap();
+        let x = rows[y].chars().position(|c| c == 'Y').unwrap();
+        let cell = &buffer[(x as u16, y as u16)];
+        assert_eq!(cell.fg, ORANGE);
+        assert!(cell.modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
     fn search_box_shows_scope_and_query() {
         let mut s = state();
         s.update(Action::FocusSearch);
@@ -3812,8 +3842,9 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
         assert_eq!(id, "b", "the selected video");
-        assert_eq!(cells.width, 46 - 2);
-        assert_eq!(cells.height, (46 - 2) * 9 / 32);
+        // Inside the border and a blank cell all round.
+        assert_eq!(cells.width, 46 - 4);
+        assert_eq!(cells.height, (46 - 4) * 9 / 32);
         s.update(Action::ToggleHelp);
         assert_eq!(thumbnail_area(&s, screen_area), None, "kitty would draw it over the help");
         s.update(Action::ToggleHelp);
@@ -4237,7 +4268,7 @@ mod tests {
         let (hx, hy) = find(&plain_screen, "✦ Resumen IA · no disponible para este video");
         assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
         assert!(hy + 2 <= find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
-        assert_eq!(hx, find(&plain_screen, "┌ A continuación").0);
+        assert_eq!(hx, find(&plain_screen, "┌ A continuación").0 + 1, "a column in from the edge");
         let (x, y2) = find(&plain_screen, "title r2 ");
         assert!(y2 <= y, "Up next stays pinned to the bottom");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
@@ -4335,7 +4366,9 @@ mod tests {
         for result in [Ok(None), Err("falló".to_owned())] {
             s.update(Action::Summarized("b".into(), result));
             let screen = render(&s);
-            let (x, y) = find(&screen, "✦ Resumen IA · no disponible para este video");
+            // The padded preview wraps the note onto the next line.
+            assert!(screen.contains("no disponible"), "{screen}");
+            let (x, y) = find(&screen, "✦ Resumen IA");
             assert!(blank_above(&screen, x, y), "{screen}");
         }
     }
@@ -5271,11 +5304,12 @@ mod tests {
             let t = l.thumbnail;
             let related_top = l.related.y;
             if t.width > 0 {
-                assert_eq!(t.y, l.left.y, "{w}x{h}: from the top");
+                assert_eq!((t.x, t.y), (l.left.x + 1, l.left.y + 1), "{w}x{h}: a cell in from the top and left");
                 let full = t.y + t.height == related_top;
                 assert!(full || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
                 assert_eq!(t.width, columns_16_9(t.height), "{w}x{h}: 16:9");
                 assert_eq!(l.details.x, t.x + t.width + 2, "{w}x{h}: text beside it");
+                assert_eq!(l.details.right() + 1, l.left.right(), "{w}x{h}: a column before the right edge");
             }
             assert!(l.details.width >= WATCH_TEXT_MIN_WIDTH, "{w}x{h}: text keeps its width: {l:?}");
             assert_eq!(l.summary.x, l.details.x, "{w}x{h}: summary under the details");

@@ -1137,6 +1137,19 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### Room to breathe
+
+- The menu's section headers (YOUTUBE, TUBEVIBE, ON THIS COMPUTER, TABS) are
+  the theme's orange and bold, like the Settings headers.
+- The Preview pane keeps a blank cell inside its border on every side, around
+  the thumbnail and the text.
+- Video tab: the thumbnail sits a cell in from the top and left borders (still
+  scaled to fill its area down to Up Next), with a 2-column gap before the
+  text; the details and the AI Summary stop a column short of the right edge.
+- Comments have a blank column on the left and right, and Up Next a blank
+  column on the right to match its left one. Titles and summaries are cut
+  with "…" for the new widths.
+
 ### Settings look like boxvibe's
 
 - Settings are grouped under uppercase section headers: **TUBEVIBE**, ACCOUNT,
