@@ -136,8 +136,12 @@ Every video opens in its own tab.
 - Log in with any installed browser (Brave, Chrome, Chromium, Vivaldi, Edge,
   Opera, Firefox — profiles are detected), or **import a `cookies.txt`** on
   machines without a browser (servers, SSH)
-- A settings screen for everything; changes go to `config.toml`, keeping your
-  comments. `$EDITOR` can open the file from the app
+- A settings screen for everything, grouped under TUBEVIBE, ACCOUNT, PLAYBACK,
+  FEEDS, LOOK, ANIMATION and FOLDERS, with a line on what the highlighted
+  setting does; changes go to `config.toml`, keeping your comments. `$EDITOR`
+  can open the file from the app
+- Settings → *App Menu Entry* adds (or removes) a `tubevibe.desktop` launcher in
+  `~/.local/share/applications`, so app launchers like walker list tubevibe
 - The bottom bar always shows the keys that work right now; `?` lists
   them all
 - English or Spanish, following the system language until you pick one

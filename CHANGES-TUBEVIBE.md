@@ -1137,6 +1137,24 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 
 ## Unreleased (0.8.9)
 
+### Settings look like boxvibe's
+
+- Settings are grouped under uppercase section headers: **TUBEVIBE**, ACCOUNT,
+  PLAYBACK, FEEDS, LOOK, ANIMATION and FOLDERS. Each row still shows its current
+  value, and a line under the list says what the highlighted setting does.
+  Every change still saves to `config.toml` right away; clicks on a header do
+  nothing.
+
+### App Menu Entry
+
+- New setting, Settings → TUBEVIBE → *App Menu Entry*: shows Installed / Not
+  Installed, and Enter writes or deletes
+  `$XDG_DATA_HOME/applications/tubevibe.desktop` (default
+  `~/.local/share/applications`). The entry runs this tubevibe binary in a
+  terminal and carries `X-Tubevibe-Generated=true`; only a file with that
+  marker is ever deleted or replaced. `update-desktop-database` runs on the
+  folder when it is installed.
+
 ### No flicker when scrolling past thumbnails
 
 - Moving the selection no longer clears the whole screen: a picture that goes

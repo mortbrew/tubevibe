@@ -61,6 +61,7 @@ const SHOWN: Color = MAGENTA;
 const GREEN: Color = TOKYO_NIGHT.green;
 const YELLOW: Color = TOKYO_NIGHT.yellow;
 const RED: Color = TOKYO_NIGHT.red;
+const ORANGE: Color = TOKYO_NIGHT.orange;
 const TEAL: Color = TOKYO_NIGHT.teal;
 const PURPLE: Color = TOKYO_NIGHT.purple;
 
@@ -71,8 +72,8 @@ const SELECTED: Color = crate::theme::ACCENT_DRAWN;
 pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
-    /// In `Setting::ALL` order.
-    pub settings: [&'static str; 38],
+    /// In `Setting::ICON_ORDER` order.
+    pub settings: [&'static str; 39],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -138,7 +139,7 @@ impl Icons {
     }
 
     fn setting(&self, setting: Setting) -> &'static str {
-        self.settings[Setting::ALL.iter().position(|s| *s == setting).unwrap_or(0)]
+        self.settings[Setting::ICON_ORDER.iter().position(|s| *s == setting).unwrap_or(0)]
     }
 }
 
@@ -149,7 +150,7 @@ const EMOJI: Icons = Icons {
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📏", "🔭", "💭", "📑",
         "🎨", "📷", "🧩", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
-        "📝",
+        "📝", "📋",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -249,6 +250,7 @@ const NERD: Icons = Icons {
         "\u{f005}",
         "\u{f01b}",
         "\u{f044}",
+        "\u{f0c9}",
     ],
     logo: "\u{f16a}",
     tab: "\u{f144}",
@@ -297,7 +299,7 @@ const UNICODE: Icons = Icons {
     sections: ["⌂", "◷", "▣", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
         "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "░", "➚", "◆",
-        "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎", "☰",
     ],
     logo: "▶",
     tab: "▶",
@@ -469,6 +471,15 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     let list = match listing.items {
         Items::Videos(_) | Items::Channels(_) => split_preview(rest, state.config.ui.preview_width).0,
         Items::About | Items::System => return None,
+        Items::Settings => {
+            let (list, _) = settings_areas(Block::bordered().inner(rest));
+            let rows = settings_rows(state.lang());
+            let shown = rows.iter().position(|r| *r == Some(listing.selected)).unwrap_or(0);
+            return match list_row(list, shown, rows.len(), at)? {
+                Spot::Row(r) => rows[r].map(Spot::Row),
+                other => Some(other),
+            };
+        }
         _ => rest,
     };
     list_row(Block::bordered().inner(list), listing.selected, listing.items.len(), at)
@@ -1573,7 +1584,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
             playlists.iter().map(|p| playlist_row(icons, p, state.lang(), row_width)).collect()
         }
         Items::Settings => {
-            Setting::ALL.iter().enumerate().map(|(i, s)| setting_row(state, icons.settings[i], *s)).collect()
+            return draw_settings(frame, state, icons, listing.selected, title, area);
         }
         Items::Files(files, kind) => {
             files.iter().map(|f| file_row(icons, f, *kind, state.marked.contains(&f.path), row_width)).collect()
@@ -1996,6 +2007,75 @@ fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: boo
         Span::styled(format!("{folder} "), MAGENTA),
     ];
     ListItem::new(Line::from(fit_row(head, Span::styled(file.name.as_str(), FG), Vec::new(), width)))
+}
+
+/// Settings' screen rows, top to bottom: `Some(i)` is `Setting::ALL[i]`,
+/// `None` a section header or the blank line before one.
+fn settings_rows(_lang: Lang) -> Vec<Option<usize>> {
+    let mut rows = Vec::new();
+    let mut group = None;
+    for (i, setting) in Setting::ALL.iter().enumerate() {
+        if group != Some(setting.section()) {
+            if group.is_some() {
+                rows.push(None);
+            }
+            group = Some(setting.section());
+            rows.push(None);
+        }
+        rows.push(Some(i));
+    }
+    rows
+}
+
+/// Inside the Settings border: the rows, and the description at the bottom.
+fn settings_areas(inner: Rect) -> (Rect, Rect) {
+    let [list, about] = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).areas(inner);
+    (list, about)
+}
+
+/// Settings, like boxvibe's: uppercase sections, one row per setting with
+/// its value, and what the highlighted one does under the list.
+fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usize, title: String, area: Rect) {
+    let lang = state.lang();
+    let focused = state.focus == Focus::List;
+    let block = focus_panel(title, focused);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let (list_area, about_area) = settings_areas(inner);
+    let rows = settings_rows(lang);
+    let mut items = Vec::with_capacity(rows.len());
+    let mut shown = 0;
+    for (r, row) in rows.iter().enumerate() {
+        match row {
+            Some(i) => {
+                if *i == selected {
+                    shown = r;
+                }
+                let setting = Setting::ALL[*i];
+                items.push(setting_row(state, icons.setting(setting), setting));
+            }
+            None => match rows.get(r + 1) {
+                Some(Some(next)) => {
+                    let (es, en) = Setting::ALL[*next].section();
+                    items.push(ListItem::new(Span::styled(
+                        format!(" {}", lang.pick(es, en)),
+                        Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+                    )));
+                }
+                _ => items.push(ListItem::new("")),
+            },
+        }
+    }
+    let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
+    let list = List::new(items).highlight_symbol(if focused { "▌" } else { " " }).highlight_style(highlight);
+    frame.render_stateful_widget(list, list_area, &mut ListState::default().with_selected(Some(shown)));
+    if let Some(setting) = Setting::ALL.get(selected) {
+        let about = Line::from(Span::styled(format!(" {}", setting.about(lang)), MUTED));
+        frame.render_widget(
+            Paragraph::new(vec![Line::raw(""), about]).wrap(ratatui::widgets::Wrap { trim: false }),
+            about_area,
+        );
+    }
 }
 
 /// Width of the settings' label column: the longest label and a gap, so
@@ -3340,14 +3420,37 @@ mod tests {
 
     #[test]
     fn settings_screen_shows_labels_and_values() {
-        // Taller than the default screen: the list scrolls past 36 rows.
-        let screen = render_screen(&open_settings(), 130, 46).join("\n");
+        // Taller than the default screen: with its section headers the list scrolls past 36 rows.
+        let screen = render_screen(&open_settings(), 130, 70).join("\n");
         for setting in Setting::ALL {
             assert!(screen.contains(setting.label(Lang::Es)), "{setting:?}\n{screen}");
         }
         assert!(screen.contains("720p"));
         assert!(screen.contains("~/Videos"));
         assert!(screen.contains("Original + subtítulos"));
+    }
+
+    #[test]
+    fn settings_are_grouped_under_sections_with_a_description() {
+        let mut s = open_settings();
+        s.config.ui.lang = Some(Lang::En);
+        s.focus = Focus::List;
+        let screen = render_screen(&s, 130, 70);
+        if std::env::var_os("TUBEVIBE_SNAPSHOT").is_some() {
+            println!("{}", screen.join("\n"));
+        }
+        let order: Vec<usize> = ["TUBEVIBE", "ACCOUNT", "PLAYBACK", "FEEDS", "LOOK", "ANIMATION", "FOLDERS"]
+            .iter()
+            .map(|h| row_of(&screen, &format!("│  {h}")))
+            .collect();
+        assert!(order.windows(2).all(|w| w[0] < w[1]), "{order:?}");
+        assert!(row_of(&screen, "App Menu Entry") < order[1]);
+        assert!(screen.iter().any(|l| l.contains(Setting::ALL[0].about(Lang::En))), "the first setting's description");
+        // A click on a header selects nothing; one on a setting row selects it.
+        let rows = settings_rows(Lang::En);
+        assert_eq!(rows[0], None);
+        assert_eq!(rows[1], Some(0));
+        assert_eq!(rows.iter().flatten().count(), Setting::ALL.len());
     }
 
     #[test]

@@ -193,10 +193,55 @@ pub enum Setting {
     FavoritesFirst,
     CheckUpdates,
     EditFile,
+    MenuEntry,
 }
 
 impl Setting {
-    pub const ALL: [Self; 38] = [
+    /// The Settings screen's order: grouped by `section`, one group after another.
+    pub const ALL: [Self; 39] = [
+        Self::AppLang,
+        Self::CheckUpdates,
+        Self::RestoreTabs,
+        Self::Mouse,
+        Self::SystemCheck,
+        Self::EditFile,
+        Self::MenuEntry,
+        Self::Browser,
+        Self::ImportCookies,
+        Self::Refresh,
+        Self::Logout,
+        Self::VideoMode,
+        Self::Quality,
+        Self::Language,
+        Self::SubLang,
+        Self::BackgroundAudio,
+        Self::SponsorBlock,
+        Self::Autoplay,
+        Self::HideWatched,
+        Self::HideLater,
+        Self::HideShorts,
+        Self::NotifyNew,
+        Self::FavoritesFirst,
+        Self::DiscoverTopics,
+        Self::OmarchyTheme,
+        Self::Icons,
+        Self::BorderStyle,
+        Self::Thumbnails,
+        Self::ThumbPixelation,
+        Self::MenuWidth,
+        Self::PreviewWidth,
+        Self::CommentsWidth,
+        Self::Splash,
+        Self::FxStartup,
+        Self::FxPages,
+        Self::FxDialogs,
+        Self::VideoDirs,
+        Self::MusicDirs,
+        Self::DownloadDir,
+    ];
+
+    /// What the icon sets are listed in (the order Settings had before sections).
+    pub const ICON_ORDER: [Self; 39] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -235,7 +280,22 @@ impl Setting {
         Self::FavoritesFirst,
         Self::CheckUpdates,
         Self::EditFile,
+        Self::MenuEntry,
     ];
+
+    /// The uppercase header the setting sits under (Spanish, English).
+    pub fn section(self) -> (&'static str, &'static str) {
+        match self {
+            Self::AppLang | Self::CheckUpdates | Self::RestoreTabs | Self::Mouse | Self::SystemCheck | Self::EditFile | Self::MenuEntry => ("TUBEVIBE", "TUBEVIBE"),
+            Self::Browser | Self::ImportCookies | Self::Refresh | Self::Logout => ("CUENTA", "ACCOUNT"),
+            Self::VideoMode | Self::Quality | Self::Language | Self::SubLang | Self::BackgroundAudio | Self::SponsorBlock | Self::Autoplay => ("REPRODUCCIÓN", "PLAYBACK"),
+            Self::HideWatched | Self::HideLater | Self::HideShorts | Self::NotifyNew | Self::FavoritesFirst | Self::DiscoverTopics => ("LISTAS", "FEEDS"),
+            Self::OmarchyTheme | Self::Icons | Self::BorderStyle | Self::Thumbnails | Self::ThumbPixelation | Self::MenuWidth | Self::PreviewWidth | Self::CommentsWidth => ("ASPECTO", "LOOK"),
+            Self::Splash | Self::FxStartup | Self::FxPages | Self::FxDialogs => ("ANIMACIÓN", "ANIMATION"),
+            Self::VideoDirs | Self::MusicDirs | Self::DownloadDir => ("CARPETAS", "FOLDERS"),
+        }
+    }
+
 
     pub fn label(self, lang: Lang) -> &'static str {
         let (es, en) = match self {
@@ -284,6 +344,53 @@ impl Setting {
             Self::FavoritesFirst => ("Primero mis canales más vistos", "My Most Watched Channels First"),
             Self::CheckUpdates => ("Buscar versiones nuevas al abrir", "Look for New Versions on Startup"),
             Self::EditFile => ("Editar config.toml", "Edit config.toml"),
+            Self::MenuEntry => ("Entrada en el menú de apps", "App Menu Entry"),
+        };
+        lang.pick(es, en)
+    }
+
+    /// One line on what the setting does, under the list (Settings saves each change to config.toml).
+    pub fn about(self, lang: Lang) -> &'static str {
+        let (es, en) = match self {
+            Self::Browser => ("Lee la sesión de YouTube de un navegador donde ya entraste.", "Reads your YouTube login from a browser you're signed in to."),
+            Self::ImportCookies => ("Un cookies.txt exportado, para equipos sin navegador o por SSH.", "Uses an exported cookies.txt, for machines with no browser or over SSH."),
+            Self::Refresh => ("Vuelve a leer las cookies, si la sesión venció.", "Reads the cookies again, if the login expired."),
+            Self::Logout => ("Olvida la sesión de YouTube en tubevibe.", "Forgets the YouTube login in tubevibe."),
+            Self::Language => ("El idioma de audio que se pide a YouTube.", "The audio language asked of YouTube."),
+            Self::SubLang => ("Idioma de subtítulos y de las pistas dobladas.", "The language for subtitles and dubbed audio tracks."),
+            Self::Quality => ("La resolución más alta que se reproduce y se descarga.", "The highest resolution played and downloaded."),
+            Self::VideoMode => ("Ventana, superpuesto o embebido (embebido solo en kitty).", "Window, overlay or embedded in the app (embedded needs kitty)."),
+            Self::BackgroundAudio => ("Qué hace el video al cambiar de pestaña.", "What the video does when you leave its tab."),
+            Self::SponsorBlock => ("Salta los patrocinios marcados en SponsorBlock.", "Skips sponsor segments marked on SponsorBlock."),
+            Self::Autoplay => ("Si Enter reproduce el video o abre su pestaña.", "Whether Enter plays the video or opens its tab."),
+            Self::AppLang => ("Español o inglés. También L.", "Spanish or English. Also L."),
+            Self::Icons => ("Emoji, Nerd Font (necesita una instalada) o Unicode.", "Emoji, Nerd Font (needs one installed) or plain Unicode."),
+            Self::BorderStyle => ("Cómo se dibujan los bordes de los paneles.", "How every pane's border is drawn."),
+            Self::MenuWidth => ("El ancho del menú, de 20 a 40 columnas. También { y }.", "The menu's width, 20 to 40 columns. Also { and }."),
+            Self::PreviewWidth => ("El ancho del panel de vista previa de las listas.", "The width of the preview pane beside lists."),
+            Self::CommentsWidth => ("El ancho de los comentarios en la pestaña del video.", "The width of the comments in a video tab."),
+            Self::RestoreTabs => ("Abre de nuevo las pestañas de la última vez.", "Opens the tabs from last time again."),
+            Self::OmarchyTheme => ("Usa los colores del tema actual de Omarchy.", "Uses your current Omarchy theme's colours."),
+            Self::Thumbnails => ("Imagen (kitty, sixel, iTerm2), bloques de color o nada.", "Picture (kitty, sixel, iTerm2), coloured half blocks, or Off."),
+            Self::ThumbPixelation => ("Pixela las miniaturas a propósito.", "Makes the thumbnails blocky on purpose."),
+            Self::Mouse => ("Clics y rueda en la app; Shift para seleccionar texto.", "Clicks and wheel in the app; hold Shift to select text."),
+            Self::Splash => ("Muestra el logo al abrir.", "Shows the logo when tubevibe opens."),
+            Self::FxStartup => ("La animación al abrir la app.", "The animation when the app starts."),
+            Self::FxPages => ("La animación al cambiar de página.", "The animation when the page changes."),
+            Self::FxDialogs => ("La animación de la ayuda y las preguntas.", "The animation of Help and confirm boxes."),
+            Self::VideoDirs => ("Carpetas que lista Videos, separadas por comas.", "Folders listed under Videos, comma separated."),
+            Self::MusicDirs => ("Carpetas que lista Música, separadas por comas.", "Folders listed under Music, comma separated."),
+            Self::DownloadDir => ("Dónde se guardan las descargas.", "Where downloads are saved."),
+            Self::DiscoverTopics => ("Los temas que busca Descubrir, separados por comas.", "The topics Discover searches, comma separated."),
+            Self::SystemCheck => ("Revisa mpv, yt-dlp y lo demás que usa tubevibe.", "Checks mpv, yt-dlp and the other tools tubevibe uses."),
+            Self::HideWatched => ("Oculta en los feeds lo que ya viste. v los muestra.", "Hides videos you've watched in feeds. v shows them."),
+            Self::HideLater => ("Oculta en Mis recomendados lo que está en Ver después.", "Hides your Watch Later videos in My Recommendations."),
+            Self::HideShorts => ("Deja los Shorts fuera de las listas.", "Leaves Shorts out of lists."),
+            Self::NotifyNew => ("Avisa cuando mis canales suben videos nuevos.", "Tells you when your channels post new videos."),
+            Self::FavoritesFirst => ("Pone primero los canales que más miras.", "Puts the channels you watch most first."),
+            Self::CheckUpdates => ("Pregunta a GitHub al abrir; Acerca de muestra la nueva.", "Asks GitHub when tubevibe opens; About shows the new version."),
+            Self::EditFile => ("Abre config.toml en $EDITOR y lo vuelve a leer al cerrar.", "Opens config.toml in $EDITOR and reads it again when you close it."),
+            Self::MenuEntry => ("Enter agrega o quita tubevibe.desktop, para que los lanzadores (walker) muestren tubevibe.", "Enter adds or removes tubevibe.desktop, so app launchers (walker on Omarchy) list tubevibe."),
         };
         lang.pick(es, en)
     }
@@ -1339,6 +1446,10 @@ impl State {
         match setting {
             Setting::Browser | Setting::Logout => self.session_label(),
             Setting::ImportCookies | Setting::Refresh | Setting::EditFile => String::new(),
+            Setting::MenuEntry => {
+                let on = crate::desktop::applications_dir().is_some_and(|d| crate::desktop::installed(&d));
+                self.tr(if on { "Instalada" } else { "No instalada" }, if on { "Installed" } else { "Not Installed" }).into()
+            }
             Setting::Language => language_label(player.language, lang).into(),
             Setting::SubLang => language_name(&player.sub_lang, lang),
             Setting::Quality => format!("{}p", player.max_height),
@@ -2637,7 +2748,41 @@ impl State {
                 Vec::new()
             }
             Setting::EditFile => vec![Effect::EditConfig],
+            Setting::MenuEntry => {
+                self.toggle_menu_entry();
+                Vec::new()
+            }
         }
+    }
+
+    /// Adds or removes tubevibe.desktop (a file on disk, not a config key).
+    fn toggle_menu_entry(&mut self) {
+        use crate::desktop;
+        let Some(dir) = desktop::applications_dir() else {
+            self.status = self.tr("Sin carpeta personal: no hay entrada", "No home folder: can't add an app menu entry").into();
+            return;
+        };
+        let home = std::env::var("HOME").unwrap_or_default();
+        let short = |p: &std::path::Path| {
+            let s = p.display().to_string();
+            if home.is_empty() { s } else { s.replacen(&home, "~", 1) }
+        };
+        let es = self.lang().pick(true, false);
+        self.status = if desktop::installed(&dir) {
+            match desktop::remove(&dir) {
+                Ok(p) if es => format!("Quitado {} del menú de apps", short(&p)),
+                Ok(p) => format!("Removed {} from the app menu", short(&p)),
+                Err(e) if es => format!("No se tocó {}: {e}", short(&desktop::path_in(&dir))),
+                Err(e) => format!("Left {} alone: {e}", short(&desktop::path_in(&dir))),
+            }
+        } else {
+            match desktop::current_exe().and_then(|exe| desktop::install(&dir, &exe)) {
+                Ok(p) if es => format!("Agregado {}: tubevibe está en el menú de apps", short(&p)),
+                Ok(p) => format!("Added {}: tubevibe is in the app menu", short(&p)),
+                Err(e) if es => format!("No se pudo agregar la entrada: {e}"),
+                Err(e) => format!("Couldn't add the app menu entry: {e}"),
+            }
+        };
     }
 
     /// This week's videos on my topics, out of my channels; without topics,
@@ -6479,6 +6624,16 @@ mod tests {
         assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);
+        // App Menu Entry writes a file, not config.toml (a temp folder in tests).
+        let dir = crate::desktop::applications_dir().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(s.setting_value(Setting::MenuEntry), "No instalada");
+        assert_eq!(change(&mut s, Setting::MenuEntry), []);
+        assert_eq!(s.setting_value(Setting::MenuEntry), "Instalada", "{}", s.status);
+        assert!(std::fs::read_to_string(crate::desktop::path_in(&dir)).unwrap().contains(crate::desktop::MARKER));
+        assert_eq!(change(&mut s, Setting::MenuEntry), []);
+        assert_eq!(s.setting_value(Setting::MenuEntry), "No instalada");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
