@@ -1135,6 +1135,145 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   layout and the width settings; stacked panes take the full width.
 
 
+## Unreleased (0.8.9)
+
+### Room to breathe
+
+- The menu's section headers (YOUTUBE, TUBEVIBE, ON THIS COMPUTER, TABS) are
+  the theme's orange and bold, like the Settings headers.
+- The Preview pane keeps a blank cell inside its border on every side, around
+  the thumbnail and the text.
+- Video tab: the thumbnail sits a cell in from the top and left borders (still
+  scaled to fill its area down to Up Next), with a 2-column gap before the
+  text; the details and the AI Summary stop a column short of the right edge.
+- Comments have a blank column on the left and right, and Up Next a blank
+  column on the right to match its left one. Titles and summaries are cut
+  with "…" for the new widths.
+
+### Settings look like boxvibe's
+
+- Settings are grouped under uppercase section headers: **TUBEVIBE**, ACCOUNT,
+  PLAYBACK, FEEDS, LOOK, ANIMATION and FOLDERS. Each row still shows its current
+  value, and a line under the list says what the highlighted setting does.
+  Every change still saves to `config.toml` right away; clicks on a header do
+  nothing.
+
+### App Menu Entry
+
+- New setting, Settings → TUBEVIBE → *App Menu Entry*: shows Installed / Not
+  Installed, and Enter writes or deletes
+  `$XDG_DATA_HOME/applications/tubevibe.desktop` (default
+  `~/.local/share/applications`). The entry runs this tubevibe binary in a
+  terminal and carries `X-Tubevibe-Generated=true`; only a file with that
+  marker is ever deleted or replaced. `update-desktop-database` runs on the
+  folder when it is installed.
+
+### No flicker when scrolling past thumbnails
+
+- Moving the selection no longer clears the whole screen: a picture that goes
+  is overwritten by the cells drawn over it, and a new thumbnail waits until
+  the selection has settled for 120 ms, so scrolling fast sends no picture per row.
+- An image is encoded and sent only when the video, its size or a setting
+  changes.
+
+### Thumbnails fill their area, in high resolution
+
+- The picture now scales up (not only down) to fill its area, 16:9, from the
+  top-left corner: on a video tab it starts at the top and meets Up Next, with
+  the text 2 columns to its right; in the preview pane it fills the top.
+- Areas follow the font's real cell shape when the terminal reports it.
+- Big areas (10 rows or more) get YouTube's largest thumbnail: maxres, else
+  sd or hq (black bars cut off), else the small one; cached on disk as
+  `<id>-hd.jpg`. Smaller previews keep the small mqdefault. Pixelation applies
+  to both.
+
+### A big thumbnail on video tabs
+
+- The video tab's thumbnail now runs from the top of the left column down to
+  Up Next (no gap), 16:9, with the details and the AI Summary in a column to
+  its right (the summary under the stats, wrapped, all of it while Up Next
+  keeps its rows).
+- The text column keeps at least 40 columns: on smaller windows the thumbnail
+  shrinks (height and width), and under 4 rows it is left out and the text
+  takes the whole column. Up Next stays pinned at the bottom (21 rows at
+  most), the comments full height, narrow windows still stack.
+
+### Thumbnails in any terminal
+
+- Thumbnails are drawn with ratatui-image instead of the kitty-only code: real
+  pictures in kitty, sixel and iTerm2 terminals, coloured half blocks
+  elsewhere (Alacritty, and always inside tmux/Zellij). In lists the thumbnail
+  sits at the top of the preview pane; on a video tab, left of the details.
+  It is skipped when the space is too small.
+- Settings: **Video Thumbnails** is now Picture / Blocks / Off (the old
+  `thumbnails = true/false` still reads), and **Thumbnail Pixelation**
+  (Off/Low/Medium/High/Max, `[ui] thumb_pixelation`).
+- Images are fetched once (the same mqdefault URL) and cached in memory and in
+  `~/.cache/tubevibe/thumbs` (capped at 30 MB).
+- Only embedded video still needs kitty; the note no longer shows on Thumbnails.
+
+### Up Next is at most 21 rows tall
+
+- The Up Next pane on a video tab is capped at 21 videos plus its border
+  (it never lists more) and sits at the bottom of the left column; spare
+  rows go above it, under the details and AI summary. On short windows it keeps scrolling so the
+  selected video stays visible. Comments keep their full height.
+
+### → from the menu opens a tab on its video
+
+- Pressing → on a video tab in the menu now focuses the video pane
+  instead of Up Next (the tab used to keep its last Up Next focus).
+
+### Linux-only releases (`linux-only-releases`)
+
+- The release workflow builds only `tubevibe-x86_64-linux.tar.gz`,
+  `tubevibe-aarch64-linux.tar.gz` and `tubevibe_amd64.deb`; the macOS and
+  Windows jobs (and the Windows installer step) are gone. macOS and Windows
+  users build from source with cargo; README, the docs page and `install.sh`
+  say so (on macOS `install.sh` builds from source).
+- Self-update on a machine with no prebuilt file (macOS, Windows): About says
+  "No Prebuilt Update for This Platform: Build From Source" and shows the
+  `cargo install` command, instead of a bare "No Download for This System".
+- Test: `no_prebuilt_file_on_macos_or_windows_says_build_from_source`.
+
+### Needs Kitty Terminal note (`settings-kitty-note`)
+
+- **Settings → Player Mode and Video Thumbnails** show **Needs Kitty Terminal**
+  (in the theme's red) when they need kitty and the app isn't running in kitty:
+  Player Mode set to Embedded, or Thumbnails turned on. Embedded video and
+  thumbnails are drawn with kitty's graphics protocol, which terminals like
+  Alacritty don't have.
+
+### Balanced dialog padding (`dialog-padding`)
+
+- **Confirm dialogs** have a blank line below the hint as well as above the
+  question, so the text sits in the middle of the box.
+
+### Key-cap bottom bar and shorter labels (`keycap-bar`)
+
+- **Key-cap bottom bar**: each key is a solid cap (the theme's background on its
+  text colour, exact theme colours), followed by its label in the text colour.
+  Capital keys stay bold. `? Help` always fits.
+- **Shorter labels** in the bottom bar and Help, e.g. *Close Tab*, *Close, Remove
+  From List*, *Change Resolution*, *Change Codec*, *Replay*, *Seek ±5s*,
+  *Open Channel*, *Trash Marked*, *Resume*, *Search In*. No more "(Asks First)":
+  the confirm dialog already asks.
+
+### Version on the menu border
+
+- The left menu's top border shows the version (`v0.8.9`, muted colour)
+  right-aligned, on the same line as the ▶ tubevibe logo. On a menu too narrow
+  for both (under 23 columns) the version is left out and the logo stays.
+- Version bumped to 0.8.9.
+
+### `{` and `}` resize the menu (from boxvibe)
+
+- `{` makes the left menu 2 columns narrower and `}` 2 columns wider, live,
+  between 20 and 40 columns (and never more than half the screen, as before).
+  Saved right away as `[ui] menu_width` in config.toml, the same value as
+  Settings → Menu Width. The status bar says the new width. Works anywhere
+  but in the search box; Help lists it on the `M { }` row.
+
 ## 0.8.8: single-key shortcuts (no more Ctrl+Y), Restart Now, t/T tabs, wrapped dialogs and Help (2026-10-20)
 
 ### Help rows never run out of their box (`key-remap`)

@@ -175,6 +175,7 @@ pub enum Setting {
     RestoreTabs,
     OmarchyTheme,
     Thumbnails,
+    ThumbPixelation,
     Mouse,
     Splash,
     FxStartup,
@@ -192,10 +193,55 @@ pub enum Setting {
     FavoritesFirst,
     CheckUpdates,
     EditFile,
+    MenuEntry,
 }
 
 impl Setting {
-    pub const ALL: [Self; 37] = [
+    /// The Settings screen's order: grouped by `section`, one group after another.
+    pub const ALL: [Self; 39] = [
+        Self::AppLang,
+        Self::CheckUpdates,
+        Self::RestoreTabs,
+        Self::Mouse,
+        Self::SystemCheck,
+        Self::EditFile,
+        Self::MenuEntry,
+        Self::Browser,
+        Self::ImportCookies,
+        Self::Refresh,
+        Self::Logout,
+        Self::VideoMode,
+        Self::Quality,
+        Self::Language,
+        Self::SubLang,
+        Self::BackgroundAudio,
+        Self::SponsorBlock,
+        Self::Autoplay,
+        Self::HideWatched,
+        Self::HideLater,
+        Self::HideShorts,
+        Self::NotifyNew,
+        Self::FavoritesFirst,
+        Self::DiscoverTopics,
+        Self::OmarchyTheme,
+        Self::Icons,
+        Self::BorderStyle,
+        Self::Thumbnails,
+        Self::ThumbPixelation,
+        Self::MenuWidth,
+        Self::PreviewWidth,
+        Self::CommentsWidth,
+        Self::Splash,
+        Self::FxStartup,
+        Self::FxPages,
+        Self::FxDialogs,
+        Self::VideoDirs,
+        Self::MusicDirs,
+        Self::DownloadDir,
+    ];
+
+    /// What the icon sets are listed in (the order Settings had before sections).
+    pub const ICON_ORDER: [Self; 39] = [
         Self::Browser,
         Self::ImportCookies,
         Self::Refresh,
@@ -216,6 +262,7 @@ impl Setting {
         Self::RestoreTabs,
         Self::OmarchyTheme,
         Self::Thumbnails,
+        Self::ThumbPixelation,
         Self::Mouse,
         Self::Splash,
         Self::FxStartup,
@@ -233,7 +280,22 @@ impl Setting {
         Self::FavoritesFirst,
         Self::CheckUpdates,
         Self::EditFile,
+        Self::MenuEntry,
     ];
+
+    /// The uppercase header the setting sits under (Spanish, English).
+    pub fn section(self) -> (&'static str, &'static str) {
+        match self {
+            Self::AppLang | Self::CheckUpdates | Self::RestoreTabs | Self::Mouse | Self::SystemCheck | Self::EditFile | Self::MenuEntry => ("TUBEVIBE", "TUBEVIBE"),
+            Self::Browser | Self::ImportCookies | Self::Refresh | Self::Logout => ("CUENTA", "ACCOUNT"),
+            Self::VideoMode | Self::Quality | Self::Language | Self::SubLang | Self::BackgroundAudio | Self::SponsorBlock | Self::Autoplay => ("REPRODUCCIÓN", "PLAYBACK"),
+            Self::HideWatched | Self::HideLater | Self::HideShorts | Self::NotifyNew | Self::FavoritesFirst | Self::DiscoverTopics => ("LISTAS", "FEEDS"),
+            Self::OmarchyTheme | Self::Icons | Self::BorderStyle | Self::Thumbnails | Self::ThumbPixelation | Self::MenuWidth | Self::PreviewWidth | Self::CommentsWidth => ("ASPECTO", "LOOK"),
+            Self::Splash | Self::FxStartup | Self::FxPages | Self::FxDialogs => ("ANIMACIÓN", "ANIMATION"),
+            Self::VideoDirs | Self::MusicDirs | Self::DownloadDir => ("CARPETAS", "FOLDERS"),
+        }
+    }
+
 
     pub fn label(self, lang: Lang) -> &'static str {
         let (es, en) = match self {
@@ -258,7 +320,8 @@ impl Setting {
             Self::CommentsWidth => ("Ancho de los comentarios", "Comments Width"),
             Self::RestoreTabs => ("Recuperar las pestañas al abrir", "Restore Tabs on Startup"),
             Self::OmarchyTheme => ("Colores del tema de Omarchy", "Omarchy Theme Colors"),
-            Self::Thumbnails => ("Portadas de los videos (kitty)", "Video Thumbnails (kitty)"),
+            Self::Thumbnails => ("Miniaturas de los videos", "Video Thumbnails"),
+            Self::ThumbPixelation => ("Pixelado de las miniaturas", "Thumbnail Pixelation"),
             Self::Mouse => ("Mouse (para copiar texto: Shift)", "Mouse (to Copy Text: Shift)"),
             Self::Splash => ("Logo al abrir la app", "Logo When the App Opens"),
             Self::FxStartup => ("Animación al abrir la app", "Animation When the App Starts"),
@@ -281,6 +344,53 @@ impl Setting {
             Self::FavoritesFirst => ("Primero mis canales más vistos", "My Most Watched Channels First"),
             Self::CheckUpdates => ("Buscar versiones nuevas al abrir", "Look for New Versions on Startup"),
             Self::EditFile => ("Editar config.toml", "Edit config.toml"),
+            Self::MenuEntry => ("Entrada en el menú de apps", "App Menu Entry"),
+        };
+        lang.pick(es, en)
+    }
+
+    /// One line on what the setting does, under the list (Settings saves each change to config.toml).
+    pub fn about(self, lang: Lang) -> &'static str {
+        let (es, en) = match self {
+            Self::Browser => ("Lee la sesión de YouTube de un navegador donde ya entraste.", "Reads your YouTube login from a browser you're signed in to."),
+            Self::ImportCookies => ("Un cookies.txt exportado, para equipos sin navegador o por SSH.", "Uses an exported cookies.txt, for machines with no browser or over SSH."),
+            Self::Refresh => ("Vuelve a leer las cookies, si la sesión venció.", "Reads the cookies again, if the login expired."),
+            Self::Logout => ("Olvida la sesión de YouTube en tubevibe.", "Forgets the YouTube login in tubevibe."),
+            Self::Language => ("El idioma de audio que se pide a YouTube.", "The audio language asked of YouTube."),
+            Self::SubLang => ("Idioma de subtítulos y de las pistas dobladas.", "The language for subtitles and dubbed audio tracks."),
+            Self::Quality => ("La resolución más alta que se reproduce y se descarga.", "The highest resolution played and downloaded."),
+            Self::VideoMode => ("Ventana, superpuesto o embebido (embebido solo en kitty).", "Window, overlay or embedded in the app (embedded needs kitty)."),
+            Self::BackgroundAudio => ("Qué hace el video al cambiar de pestaña.", "What the video does when you leave its tab."),
+            Self::SponsorBlock => ("Salta los patrocinios marcados en SponsorBlock.", "Skips sponsor segments marked on SponsorBlock."),
+            Self::Autoplay => ("Si Enter reproduce el video o abre su pestaña.", "Whether Enter plays the video or opens its tab."),
+            Self::AppLang => ("Español o inglés. También L.", "Spanish or English. Also L."),
+            Self::Icons => ("Emoji, Nerd Font (necesita una instalada) o Unicode.", "Emoji, Nerd Font (needs one installed) or plain Unicode."),
+            Self::BorderStyle => ("Cómo se dibujan los bordes de los paneles.", "How every pane's border is drawn."),
+            Self::MenuWidth => ("El ancho del menú, de 20 a 40 columnas. También { y }.", "The menu's width, 20 to 40 columns. Also { and }."),
+            Self::PreviewWidth => ("El ancho del panel de vista previa de las listas.", "The width of the preview pane beside lists."),
+            Self::CommentsWidth => ("El ancho de los comentarios en la pestaña del video.", "The width of the comments in a video tab."),
+            Self::RestoreTabs => ("Abre de nuevo las pestañas de la última vez.", "Opens the tabs from last time again."),
+            Self::OmarchyTheme => ("Usa los colores del tema actual de Omarchy.", "Uses your current Omarchy theme's colours."),
+            Self::Thumbnails => ("Imagen (kitty, sixel, iTerm2), bloques de color o nada.", "Picture (kitty, sixel, iTerm2), coloured half blocks, or Off."),
+            Self::ThumbPixelation => ("Pixela las miniaturas a propósito.", "Makes the thumbnails blocky on purpose."),
+            Self::Mouse => ("Clics y rueda en la app; Shift para seleccionar texto.", "Clicks and wheel in the app; hold Shift to select text."),
+            Self::Splash => ("Muestra el logo al abrir.", "Shows the logo when tubevibe opens."),
+            Self::FxStartup => ("La animación al abrir la app.", "The animation when the app starts."),
+            Self::FxPages => ("La animación al cambiar de página.", "The animation when the page changes."),
+            Self::FxDialogs => ("La animación de la ayuda y las preguntas.", "The animation of Help and confirm boxes."),
+            Self::VideoDirs => ("Carpetas que lista Videos, separadas por comas.", "Folders listed under Videos, comma separated."),
+            Self::MusicDirs => ("Carpetas que lista Música, separadas por comas.", "Folders listed under Music, comma separated."),
+            Self::DownloadDir => ("Dónde se guardan las descargas.", "Where downloads are saved."),
+            Self::DiscoverTopics => ("Los temas que busca Descubrir, separados por comas.", "The topics Discover searches, comma separated."),
+            Self::SystemCheck => ("Revisa mpv, yt-dlp y lo demás que usa tubevibe.", "Checks mpv, yt-dlp and the other tools tubevibe uses."),
+            Self::HideWatched => ("Oculta en los feeds lo que ya viste. v los muestra.", "Hides videos you've watched in feeds. v shows them."),
+            Self::HideLater => ("Oculta en Mis recomendados lo que está en Ver después.", "Hides your Watch Later videos in My Recommendations."),
+            Self::HideShorts => ("Deja los Shorts fuera de las listas.", "Leaves Shorts out of lists."),
+            Self::NotifyNew => ("Avisa cuando mis canales suben videos nuevos.", "Tells you when your channels post new videos."),
+            Self::FavoritesFirst => ("Pone primero los canales que más miras.", "Puts the channels you watch most first."),
+            Self::CheckUpdates => ("Pregunta a GitHub al abrir; Acerca de muestra la nueva.", "Asks GitHub when tubevibe opens; About shows the new version."),
+            Self::EditFile => ("Abre config.toml en $EDITOR y lo vuelve a leer al cerrar.", "Opens config.toml in $EDITOR and reads it again when you close it."),
+            Self::MenuEntry => ("Enter agrega o quita tubevibe.desktop, para que los lanzadores (walker) muestren tubevibe.", "Enter adds or removes tubevibe.desktop, so app launchers (walker on Omarchy) list tubevibe."),
         };
         lang.pick(es, en)
     }
@@ -511,6 +621,8 @@ pub enum Action {
     /// `Q`: quit, after asking.
     AskQuit,
     ToggleSidebar,
+    /// `{` / `}`: the menu a step narrower or wider, saved as `[ui] menu_width`.
+    ResizeMenu(i8),
     ToggleHelp,
     Up,
     Down,
@@ -1227,6 +1339,15 @@ impl State {
     }
 
     /// `es` or `en`, in the interface language.
+    /// "Needs Kitty Terminal" next to a setting that needs kitty, when this isn't kitty.
+    pub fn kitty_note(&self, setting: Setting) -> Option<&'static str> {
+        let wants_kitty = match setting {
+            Setting::VideoMode => self.config.player.mode == PlayerMode::Embedded,
+            _ => false,
+        };
+        kitty_note(wants_kitty, kitty_detected(), self.lang())
+    }
+
     fn tr(&self, es: &'static str, en: &'static str) -> &'static str {
         self.lang().pick(es, en)
     }
@@ -1325,17 +1446,24 @@ impl State {
         match setting {
             Setting::Browser | Setting::Logout => self.session_label(),
             Setting::ImportCookies | Setting::Refresh | Setting::EditFile => String::new(),
+            Setting::MenuEntry => {
+                let on = crate::desktop::applications_dir().is_some_and(|d| crate::desktop::installed(&d));
+                self.tr(if on { "Instalada" } else { "No instalada" }, if on { "Installed" } else { "Not Installed" }).into()
+            }
             Setting::Language => language_label(player.language, lang).into(),
             Setting::SubLang => language_name(&player.sub_lang, lang),
             Setting::Quality => format!("{}p", player.max_height),
-            Setting::VideoMode => match player.mode {
+            Setting::VideoMode => {
+                let label: String = match player.mode {
                 PlayerMode::Auto => self.tr("Automático (integrado en kitty)", "Automatic (Embedded in kitty)").into(),
                 PlayerMode::Embedded => self.tr("Integrado", "Embedded").into(),
                 PlayerMode::Window => self.tr("Ventana aparte", "Separate Window").into(),
                 PlayerMode::Overlay => {
                     self.tr("Superpuesto: ventana sobre la app (X11)", "Overlay: a Window over the App (X11)").into()
                 }
-            },
+                };
+                label
+            }
             Setting::BackgroundAudio => {
                 if player.background_audio {
                     self.tr("Sigue sonando", "Keeps Playing").into()
@@ -1363,10 +1491,8 @@ impl State {
                 let (es, en) = on_off(self.config.ui.restore_tabs);
                 self.tr(es, en).into()
             }
-            Setting::Thumbnails => {
-                let (es, en) = on_off(self.config.ui.thumbnails);
-                self.tr(es, en).into()
-            }
+            Setting::Thumbnails => self.config.ui.thumbnails.label(lang).into(),
+            Setting::ThumbPixelation => self.config.ui.thumb_pixelation.label(lang).into(),
             Setting::Mouse => {
                 let (es, en) = on_off(self.config.ui.mouse);
                 self.tr(es, en).into()
@@ -1500,6 +1626,17 @@ impl State {
                 self.sidebar = !self.sidebar;
                 self.focus = if self.sidebar && self.stack.is_empty() { Focus::Menu } else { Focus::List };
             }
+            Action::ResizeMenu(dir) => {
+                let size = crate::config::MENU_WIDTH;
+                let next = size.step_by(self.config.ui.menu_width, dir);
+                self.config.ui.menu_width = next;
+                self.status = format!(
+                    "{}: {next} {}",
+                    self.tr("Ancho del menú", "Menu Width"),
+                    self.tr("columnas ({ y } lo cambian)", "Columns ({ and } Change It)")
+                );
+                return vec![Effect::SaveSetting { table: "ui", key: size.key, value: SettingValue::Number(next.into()) }];
+            }
             Action::ToggleHelp => {
                 self.help = !self.help;
                 self.help_scroll = 0;
@@ -1518,6 +1655,14 @@ impl State {
             }
             Action::MenuOpen => {
                 if self.menu_row() == MenuRow::Section(Self::section_index(Section::Salir)) {
+                    return Vec::new();
+                }
+                // → on a tab lands on its video, not on Up Next where the tab last was.
+                if let MenuRow::Tab(i) = self.menu_row() {
+                    self.show_tab(i + 1);
+                    if let Some(tab) = self.active_tab_mut() {
+                        tab.on_related = false;
+                    }
                     return Vec::new();
                 }
                 return self.enter();
@@ -2510,8 +2655,12 @@ impl State {
                 save("ui", "border_style", SettingValue::Text(self.config.ui.border_style.as_str().into()))
             }
             Setting::Thumbnails => {
-                self.config.ui.thumbnails = !self.config.ui.thumbnails;
-                save("ui", "thumbnails", SettingValue::Bool(self.config.ui.thumbnails))
+                self.config.ui.thumbnails = self.config.ui.thumbnails.next();
+                save("ui", "thumbnails", SettingValue::Text(self.config.ui.thumbnails.as_str().into()))
+            }
+            Setting::ThumbPixelation => {
+                self.config.ui.thumb_pixelation = self.config.ui.thumb_pixelation.next();
+                save("ui", "thumb_pixelation", SettingValue::Text(self.config.ui.thumb_pixelation.as_str().into()))
             }
             Setting::Mouse => {
                 self.config.ui.mouse = !self.config.ui.mouse;
@@ -2599,7 +2748,41 @@ impl State {
                 Vec::new()
             }
             Setting::EditFile => vec![Effect::EditConfig],
+            Setting::MenuEntry => {
+                self.toggle_menu_entry();
+                Vec::new()
+            }
         }
+    }
+
+    /// Adds or removes tubevibe.desktop (a file on disk, not a config key).
+    fn toggle_menu_entry(&mut self) {
+        use crate::desktop;
+        let Some(dir) = desktop::applications_dir() else {
+            self.status = self.tr("Sin carpeta personal: no hay entrada", "No home folder: can't add an app menu entry").into();
+            return;
+        };
+        let home = std::env::var("HOME").unwrap_or_default();
+        let short = |p: &std::path::Path| {
+            let s = p.display().to_string();
+            if home.is_empty() { s } else { s.replacen(&home, "~", 1) }
+        };
+        let es = self.lang().pick(true, false);
+        self.status = if desktop::installed(&dir) {
+            match desktop::remove(&dir) {
+                Ok(p) if es => format!("Quitado {} del menú de apps", short(&p)),
+                Ok(p) => format!("Removed {} from the app menu", short(&p)),
+                Err(e) if es => format!("No se tocó {}: {e}", short(&desktop::path_in(&dir))),
+                Err(e) => format!("Left {} alone: {e}", short(&desktop::path_in(&dir))),
+            }
+        } else {
+            match desktop::current_exe().and_then(|exe| desktop::install(&dir, &exe)) {
+                Ok(p) if es => format!("Agregado {}: tubevibe está en el menú de apps", short(&p)),
+                Ok(p) => format!("Added {}: tubevibe is in the app menu", short(&p)),
+                Err(e) if es => format!("No se pudo agregar la entrada: {e}"),
+                Err(e) => format!("Couldn't add the app menu entry: {e}"),
+            }
+        };
     }
 
     /// This week's videos on my topics, out of my channels; without topics,
@@ -3249,8 +3432,8 @@ impl State {
                 }
                 if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_) | ListKind::Saved) {
                     items.push(item(
-                        "Quitar de esta lista (pide confirmar)",
-                        "Remove from This List (Asks First)",
+                        "Quitar de la lista",
+                        "Remove From List",
                         "X",
                         Action::RemoveFromList,
                     ));
@@ -3277,8 +3460,8 @@ impl State {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
                     items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
                     items.push(item(
-                        "A la papelera (pide confirmar)",
-                        "Move to Trash (Asks First)",
+                        "A la papelera",
+                        "Trash",
                         "X",
                         Action::Trash,
                     ));
@@ -3336,7 +3519,7 @@ impl State {
     fn subscribe_item(&self) -> Option<MenuItem> {
         let (id, ..) = self.selected_channel()?;
         let (es, en) = if self.subs.contains(&id) {
-            ("Desuscribirse (pide confirmar)", "Unsubscribe (Asks First)")
+            ("Desuscribirse", "Unsubscribe")
         } else {
             ("Suscribirse", "Subscribe")
         };
@@ -3699,7 +3882,13 @@ impl State {
                 self.tr("No puedo escribir en la carpeta de tubevibe", "Can't write to tubevibe's folder")
             ),
             Replace::NoAsset => {
-                format!("{} · {see}", self.tr("No hay descarga para este sistema", "No download for this system"))
+                format!(
+                    "{} · {see}",
+                    self.tr(
+                        "No hay actualización compilada para este sistema: compilá desde el código",
+                        "No prebuilt update for this platform: build from source"
+                    )
+                )
             }
         };
         Vec::new()
@@ -4600,6 +4789,19 @@ fn effect_flag(effects: &mut EffectsConfig, setting: Setting) -> Option<(&'stati
 }
 
 /// "Sí"/"No", "On"/"Off".
+/// kitty is the terminal (not inside a multiplexer): embedded video works.
+fn kitty_detected() -> bool {
+    crate::player::resolve_mode(PlayerMode::Auto, |key| std::env::var(key).ok()) == crate::player::Mode::Embedded
+}
+
+/// Adds the "Needs Kitty Terminal" note to a setting's value.
+fn kitty_note(wants_kitty: bool, kitty: bool, lang: Lang) -> Option<&'static str> {
+    (wants_kitty && !kitty).then_some(match lang {
+        Lang::Es => "Requiere la terminal kitty",
+        Lang::En => "Needs Kitty Terminal",
+    })
+}
+
 fn on_off(on: bool) -> (&'static str, &'static str) {
     if on { ("Sí", "On") } else { ("No", "Off") }
 }
@@ -4625,6 +4827,27 @@ mod tests {
     use crate::domain::{channel, video};
 
     /// Upstream's behavior, which most tests describe: Enter plays at once.
+    #[test]
+    fn braces_resize_the_menu_within_its_limits_and_save_it() {
+        let mut s = state();
+        s.config.ui.menu_width = 26;
+        let saved = |e: &[Effect]| match e {
+            [Effect::SaveSetting { table: "ui", key: "menu_width", value: SettingValue::Number(n) }] => *n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(saved(&s.update(Action::ResizeMenu(1))), 28);
+        assert_eq!(s.config.ui.menu_width, 28);
+        assert!(s.status.contains("28"), "{}", s.status);
+        for _ in 0..20 {
+            s.update(Action::ResizeMenu(1));
+        }
+        assert_eq!(s.config.ui.menu_width, 40, "never wider than 40");
+        for _ in 0..20 {
+            s.update(Action::ResizeMenu(-1));
+        }
+        assert_eq!(saved(&s.update(Action::ResizeMenu(-1))), 20, "never narrower than 20");
+    }
+
     fn state() -> State {
         let mut config = Config::default();
         config.player.autoplay = true;
@@ -5494,6 +5717,13 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(s.prompt, None);
+    }
+
+    #[test]
+    fn kitty_note_only_without_kitty() {
+        assert_eq!(kitty_note(true, false, Lang::En), Some("Needs Kitty Terminal"));
+        assert_eq!(kitty_note(true, true, Lang::En), None);
+        assert_eq!(kitty_note(false, false, Lang::En), None);
     }
 
     #[test]
@@ -6394,6 +6624,16 @@ mod tests {
         assert_eq!(s.config.ui.border_style, crate::config::BorderStyle::Rounded);
         assert_eq!(s.config.ui.icons, IconSet::Nerd);
         assert_eq!(change(&mut s, Setting::EditFile), [Effect::EditConfig]);
+        // App Menu Entry writes a file, not config.toml (a temp folder in tests).
+        let dir = crate::desktop::applications_dir().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(s.setting_value(Setting::MenuEntry), "No instalada");
+        assert_eq!(change(&mut s, Setting::MenuEntry), []);
+        assert_eq!(s.setting_value(Setting::MenuEntry), "Instalada", "{}", s.status);
+        assert!(std::fs::read_to_string(crate::desktop::path_in(&dir)).unwrap().contains(crate::desktop::MARKER));
+        assert_eq!(change(&mut s, Setting::MenuEntry), []);
+        assert_eq!(s.setting_value(Setting::MenuEntry), "No instalada");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -6980,6 +7220,19 @@ mod tests {
             s.update(Action::Back);
             assert_eq!((s.focus, s.menu_row()), (Focus::Menu, MenuRow::Section(expected)), "{section:?}");
         }
+    }
+
+    #[test]
+    fn right_on_a_tab_focuses_the_video_not_up_next() {
+        let mut s = with_videos(&["a"]);
+        play(&mut s, 0);
+        s.tabs[0].on_related = true;
+        s.update(Action::FocusMenu);
+        assert_eq!(s.menu_row(), MenuRow::Tab(0));
+        s.update(Action::MenuOpen);
+        assert_eq!((s.active, s.focus, s.tabs[0].on_related), (1, Focus::List, false));
+        s.update(Action::FocusMenu);
+        assert_eq!(s.focus, Focus::Menu, "← back to the menu");
     }
 
     #[test]

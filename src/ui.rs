@@ -61,6 +61,7 @@ const SHOWN: Color = MAGENTA;
 const GREEN: Color = TOKYO_NIGHT.green;
 const YELLOW: Color = TOKYO_NIGHT.yellow;
 const RED: Color = TOKYO_NIGHT.red;
+const ORANGE: Color = TOKYO_NIGHT.orange;
 const TEAL: Color = TOKYO_NIGHT.teal;
 const PURPLE: Color = TOKYO_NIGHT.purple;
 
@@ -71,8 +72,8 @@ const SELECTED: Color = crate::theme::ACCENT_DRAWN;
 pub struct Icons {
     /// In `Section::ALL` order.
     pub sections: [&'static str; 18],
-    /// In `Setting::ALL` order.
-    pub settings: [&'static str; 37],
+    /// In `Setting::ICON_ORDER` order.
+    pub settings: [&'static str; 39],
     pub logo: &'static str,
     pub tab: &'static str,
     pub live: &'static str,
@@ -138,7 +139,7 @@ impl Icons {
     }
 
     fn setting(&self, setting: Setting) -> &'static str {
-        self.settings[Setting::ALL.iter().position(|s| *s == setting).unwrap_or(0)]
+        self.settings[Setting::ICON_ORDER.iter().position(|s| *s == setting).unwrap_or(0)]
     }
 }
 
@@ -148,8 +149,8 @@ const EMOJI: Icons = Icons {
     ],
     settings: [
         "👤", "📄", "🔄", "🚪", "🌐", "💬", "📐", "🎬", "🎧", "⏩", "👆", "🔤", "😀", "🔲", "📏", "🔭", "💭", "📑",
-        "🎨", "📷", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
-        "📝",
+        "🎨", "📷", "🧩", "🐭", "🎦", "✨", "🌊", "💥", "📼", "🎵", "📁", "📌", "🩺", "👀", "🕒", "🩳", "🔔", "⭐", "🆙",
+        "📝", "📋",
     ],
     // Plain ▶ (no U+FE0F): one cell, drawn in the logo's red, not as the orange emoji.
     logo: "▶",
@@ -231,7 +232,7 @@ const NERD: Icons = Icons {
         "\u{f086}",
         "\u{f2d2}",
         "\u{f1fc}",
-        "\u{f03e}",
+        "\u{f03e}", "\u{f00a}",
         "\u{f245}",
         "\u{f04b}",
         "\u{f0d0}",
@@ -249,6 +250,7 @@ const NERD: Icons = Icons {
         "\u{f005}",
         "\u{f01b}",
         "\u{f044}",
+        "\u{f0c9}",
     ],
     logo: "\u{f16a}",
     tab: "\u{f144}",
@@ -296,8 +298,8 @@ const NERD: Icons = Icons {
 const UNICODE: Icons = Icons {
     sections: ["⌂", "◷", "▣", "↺", "≣", "★", "⌕", "⌁", "◈", "◎", "✧", "♦", "▷", "♫", "⇩", "⚙", "♥", "⏻"],
     settings: [
-        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "➚", "◆",
-        "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎",
+        "☺", "▤", "↻", "⏻", "⇄", "≡", "▦", "▶", "♪", "»", "▸", "⚑", "☻", "▢", "◧", "◨", "▥", "❐", "◐", "▨", "░", "➚", "◆",
+        "✦", "≈", "✸", "▷", "♫", "▭", "#", "✚", "◉", "◷", "▯", "♪", "★", "↑", "✎", "☰",
     ],
     logo: "▶",
     tab: "▶",
@@ -469,6 +471,15 @@ pub fn spot(state: &State, playing: Option<&Info>, screen: Rect, x: u16, y: u16)
     let list = match listing.items {
         Items::Videos(_) | Items::Channels(_) => split_preview(rest, state.config.ui.preview_width).0,
         Items::About | Items::System => return None,
+        Items::Settings => {
+            let (list, _) = settings_areas(Block::bordered().inner(rest));
+            let rows = settings_rows(state.lang());
+            let shown = rows.iter().position(|r| *r == Some(listing.selected)).unwrap_or(0);
+            return match list_row(list, shown, rows.len(), at)? {
+                Spot::Row(r) => rows[r].map(Spot::Row),
+                other => Some(other),
+            };
+        }
         _ => rest,
     };
     list_row(Block::bordered().inner(list), listing.selected, listing.items.len(), at)
@@ -626,6 +637,7 @@ fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
 }
 
 /// Cells of a video tab whose video plays in its own window.
+#[derive(Debug)]
 struct WatchLayout {
     thumbnail: Rect,
     details: Rect,
@@ -656,6 +668,7 @@ thread_local! {
     static CARD_ROWS: std::cell::Cell<Option<DrawnCard>> = const { std::cell::Cell::new(None) };
 }
 
+#[cfg(test)]
 fn watch_layout(inner: Rect, comments: u16) -> WatchLayout {
     watch_layout_with(inner, comments, (0, 0))
 }
@@ -689,26 +702,70 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
             (inner, None)
         }
     };
-    // Two fifths of the left column, at most 36 columns.
-    let width = WATCH_THUMBNAIL_WIDTH.min(left.width * 2 / 5);
-    let rows = (u32::from(width) * 9 / 32) as u16;
-    let card_rows = rows.max(detail_rows);
-    let [card, summary, _, related] = Layout::vertical([
-        Constraint::Length(card_rows),
-        Constraint::Length(summary_rows),
-        Constraint::Length(1),
-        Constraint::Fill(1),
-    ])
-    .areas(left);
-    let [thumbnail, _, details] =
-        Layout::horizontal([Constraint::Length(width), Constraint::Length(2), Constraint::Fill(1)]).areas(card);
-    let thumbnail = Rect { height: rows.min(card.height), ..thumbnail };
+    // "Up next" sits at the bottom of the column, at most its cap tall; the
+    // rows above it are the thumbnail's, with the details and summary beside.
+    let text_rows = detail_rows.saturating_add(summary_rows).min(left.height);
+    let related_rows = left.height.saturating_sub(text_rows).saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
+    let [top, related] = Layout::vertical([Constraint::Fill(1), Constraint::Length(related_rows)]).areas(left);
+    // The picture sits a cell in from the top and left borders and meets
+    // "Up next"; the text keeps a 2-column gap after it and a column before
+    // the right edge (1 column in from the left without a picture).
+    let (width, rows) = watch_thumbnail_size(top.height.saturating_sub(1), left.width);
+    let thumbnail = Rect { x: top.x + 1, y: top.y + 1, width, height: rows };
+    let gap = if width > 0 { 1 + width + 2 } else { 1 };
+    let text = Rect { x: top.x + gap, width: top.width.saturating_sub(gap + 1), ..top };
+    let details = Rect { height: detail_rows.min(text.height), ..text };
+    let summary = Rect {
+        y: details.y + details.height,
+        height: summary_rows.min(text.height - details.height),
+        ..text
+    };
     WatchLayout { thumbnail, details, summary, related, comments, left }
+}
+
+/// Cell height over width ×100 (the font's, when the terminal said).
+static CELL_ASPECT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(200);
+
+/// Tells the layout how tall a cell is for its width (2.0 when unknown), so
+/// thumbnail areas match the picture drawn in them.
+pub fn set_cell_aspect(aspect: f32) {
+    let x100 = (aspect * 100.0).round().clamp(100.0, 400.0) as u32;
+    CELL_ASPECT.store(x100, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Columns that hold a 16:9 picture `rows` tall.
+fn columns_16_9(rows: u16) -> u16 {
+    let aspect = CELL_ASPECT.load(std::sync::atomic::Ordering::Relaxed);
+    (u32::from(rows) * aspect * 16 / 900) as u16
+}
+
+/// Rows that hold a 16:9 picture `columns` wide.
+fn rows_16_9(columns: u16) -> u16 {
+    let aspect = CELL_ASPECT.load(std::sync::atomic::Ordering::Relaxed);
+    (u32::from(columns) * 900 / (aspect * 16)) as u16
+}
+
+/// Columns the details and summary keep beside the thumbnail on a video tab.
+const WATCH_TEXT_MIN_WIDTH: u16 = 40;
+
+/// Columns and rows of the video tab's thumbnail in `rows` above "Up next" of
+/// a `columns`-wide column: all the rows, 16:9 (a cell is about twice as tall
+/// as wide), smaller when the text beside would get under
+/// [`WATCH_TEXT_MIN_WIDTH`]; none under 14x4.
+fn watch_thumbnail_size(rows: u16, columns: u16) -> (u16, u16) {
+    // Left margin, gap and right padding around the picture and the text.
+    let most = columns.saturating_sub(WATCH_TEXT_MIN_WIDTH + 4);
+    let rows = rows.min(rows_16_9(most));
+    let width = columns_16_9(rows);
+    if rows < 4 { (0, 0) } else { (width, rows) }
 }
 
 /// Rows "Up next" keeps at least (its border and five videos), however long
 /// the summary: past that the summary is cut with "…".
 const UP_NEXT_MIN_ROWS: u16 = 7;
+/// Videos "Up next" ever lists: the pane is never taller than these plus its
+/// border, and scrolls (keeping the selection in view) when shorter.
+const UP_NEXT_MAX_ROWS: u16 = 21;
 
 /// `text` broken into lines of at most `width` columns: its own line breaks
 /// kept, words kept whole when they fit, longer ones cut.
@@ -779,16 +836,6 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     let lang = state.lang();
     let Some(video) = &tab.playback.video else { return };
     let comments_width = state.config.ui.comments_width;
-    let mut layout = watch_layout(inner, comments_width);
-    let details = if view.thumbnails {
-        let middle = Rect { y: layout.thumbnail.y + layout.thumbnail.height / 2, height: 1, ..layout.thumbnail };
-        frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
-        layout.details
-    } else {
-        // No thumbnail: the details take the left column's whole width.
-        let left = layout.related;
-        Rect { x: left.x, width: left.width, ..layout.details }
-    };
     let watch = tab.watch.as_ref();
     let mut channel = vec![Span::styled(video.channel.as_str(), MAGENTA)];
     if let Some(subscribers) = watch.and_then(|w| w.subscribers.as_deref()) {
@@ -842,24 +889,51 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
     if let Some(elapsed) = view.opening {
         lines.push(Line::from(loading_text(lang.pick("el video", "the video"), elapsed, lang)).fg(YELLOW));
     }
-    // The details card grows to hold them all, up to what leaves "Up next" its rows.
+    // Beside the thumbnail (the whole column without one): the details, then
+    // the AI summary, all of it as long as "Up next" keeps its rows (then cut
+    // with "…"). The text's width follows the thumbnail, which follows the
+    // rows the text takes: settled in a few rounds.
+    let text_area = |layout: &WatchLayout| {
+        if view.thumbnails {
+            layout.details
+        } else {
+            Rect { x: layout.left.x + 1, width: layout.left.width.saturating_sub(2), ..layout.details }
+        }
+    };
     let paragraph = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true });
-    let most_card = layout.left.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
-    let detail_rows = (paragraph.line_count(details.width) as u16).min(most_card);
-    layout = watch_layout_with(inner, comments_width, (detail_rows, 0));
-    let details = Rect { y: layout.details.y, height: layout.details.height, ..details };
+    let summary = state.tab_summary_lookup(tab);
+    let most_text = inner.height.saturating_sub(1 + UP_NEXT_MIN_ROWS);
+    let mut rows = (0, 0);
+    let mut layout = watch_layout_with(inner, comments_width, rows);
+    let mut summary_text = Vec::new();
+    for _ in 0..4 {
+        let width = text_area(&layout).width;
+        let most = most_text.min(layout.left.height.saturating_sub(1 + UP_NEXT_MIN_ROWS));
+        let detail_rows = (paragraph.line_count(width) as u16).min(most);
+        let mut summary_rows = 0;
+        if let Some(summary) = summary {
+            summary_text = summary_lines(summary, width, usize::from(most - detail_rows), lang, icons.summary);
+            let wrapped = Paragraph::new(summary_text.clone()).wrap(ratatui::widgets::Wrap { trim: true });
+            summary_rows = (wrapped.line_count(width) as u16).min(most - detail_rows);
+        }
+        let settled = rows == (detail_rows, summary_rows);
+        rows = (detail_rows, summary_rows);
+        layout = watch_layout_with(inner, comments_width, rows);
+        if settled {
+            break;
+        }
+    }
+    let (detail_rows, summary_rows) = rows;
+    if view.thumbnails && layout.thumbnail.width > 0 {
+        let t = layout.thumbnail;
+        let middle = Rect { y: t.y + t.height / 2, height: 1, ..t };
+        frame.render_widget(Paragraph::new(icons.waiting).fg(MUTED).alignment(Alignment::Center), middle);
+    }
+    let details = text_area(&layout);
     frame.render_widget(paragraph, details);
-    // The AI summary across the left column, all of it, as long as "Up next"
-    // keeps its rows (then cut with "…").
-    let mut summary_rows = 0;
-    if let Some(summary) = state.tab_summary_lookup(tab) {
-        let width = layout.related.width;
-        let most = layout.left.height.saturating_sub(layout.details.height + 1 + UP_NEXT_MIN_ROWS);
-        let lines = summary_lines(summary, width, usize::from(most), lang, icons.summary);
-        let wrapped = Paragraph::new(lines.clone()).wrap(ratatui::widgets::Wrap { trim: true });
-        summary_rows = (wrapped.line_count(width) as u16).min(most);
-        layout = watch_layout_with(inner, comments_width, (detail_rows, summary_rows));
-        frame.render_widget(wrapped, layout.summary);
+    if summary.is_some() {
+        let area = Rect { y: layout.summary.y, height: layout.summary.height, ..details };
+        frame.render_widget(Paragraph::new(summary_text).wrap(ratatui::widgets::Wrap { trim: true }), area);
     }
     CARD_ROWS.with(|c| c.set(Some((tab.id, inner, (detail_rows, summary_rows)))));
 
@@ -872,10 +946,10 @@ fn draw_watch(frame: &mut Frame, state: &State, icons: &Icons, view: &View, tab:
         Some(_) => format!(" {} · {} · Tab ", lang.pick("A continuación", "Up Next"), related.len()),
     };
     let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
-    // Inside the borders, less the cursor column.
-    let row_width = usize::from(layout.related.width.saturating_sub(3));
+    // Inside the borders, less the cursor column and a blank column on the right.
+    let row_width = usize::from(layout.related.width.saturating_sub(4));
     let list = List::new(related.iter().map(|v| video_row_dated(state, icons, view, v, false, row_width)))
-        .block(focus_panel(title, focused))
+        .block(focus_panel(title, focused).padding(ratatui::widgets::Padding::right(1)))
         .highlight_symbol(if focused { "▌" } else { " " })
         .highlight_style(highlight);
     let selected = (!related.is_empty()).then_some(tab.related);
@@ -913,7 +987,8 @@ fn draw_comments(frame: &mut Frame, tab: &Tab, icons: &Icons, lang: Lang, area: 
         lines.extend(comment.text.lines().map(|l| Line::from(l.to_owned()).fg(FG)));
         lines.push(Line::from(""));
     }
-    let comments = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true }).block(panel(title, MUTED));
+    let comments = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: true })
+        .block(panel(title, MUTED).padding(ratatui::widgets::Padding::horizontal(1)));
     frame.render_widget(comments, area);
 }
 
@@ -1067,7 +1142,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
                 top.push((ListItem::new(""), None));
             }
             group = Some(section.group());
-            top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(MUTED).bold()), None));
+            top.push((ListItem::new(Line::from(format!(" {}", section.group().label(lang))).fg(ORANGE).bold()), None));
         }
         let mut label = section.label(lang).to_owned();
         // Only a count YouTube's whole list backs up.
@@ -1134,10 +1209,10 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
             let shown = tab_rows.min(total);
             let offset = tab_offset(state, total, shown);
             let chevron = |icon: &str| format!("{}{icon}", " ".repeat(Span::raw(title).width() + 1));
-            let mut head = Line::from(title.to_owned()).fg(MUTED).bold();
+            let mut head = Line::from(title.to_owned()).fg(ORANGE).bold();
             if offset > 0 {
                 head = Line::from(vec![Span::raw(title.to_owned()), Span::raw(format!(" {}", icons.more_above))])
-                    .fg(MUTED)
+                    .fg(ORANGE)
                     .bold();
             }
             items.push((ListItem::new(""), None));
@@ -1160,7 +1235,7 @@ fn sidebar_items(state: &State, icons: &Icons, inner: Rect) -> Vec<(ListItem<'st
     let mut items = top;
     if !tabs.is_empty() {
         items.push((ListItem::new(""), None));
-        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(MUTED).bold()), None));
+        items.push((ListItem::new(Line::from(lang.pick(" PESTAÑAS", " TABS")).fg(ORANGE).bold()), None));
         items.extend(tabs);
     }
     items.push((ListItem::new(""), None));
@@ -1215,7 +1290,15 @@ fn draw_sidebar(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
         Span::styled("tube", Style::new().fg(RED).bold()),
         Span::styled("vibe ", Style::new().fg(FG).bold()),
     ]);
-    frame.render_widget(List::new(items).block(focus_panel(title, menu_focused(state))), area);
+    let mut block = focus_panel(title.clone(), menu_focused(state));
+    // The version, right-aligned on the same border, only when it fits beside
+    // the logo with a cell of border between them (the logo always wins).
+    let version = format!(" v{} ", env!("CARGO_PKG_VERSION"));
+    let needed = 1 + title.width() + 1 + Span::raw(version.as_str()).width() + 1;
+    if usize::from(area.width) >= needed {
+        block = block.title(Line::from(Span::styled(version, MUTED)).alignment(Alignment::Right));
+    }
+    frame.render_widget(List::new(items).block(block), area);
 }
 
 /// "In YouTube Watch Later" / "In tubevibe Watch Later" lines of a video's preview.
@@ -1262,19 +1345,24 @@ fn split_preview(area: Rect, width: u16) -> (Rect, Option<Rect>) {
     (list, Some(preview))
 }
 
+/// `area` less one cell on every side (nothing left when it is too small).
+fn pad_rect(area: Rect) -> Rect {
+    area.inner(ratatui::layout::Margin { horizontal: 1, vertical: 1 })
+}
+
 /// The cells of the thumbnail inside a preview panel: 16:9, taking terminal
 /// cells as about twice as tall as wide.
 fn thumbnail_cells(preview: Rect) -> Rect {
-    let inner = Block::bordered().inner(preview);
+    let inner = pad_rect(Block::bordered().inner(preview));
     // At most half the rows (a preview under the list is wide and short),
     // narrowed to stay 16:9 when that cuts it.
-    let full = (inner.width as u32 * 9 / 32) as u16;
+    let full = rows_16_9(inner.width);
     let rows = if full > inner.height / 2 && inner.width > inner.height {
         (inner.height / 2).max(1)
     } else {
         full.min(inner.height)
     };
-    let width = if rows < full { ((u32::from(rows) * 32 / 9) as u16).min(inner.width) } else { inner.width };
+    let width = if rows < full { columns_16_9(rows).min(inner.width) } else { inner.width };
     Rect { height: rows, width, ..inner }
 }
 
@@ -1286,7 +1374,7 @@ pub fn thumbnail_area(state: &State, screen: Rect) -> Option<(String, Rect)> {
     if let Some(tab) = state.active_tab() {
         let video = tab.playback.video.as_ref().filter(|_| state.details_shown(tab) && !state.fullscreen)?;
         let inner = Block::bordered().inner(screen_areas(screen, state).content);
-        let cells = watch_layout(inner, state.config.ui.comments_width).thumbnail;
+        let cells = tab_layout(tab, inner, state.config.ui.comments_width).thumbnail;
         return under_context_menu(state, screen, cells).filter(|c| c.height > 0).map(|c| (video.id.clone(), c));
     }
     let video = state.videos_from_selection(0).first()?;
@@ -1510,7 +1598,7 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
             playlists.iter().map(|p| playlist_row(icons, p, state.lang(), row_width)).collect()
         }
         Items::Settings => {
-            Setting::ALL.iter().enumerate().map(|(i, s)| setting_row(state, icons.settings[i], *s)).collect()
+            return draw_settings(frame, state, icons, listing.selected, title, area);
         }
         Items::Files(files, kind) => {
             files.iter().map(|f| file_row(icons, f, *kind, state.marked.contains(&f.path), row_width)).collect()
@@ -1547,7 +1635,8 @@ fn draw_listing(frame: &mut Frame, state: &State, icons: &Icons, view: &View, li
 fn draw_preview(frame: &mut Frame, state: &State, icons: &Icons, view: &View, video: Option<&Video>, area: Rect) {
     let lang = state.lang();
     let block = panel(lang.pick(" Vista previa ", " Preview "), MUTED);
-    let inner = block.inner(area);
+    // A blank cell inside the border all round.
+    let inner = pad_rect(block.inner(area));
     frame.render_widget(block, area);
     let Some(v) = video else { return };
     let text_area = if view.thumbnails {
@@ -1935,6 +2024,75 @@ fn file_row<'a>(icons: &Icons, file: &'a LocalFile, kind: MediaKind, marked: boo
     ListItem::new(Line::from(fit_row(head, Span::styled(file.name.as_str(), FG), Vec::new(), width)))
 }
 
+/// Settings' screen rows, top to bottom: `Some(i)` is `Setting::ALL[i]`,
+/// `None` a section header or the blank line before one.
+fn settings_rows(_lang: Lang) -> Vec<Option<usize>> {
+    let mut rows = Vec::new();
+    let mut group = None;
+    for (i, setting) in Setting::ALL.iter().enumerate() {
+        if group != Some(setting.section()) {
+            if group.is_some() {
+                rows.push(None);
+            }
+            group = Some(setting.section());
+            rows.push(None);
+        }
+        rows.push(Some(i));
+    }
+    rows
+}
+
+/// Inside the Settings border: the rows, and the description at the bottom.
+fn settings_areas(inner: Rect) -> (Rect, Rect) {
+    let [list, about] = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).areas(inner);
+    (list, about)
+}
+
+/// Settings, like boxvibe's: uppercase sections, one row per setting with
+/// its value, and what the highlighted one does under the list.
+fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usize, title: String, area: Rect) {
+    let lang = state.lang();
+    let focused = state.focus == Focus::List;
+    let block = focus_panel(title, focused);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let (list_area, about_area) = settings_areas(inner);
+    let rows = settings_rows(lang);
+    let mut items = Vec::with_capacity(rows.len());
+    let mut shown = 0;
+    for (r, row) in rows.iter().enumerate() {
+        match row {
+            Some(i) => {
+                if *i == selected {
+                    shown = r;
+                }
+                let setting = Setting::ALL[*i];
+                items.push(setting_row(state, icons.setting(setting), setting));
+            }
+            None => match rows.get(r + 1) {
+                Some(Some(next)) => {
+                    let (es, en) = Setting::ALL[*next].section();
+                    items.push(ListItem::new(Span::styled(
+                        format!(" {}", lang.pick(es, en)),
+                        Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+                    )));
+                }
+                _ => items.push(ListItem::new("")),
+            },
+        }
+    }
+    let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
+    let list = List::new(items).highlight_symbol(if focused { "▌" } else { " " }).highlight_style(highlight);
+    frame.render_stateful_widget(list, list_area, &mut ListState::default().with_selected(Some(shown)));
+    if let Some(setting) = Setting::ALL.get(selected) {
+        let about = Line::from(Span::styled(format!(" {}", setting.about(lang)), MUTED));
+        frame.render_widget(
+            Paragraph::new(vec![Line::raw(""), about]).wrap(ratatui::widgets::Wrap { trim: false }),
+            about_area,
+        );
+    }
+}
+
 /// Width of the settings' label column: the longest label and a gap, so
 /// the values line up.
 fn setting_label_width(lang: Lang) -> usize {
@@ -1950,6 +2108,9 @@ fn setting_row(state: &State, icon: &str, setting: Setting) -> ListItem<'static>
     ];
     if !value.is_empty() {
         spans.push(Span::styled(value, Style::new().fg(YELLOW).bold()));
+    }
+    if let Some(note) = state.kitty_note(setting) {
+        spans.push(Span::styled(format!("  {note}"), RED));
     }
     ListItem::new(Line::from(spans))
 }
@@ -2029,7 +2190,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
     let normal = state.confirm.is_none() && !state.help && state.context.is_none() && state.prompt.is_none();
     // `s` asks before unsubscribing; it says so when it will.
     let subscribe = if state.selected_channel().is_some_and(|(id, ..)| state.subs.contains(&id)) {
-        key("s", "desuscribirse (pide confirmar)", "unsubscribe (asks first)")
+        key("s", "desuscribirse", "unsubscribe")
     } else {
         key("s", "suscribirse", "subscribe")
     };
@@ -2042,10 +2203,10 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 "yes (the other marked ones get cancelled or taken off)",
             ),
             Confirm::Trash(_) | Confirm::TrashDownload { .. } | Confirm::TrashDownloads { .. } => {
-                key(lang.pick("s", "y"), "sí, a la papelera", "yes, to the trash")
+                key(lang.pick("s", "y"), "sí, a la papelera", "yes, trash")
             }
             Confirm::Quit(0) => key(lang.pick("s", "y"), "sí, salir", "yes, quit"),
-            Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortarlas", "yes, quit and stop them"),
+            Confirm::Quit(_) => key(lang.pick("s", "y"), "sí, salir y cortar descargas", "yes, quit and stop downloads"),
             Confirm::ForgetHistory(_) => key(lang.pick("s", "y"), "sí, quitarlo", "yes, remove it"),
             Confirm::Download { running: true, .. } => key(lang.pick("s", "y"), "sí, cancelarla", "yes, cancel it"),
             Confirm::Download { .. } => key(lang.pick("s", "y"), "sí, quitarla", "yes, remove it"),
@@ -2057,7 +2218,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         };
         vec![yes, key(lang.pick("Otra tecla", "Other Key"), "no", "no")]
     } else if state.help {
-        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar la ayuda", "close the help")]
+        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar ayuda", "close help")]
     } else if state.context.is_some() {
         vec![
             key("↑ ↓", "elegir", "choose"),
@@ -2079,14 +2240,14 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         vec![
             key("Enter", "ver", "play"),
             key("↑ ↓", "elegir", "choose"),
-            key("Tab", "volver al video", "back to the video"),
+            key("Tab", "volver al video", "back to video"),
             key("w", "ver después YouTube", "YouTube Watch Later"),
             key("l", "ver después tubevibe", "tubevibe Watch Later"),
             key("c", "canal", "channel"),
             if state.active_tab().is_some_and(|t| t.ended && !t.started) {
                 key(keymap::space(lang), "reproducir", "play")
             } else if state.active_tab().is_some_and(|t| t.ended) {
-                key(keymap::space(lang), "volver a verlo", "play it again")
+                key(keymap::space(lang), "repetir", "replay")
             } else {
                 key(keymap::space(lang), "pausa", "pause")
             },
@@ -2096,18 +2257,18 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         if state.active_tab().is_some_and(|t| t.ended && !t.started) {
             keys.push(key("Enter", "reproducir", "play"));
         } else if state.active_tab().is_some_and(|t| t.ended) {
-            keys.push(key("Enter", "volver a verlo", "play it again"));
+            keys.push(key("Enter", "repetir", "replay"));
         }
         keys.push(key(keymap::space(lang), "pausa", "pause"));
         if state.related_shown().is_some() {
             keys.push(key("Tab", "A continuación", "Up Next"));
         }
-        keys.push(key("x", "cerrar la pestaña", "close the tab"));
+        keys.push(key("x", "cerrar pestaña", "close tab"));
         if state.active_tab().is_some_and(|t| t.source.is_some()) {
-            keys.push(key("X", "cerrar y quitar de la lista", "close and remove from the list"));
+            keys.push(key("X", "cerrar, quitar de la lista", "close, remove from list"));
         }
-        keys.push(key("v", "Cambiar calidad", "Quality Change"));
-        keys.push(key("b", "Cambiar códec", "Codec Change"));
+        keys.push(key("v", "Cambiar resolución", "Change Resolution"));
+        keys.push(key("b", "Cambiar códec", "Change Codec"));
         // The rest of the tab's keys, but the ones above and Up Next's own,
         // which the help explains.
         let shown = ["Espacio", "Enter", "v", "b", "Tab", "j k", "Esc", "x", "X"];
@@ -2125,7 +2286,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             keys.push(key("x", "Cerrar pestaña", "Close Tab"));
         }
         if state.listing().is_some_and(|l| l.items == Items::About) && about_button_ready(state) {
-            keys.insert(0, key("Tab", "elegir Actualizar Ahora", "select Update Now"));
+            keys.insert(0, key("Tab", "Actualizar Ahora", "Update Now"));
         }
         keys
     } else {
@@ -2150,14 +2311,14 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::Saved) => vec![
                 key("Enter", "ver", "play"),
-                key("X", "quitar de la lista", "remove from the list"),
+                key("X", "quitar de la lista", "remove from list"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("a", "solo audio", "audio only"),
                 key("c", "canal", "channel"),
                 back,
             ],
             Some(Items::Videos(_)) if state.listing().is_some_and(|l| l.kind == ListKind::History) => vec![
-                key("Enter", "ver (sigue donde lo dejaste)", "play (resumes where you left)"),
+                key("Enter", "seguir viendo", "resume"),
                 key("X", "quitar del historial", "remove from history"),
                 key("w", "ver después YouTube", "YouTube Watch Later"),
                 key("W", "ver después tubevibe", "tubevibe Watch Later"),
@@ -2169,7 +2330,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             {
                 vec![
                     key("Enter", "ver", "play"),
-                    key("X", "quitar de la lista", "remove from the list"),
+                    key("X", "quitar de la lista", "remove from list"),
                     key("W", "ver después tubevibe", "tubevibe Watch Later"),
                     key("a", "solo audio", "audio only"),
                     key("d", "descargar", "download"),
@@ -2189,34 +2350,34 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 key("/", "buscar", "search"),
                 back,
             ],
-            Some(Items::Channels(_)) => vec![key("Enter", "ver sus videos", "its videos"), subscribe, back],
+            Some(Items::Channels(_)) => vec![key("Enter", "abrir canal", "open channel"), subscribe, back],
             Some(Items::Profiles(_)) => vec![key("Enter", "usar esta sesión", "use this login"), back],
             Some(Items::Playlists(_)) => vec![
-                key("Enter", "ver sus videos", "its videos"),
-                key("X", "borrar la lista (pide confirmar)", "delete the playlist (asks first)"),
+                key("Enter", "abrir canal", "open channel"),
+                key("X", "borrar la lista", "delete playlist"),
                 back,
             ],
             Some(Items::Files(_, kind)) => vec![
                 match kind {
-                    MediaKind::Music => key("Enter", "escuchar desde esta canción", "play from this song"),
+                    MediaKind::Music => key("Enter", "escuchar desde acá", "play from here"),
                     MediaKind::Video => key("Enter", "ver", "play"),
                 },
                 // Several files: mark them first, then `X` sends them all.
                 if state.marked_files().is_empty() {
-                    key(keymap::space(lang), "marcar varios", "mark several")
+                    key(keymap::space(lang), "marcar", "mark")
                 } else {
-                    key(keymap::space(lang), "marcar / desmarcar", "mark / unmark")
+                    key(keymap::space(lang), "marcar", "mark")
                 },
                 if state.marked_files().is_empty() {
-                    key("X", "este a la papelera (pide confirmar)", "this one to the trash (asks first)")
+                    key("X", "a la papelera", "trash")
                 } else {
-                    key("X", "los marcados a la papelera (pide confirmar)", "the marked ones to the trash (asks first)")
+                    key("X", "marcados a la papelera", "trash marked")
                 },
                 back,
             ],
             Some(Items::Downloads(_)) if !state.marked_download_ids().is_empty() => vec![
-                key(keymap::space(lang), "marcar / desmarcar", "mark / unmark"),
-                key("X", "las marcadas: papelera (pide confirmar)", "the marked ones: trash (asks first)"),
+                key(keymap::space(lang), "marcar", "mark"),
+                key("X", "marcadas a la papelera", "trash marked"),
                 back,
             ],
             Some(Items::Downloads(downloads)) => {
@@ -2224,19 +2385,19 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
                 let mut keys = Vec::new();
                 match selected {
                     Some(DownloadState::Running { .. }) => {
-                        keys.push(key("X", "cancelar la descarga (pide confirmar)", "cancel the download (asks first)"))
+                        keys.push(key("X", "cancelar descarga", "cancel download"))
                     }
                     Some(DownloadState::Done(_)) => {
                         keys.push(key("Enter", "ver", "play"));
-                        keys.push(key("X", "a la papelera (pide confirmar)", "move to trash (asks first)"));
+                        keys.push(key("X", "a la papelera", "trash"));
                     }
                     Some(_) => {
-                        keys.push(key("X", "quitar de la lista (pide confirmar)", "take off the list (asks first)"))
+                        keys.push(key("X", "quitar de la lista", "remove from list"))
                     }
                     None => {}
                 }
                 if selected.is_some() {
-                    keys.push(key(keymap::space(lang), "marcar varios", "mark several"));
+                    keys.push(key(keymap::space(lang), "marcar", "mark"));
                 }
                 keys.push(back);
                 keys
@@ -2251,7 +2412,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             }
             Some(Items::About) => vec![back],
             Some(Items::System) => vec![key("Enter", "revisar de nuevo", "check again"), back],
-            _ => vec![key("Enter", "cambiar / abrir", "change / open"), back],
+            _ => vec![key("Enter", "cambiar", "change"), back],
         }
     };
     if normal {
@@ -2284,7 +2445,8 @@ pub(crate) fn key_style(key: &str, color: Color) -> Style {
 /// shortcut) is always kept.
 fn draw_hints(frame: &mut Frame, hints: &[(String, String)], area: Rect) {
     let hint = |(key, description): &(String, String)| {
-        [Span::styled(key.clone(), key_style(key, CYAN)), Span::styled(format!(" {description}   "), MUTED)]
+        // A key cap: the theme's background on its text colour, then what it does.
+        [Span::styled(format!(" {key} "), key_style(key, BG).bg(FG)), Span::styled(format!(" {description}  "), FG)]
     };
     let width = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
     let Some((last, rest)) = hints.split_last() else { return };
@@ -2411,6 +2573,8 @@ fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
     let mut lines = vec![Line::from("")];
     lines.extend(message);
     lines.push(Line::from(lang.pick("s = sí · cualquier otra tecla = no", "y = yes · any other key = no")).fg(MUTED));
+    // The same blank line below as above.
+    lines.push(Line::from(""));
     let title = lang.pick(" Confirmar ", " Confirm ");
     frame.render_widget(Clear, area);
     frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center).block(panel(title, RED)), area);
@@ -2530,8 +2694,8 @@ fn confirm_layout(screen: Rect, question: Line) -> (Rect, Vec<Line<'static>>) {
     let max_width = screen.width.saturating_sub(4).min(72);
     let width = natural.max(40).min(max_width).max(screen.width.min(8));
     let text_width = usize::from(width.saturating_sub(4)).max(1);
-    // Border, blank line, hint line, border; and a line of margin each side.
-    let max_lines = usize::from(screen.height.saturating_sub(6)).max(1);
+    // Border, blank line, hint line, blank line, border; and a line of margin each side.
+    let max_lines = usize::from(screen.height.saturating_sub(7)).max(1);
     let mut lines = wrap_spans(&spans, text_width);
     if lines.len() > max_lines
         && let Some(t) = spans.iter().position(|s| s.style.fg == Some(MAGENTA))
@@ -2550,7 +2714,7 @@ fn confirm_layout(screen: Rect, question: Line) -> (Rect, Vec<Line<'static>>) {
         lines = wrap_spans(&shorter, text_width);
     }
     lines.truncate(max_lines);
-    let height = (lines.len() as u16 + 4).min(screen.height);
+    let height = (lines.len() as u16 + 5).min(screen.height);
     (centered(screen, width, height), lines)
 }
 
@@ -2920,7 +3084,10 @@ fn draw_about(frame: &mut Frame, state: &State, icons: &Icons, area: Rect) {
             Replace::ReadOnly => {
                 Some(lang.pick("La carpeta de tubevibe no se puede escribir", "tubevibe's Folder Isn't Writable"))
             }
-            Replace::NoAsset => Some(lang.pick("No hay descarga para este sistema", "No Download for This System")),
+            Replace::NoAsset => Some(lang.pick(
+                "No hay actualización compilada para este sistema: compilá desde el código",
+                "No Prebuilt Update for This Platform: Build From Source",
+            )),
             Replace::Ready(_) => None,
         } {
             lines.push(Line::from(why).fg(MUTED));
@@ -3268,14 +3435,52 @@ mod tests {
 
     #[test]
     fn settings_screen_shows_labels_and_values() {
-        // Taller than the default screen: the list scrolls past 36 rows.
-        let screen = render_screen(&open_settings(), 130, 46).join("\n");
+        // Taller than the default screen: with its section headers the list scrolls past 36 rows.
+        let screen = render_screen(&open_settings(), 130, 70).join("\n");
         for setting in Setting::ALL {
             assert!(screen.contains(setting.label(Lang::Es)), "{setting:?}\n{screen}");
         }
         assert!(screen.contains("720p"));
         assert!(screen.contains("~/Videos"));
         assert!(screen.contains("Original + subtítulos"));
+    }
+
+    #[test]
+    fn settings_are_grouped_under_sections_with_a_description() {
+        let mut s = open_settings();
+        s.config.ui.lang = Some(Lang::En);
+        s.focus = Focus::List;
+        let screen = render_screen(&s, 130, 70);
+        if std::env::var_os("TUBEVIBE_SNAPSHOT").is_some() {
+            println!("{}", screen.join("\n"));
+        }
+        let order: Vec<usize> = ["TUBEVIBE", "ACCOUNT", "PLAYBACK", "FEEDS", "LOOK", "ANIMATION", "FOLDERS"]
+            .iter()
+            .map(|h| row_of(&screen, &format!("│  {h}")))
+            .collect();
+        assert!(order.windows(2).all(|w| w[0] < w[1]), "{order:?}");
+        assert!(row_of(&screen, "App Menu Entry") < order[1]);
+        assert!(screen.iter().any(|l| l.contains(Setting::ALL[0].about(Lang::En))), "the first setting's description");
+        // A click on a header selects nothing; one on a setting row selects it.
+        let rows = settings_rows(Lang::En);
+        assert_eq!(rows[0], None);
+        assert_eq!(rows[1], Some(0));
+        assert_eq!(rows.iter().flatten().count(), Setting::ALL.len());
+    }
+
+    #[test]
+    fn menu_section_headers_are_orange_like_settings() {
+        let s = state();
+        let mut terminal = Terminal::new(TestBackend::new(130, 40)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let rows: Vec<String> =
+            buffer.content.chunks(130).map(|row| row.iter().map(|c| c.symbol()).collect()).collect();
+        let y = rows.iter().position(|l| l.contains("YOUTUBE")).unwrap();
+        let x = rows[y].chars().position(|c| c == 'Y').unwrap();
+        let cell = &buffer[(x as u16, y as u16)];
+        assert_eq!(cell.fg, ORANGE);
+        assert!(cell.modifier.contains(Modifier::BOLD));
     }
 
     #[test]
@@ -3323,12 +3528,12 @@ mod tests {
             keys.iter().filter(|(_, d)| d.starts_with("Play")).count()
         );
         assert!(!keys.iter().any(|(_, d)| d.contains("in Up Next")), "{keys:?}");
-        assert!(at("v", "Quality Change").is_some() && at("b", "Codec Change").is_some(), "{keys:?}");
-        assert!(at("Space", "Pause") < at("x", "Close the Tab"));
+        assert!(at("v", "Change Resolution").is_some() && at("b", "Change Codec").is_some(), "{keys:?}");
+        assert!(at("Space", "Pause") < at("x", "Close Tab"));
         assert_eq!(keys.last().unwrap(), &("?".to_string(), "Help".to_string()));
         s.update(Action::ToggleUiLang);
         let keys = hints(&s);
-        assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar calidad"));
+        assert!(keys.iter().any(|(k, d)| k == "v" && *d == "Cambiar resolución"));
         assert!(keys.iter().any(|(k, d)| k == "b" && *d == "Cambiar códec"));
         assert_eq!(keys.last().unwrap(), &("?".to_string(), "Ayuda".to_string()));
     }
@@ -3417,13 +3622,13 @@ mod tests {
         let mut list = with_items(Items::Videos(vec![video("a")]));
         assert_eq!(hint(&list, "s").as_deref(), Some("suscribirse"));
         list.subs.insert("UCa".into());
-        assert_eq!(hint(&list, "s").as_deref(), Some("desuscribirse (pide confirmar)"));
+        assert_eq!(hint(&list, "s").as_deref(), Some("desuscribirse"));
         let file = |n: &str| LocalFile { path: format!("/m/{n}.mp3").into(), name: n.into(), folder: "D".into() };
         let mut files = with_items(Items::Files(vec![file("a"), file("b")], MediaKind::Music));
-        assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar varios"));
-        assert_eq!(hint(&files, "X").as_deref(), Some("este a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "Espacio").as_deref(), Some("marcar"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("a la papelera"));
         files.update(Action::ToggleMark);
-        assert_eq!(hint(&files, "X").as_deref(), Some("los marcados a la papelera (pide confirmar)"));
+        assert_eq!(hint(&files, "X").as_deref(), Some("marcados a la papelera"));
         files.update(Action::Trash);
         assert_eq!(hint(&files, "s").as_deref(), Some("sí, a la papelera"));
     }
@@ -3434,8 +3639,8 @@ mod tests {
         let file = |n: &str| LocalFile { path: format!("/m/{n}").into(), name: n.into(), folder: "D".into() };
         for kind in [MediaKind::Video, MediaKind::Music] {
             let s = with_items(Items::Files(vec![file("a")], kind));
-            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar varios"), "{kind:?}");
-            assert!(render_sized(&s, &VIEW, 100).contains("Espacio marcar varios"), "{kind:?} fits at 100 columns");
+            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar"), "{kind:?}");
+            assert!(render_sized(&s, &VIEW, 100).contains(" Espacio  marcar"), "{kind:?} fits at 100 columns");
         }
         let states = [
             DownloadState::Done("/v/a.mp4".into()),
@@ -3444,11 +3649,11 @@ mod tests {
         ];
         for state in states {
             let mut s = with_items(Items::Downloads(vec![Download { id: 0, video: video("a"), state }]));
-            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar varios"));
+            assert_eq!(hint(&s, "Espacio").as_deref(), Some("marcar"));
             s.update(Action::ToggleUiLang);
             let screen = render_sized(&s, &VIEW, 100);
-            assert!(screen.contains("Space Mark Several"), "{screen}");
-            assert!(screen.contains("? Help"), "whole hints only, the last one kept");
+            assert!(screen.contains(" Space  Mark"), "{screen}");
+            assert!(screen.contains(" ?  Help"), "whole hints only, the last one kept");
         }
     }
 
@@ -3466,12 +3671,12 @@ mod tests {
         let screen = render(&s);
         assert!(screen.contains("· 3 · ✗ 2 marked"), "{screen}");
         assert_eq!(screen.matches("✗ ✔ done").count(), 2, "{screen}");
-        assert_eq!(hint(&s, "X").as_deref(), Some("The Marked Ones: Trash (Asks First)"));
-        assert_eq!(hint(&s, "Space").as_deref(), Some("Mark / Unmark"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("Trash Marked"));
+        assert_eq!(hint(&s, "Space").as_deref(), Some("Mark"));
         let files = vec![(0, "/v/a.mp4".into()), (1, "/v/b.mp4".into()), (2, "/v/c.mp4".into())];
         s.confirm = Some(Confirm::TrashDownloads { files: files.clone(), cancel: Vec::new(), remove: Vec::new() });
         assert!(render(&s).contains("Move 3 files to the trash?"));
-        assert_eq!(hint(&s, "y").as_deref(), Some("Yes, to the Trash"));
+        assert_eq!(hint(&s, "y").as_deref(), Some("Yes, Trash"));
         s.confirm = Some(Confirm::TrashDownloads { files, cancel: vec![7], remove: Vec::new() });
         assert_eq!(hint(&s, "y").as_deref(), Some("Yes (The Other Marked Ones Get Cancelled or Taken Off)"));
         s.update(Action::ToggleUiLang);
@@ -3483,7 +3688,7 @@ mod tests {
         let hint = |s: &State, k: &str| hints(s).into_iter().find(|(key, _)| key == k).map(|(_, d)| d);
         let done = Download { id: 0, video: video("a"), state: DownloadState::Done("/v/a.mp4".into()) };
         let mut s = with_items(Items::Downloads(vec![done]));
-        assert_eq!(hint(&s, "X").as_deref(), Some("a la papelera (pide confirmar)"));
+        assert_eq!(hint(&s, "X").as_deref(), Some("a la papelera"));
         s.confirm = Some(Confirm::TrashDownload { id: 0, path: "/v/a.mp4".into() });
         assert_eq!(hint(&s, "s").as_deref(), Some("sí, a la papelera"));
         s.update(Action::ToggleUiLang);
@@ -3495,9 +3700,9 @@ mod tests {
     #[test]
     fn hint_bar_shows_keys_with_descriptions() {
         let screen = render(&with_items(Items::Videos(vec![video("a")])));
-        assert!(screen.contains("w ver después YouTube"), "{screen}");
-        assert!(screen.contains("W ver después tubevibe"), "{screen}");
-        assert!(screen.contains("? Ayuda"));
+        assert!(screen.contains(" w  ver después YouTube"), "{screen}");
+        assert!(screen.contains(" W  ver después tubevibe"), "{screen}");
+        assert!(screen.contains(" ?  Ayuda"));
     }
 
     #[test]
@@ -3533,7 +3738,7 @@ mod tests {
         let mut s = with_items(Items::Files(vec![file("Tema uno"), file("Tema dos")], MediaKind::Music));
         let screen = render(&s);
         assert!(screen.contains("♫ Disco"), "{screen}");
-        assert!(screen.contains("escuchar desde esta canción"));
+        assert!(screen.contains("escuchar desde acá"));
         s.update(Action::Enter);
         let screen = render(&s);
         assert!(screen.contains("2 canciones en la cola"), "{screen}");
@@ -3582,7 +3787,7 @@ mod tests {
         s.update(Action::GoTab(0));
         let screen = render(&s);
         for text in
-            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", "? Help"]
+            ["My Recommendations", "Watch Later", "ON THIS COMPUTER", "Settings", "About", "TABS", " ?  Help"]
         {
             assert!(screen.contains(text), "{text} missing\n{screen}");
         }
@@ -3603,13 +3808,28 @@ mod tests {
     }
 
     #[test]
+    fn hint_keys_are_key_caps_with_bold_only_for_capitals() {
+        let mut terminal = Terminal::new(TestBackend::new(60, 1)).unwrap();
+        let hints = vec![("x".to_string(), "Close Tab".to_string()), ("X".to_string(), "Remove".to_string())];
+        terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
+        let buffer = terminal.backend().buffer();
+        let line: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(line.starts_with("  x  Close Tab   X  Remove"), "{line}");
+        let (x, label, big) = (&buffer[(2, 0)], &buffer[(5, 0)], &buffer[(17, 0)]);
+        assert_eq!((x.fg, x.bg), (BG, FG), "cap: background on text colour");
+        assert_eq!((buffer[(1, 0)].bg, buffer[(3, 0)].bg), (FG, FG), "padded cap");
+        assert_eq!(label.fg, FG, "labels in the text colour");
+        assert!(!x.modifier.contains(Modifier::BOLD) && big.modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
     fn hints_fit_whole_and_keep_the_help_key() {
         let mut terminal = Terminal::new(TestBackend::new(60, 1)).unwrap();
         let hints = hints(&with_tab());
         terminal.draw(|f| draw_hints(f, &hints, f.area())).unwrap();
         let line: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(line.contains("? Ayuda"), "{line}");
-        assert!(line.contains("Espacio pausa"), "{line}");
+        assert!(line.contains(" ?  Ayuda"), "{line}");
+        assert!(line.contains(" Espacio  pausa"), "{line}");
         assert!(!line.contains("silenciar"), "does not fit, left out whole: {line}");
     }
 
@@ -3622,8 +3842,9 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
         assert_eq!(id, "b", "the selected video");
-        assert_eq!(cells.width, 46 - 2);
-        assert_eq!(cells.height, (46 - 2) * 9 / 32);
+        // Inside the border and a blank cell all round.
+        assert_eq!(cells.width, 46 - 4);
+        assert_eq!(cells.height, (46 - 4) * 9 / 32);
         s.update(Action::ToggleHelp);
         assert_eq!(thumbnail_area(&s, screen_area), None, "kitty would draw it over the help");
         s.update(Action::ToggleHelp);
@@ -3778,6 +3999,13 @@ mod tests {
         // Sidebar title: `┌ ▶ tubevibe ┐`.
         let row: String = (0..14).map(|x| buffer[(x, 0)].symbol().to_owned()).collect();
         assert!(row.starts_with("┌ ▶ tubevibe "), "{row:?}");
+        // The version on the right of the same border, in the muted colour.
+        let top: String = (0..buffer.area.width).map(|x| buffer[(x, 0)].symbol().to_owned()).collect();
+        let menu_top = top.split('┐').next().unwrap().to_owned();
+        let version = format!(" v{} ", env!("CARGO_PKG_VERSION"));
+        assert!(menu_top.ends_with(&version), "{menu_top:?}");
+        let at = menu_top.chars().count() - version.chars().count() + 1;
+        assert_eq!(buffer[(at as u16, 0)].fg, MUTED);
         assert_eq!(buffer[(2, 0)].fg, RED, "▶ in the red of \"tube\"");
         assert_eq!(buffer[(4, 0)].fg, RED);
         // Welcome screen and About: `▶ tubevibe`, one space.
@@ -4018,10 +4246,10 @@ mod tests {
         let (_, status) = find(&screen, "▶ Enter lo reproduce");
         let (x, heading) = find(&screen, "✦ Resumen IA");
         assert_eq!(heading, status + 2, "one blank line under the status line:\n{screen}");
-        // Across the left column, under the thumbnail, all of it; Up next one
+        // In the text column, under the details, all of it; Up next one
         // blank row below its last line.
         let (up_next_x, up_next) = find(&screen, "┌ A continuación");
-        assert_eq!(x, up_next_x, "the left column's width:\n{screen}");
+        assert_eq!(x, find(&screen, "title a  ").0, "the details' column:\n{screen}");
         assert!(screen.contains("UFD Tech explores") && screen.contains("THE END."), "whole: {screen}");
         assert_eq!(find(&screen, "THE END.").1 + 2, up_next, "Up next right below it:\n{screen}");
         // The comments run the whole height of the tab, on the right.
@@ -4035,14 +4263,14 @@ mod tests {
         let screen_area = Rect::new(0, 0, 130, 40);
         let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
-        // Without one: the heading says so, Up next right below.
+        // Without one: the heading says so, Up next below it (pinned to the bottom).
         let (plain, plain_screen) = details_tab(None);
         let (hx, hy) = find(&plain_screen, "✦ Resumen IA · no disponible para este video");
         assert_eq!(hy, find(&plain_screen, "▶ Enter lo reproduce").1 + 2, "{plain_screen}");
-        assert_eq!(hy + 2, find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
-        assert_eq!(hx, find(&plain_screen, "┌ A continuación").0);
+        assert!(hy + 2 <= find(&plain_screen, "┌ A continuación").1, "{plain_screen}");
+        assert_eq!(hx, find(&plain_screen, "┌ A continuación").0 + 1, "a column in from the edge");
         let (x, y2) = find(&plain_screen, "title r2 ");
-        assert!(y2 < y, "Up next moves up without a summary");
+        assert!(y2 <= y, "Up next stays pinned to the bottom");
         assert_eq!(spot(&plain, None, screen_area, x, y2), Some(Spot::Row(1)));
     }
 
@@ -4096,7 +4324,7 @@ mod tests {
         let (s, _) = details_tab(Some("Corto."));
         let screen = tab_screen(&s, 130, 40);
         let summary = row_of(&screen, "Corto.");
-        assert_eq!(row_of(&screen, "┌ A continuación"), summary + 2, "{}", screen.join("\n"));
+        assert!(row_of(&screen, "┌ A continuación") >= summary + 2, "{}", screen.join("\n"));
         // Narrow: the comments go under Up next, which takes the whole width.
         let screen = tab_screen(&s, 100, 40);
         assert!(row_of(&screen, "┌ Comentarios") > row_of(&screen, "┌ A continuación"), "{}", screen.join("\n"));
@@ -4138,7 +4366,9 @@ mod tests {
         for result in [Ok(None), Err("falló".to_owned())] {
             s.update(Action::Summarized("b".into(), result));
             let screen = render(&s);
-            let (x, y) = find(&screen, "✦ Resumen IA · no disponible para este video");
+            // The padded preview wraps the note onto the next line.
+            assert!(screen.contains("no disponible"), "{screen}");
+            let (x, y) = find(&screen, "✦ Resumen IA");
             assert!(blank_above(&screen, x, y), "{screen}");
         }
     }
@@ -4237,9 +4467,9 @@ mod tests {
         }
         assert!(!screen.contains("ventana de mpv"));
         let screen_area = Rect::new(0, 0, 130, 40);
-        let (id, cells) = thumbnail_area(&s, screen_area).unwrap();
-        assert_eq!(id, "a");
-        assert_eq!((cells.width, cells.height), (22, 22 * 9 / 32), "two fifths of the left column, at most 36");
+        // 56 columns beside the comments: the text keeps its 40, no room left
+        // for a thumbnail of at least 4 rows.
+        assert_eq!(thumbnail_area(&s, screen_area), None);
         let (x, y) = find(&screen, "title r2 ");
         assert_eq!(spot(&s, None, screen_area, x, y), Some(Spot::Row(1)));
         assert_eq!(
@@ -4294,7 +4524,7 @@ mod tests {
         let screen = render(&s);
         assert!(!screen.contains("◀") && screen.contains("↑ Update Now"), "{screen}");
         assert!(screen.contains("(Tab to Select, Enter to Press)"), "{screen}");
-        assert_eq!(hints(&s)[0], ("Tab".to_string(), "Select Update Now".to_string()));
+        assert_eq!(hints(&s)[0], ("Tab".to_string(), "Update Now".to_string()));
         s.update(Action::ToggleFocus);
         assert_eq!(
             s.update(Action::Enter),
@@ -4787,6 +5017,21 @@ mod tests {
     }
 
     #[test]
+    fn menu_version_shows_when_it_fits_and_drops_before_the_logo() {
+        let s = state();
+        let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+        for (width, shown) in [(26, true), (23, true), (22, false), (20, false), (12, false)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
+            terminal.draw(|f| draw_sidebar(f, &s, &icons(s.config.ui.icons), f.area())).unwrap();
+            let top: String = (0..width).map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_owned()).collect();
+            assert_eq!(top.contains(&version), shown, "{width}: {top:?}");
+            if width >= 14 {
+                assert!(top.starts_with("┌ ▶ tubevibe "), "{width}: {top:?}");
+            }
+        }
+    }
+
+    #[test]
     fn menu_width_min_and_max_and_never_more_than_half() {
         for (width, screen_width, expect) in [(20, 130, 20u16), (40, 130, 40), (26, 130, 26), (40, 60, 30)] {
             let mut s = state();
@@ -5051,6 +5296,62 @@ mod tests {
     }
 
     #[test]
+    fn the_video_tab_thumbnail_runs_down_to_up_next_and_shrinks_for_the_text() {
+        // (inner width, height): wide windows, a short one, narrow ones.
+        for (w, h, rows) in [(200u16, 60u16, (6u16, 10u16)), (200, 30, (6, 4)), (120, 30, (8, 0)), (100, 50, (6, 12))] {
+            let inner = Rect::new(1, 1, w, h);
+            let l = watch_layout_with(inner, 44, rows);
+            let t = l.thumbnail;
+            let related_top = l.related.y;
+            if t.width > 0 {
+                assert_eq!((t.x, t.y), (l.left.x + 1, l.left.y + 1), "{w}x{h}: a cell in from the top and left");
+                let full = t.y + t.height == related_top;
+                assert!(full || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
+                assert_eq!(t.width, columns_16_9(t.height), "{w}x{h}: 16:9");
+                assert_eq!(l.details.x, t.x + t.width + 2, "{w}x{h}: text beside it");
+                assert_eq!(l.details.right() + 1, l.left.right(), "{w}x{h}: a column before the right edge");
+            }
+            assert!(l.details.width >= WATCH_TEXT_MIN_WIDTH, "{w}x{h}: text keeps its width: {l:?}");
+            assert_eq!(l.summary.x, l.details.x, "{w}x{h}: summary under the details");
+            assert_eq!(l.summary.y, l.details.y + rows.0, "{w}x{h}");
+            assert_eq!(l.summary.height, rows.1, "{w}x{h}: all of the summary");
+            assert_eq!(l.related.y + l.related.height, l.left.y + l.left.height, "{w}x{h}: Up next at the bottom");
+            assert!(l.related.height <= UP_NEXT_MAX_ROWS + 2);
+        }
+        // 200x60: tall, the text's 40 columns cap it; 200x30 reaches Up next.
+        let big = watch_layout_with(Rect::new(1, 1, 200, 60), 44, (6, 10));
+        assert!(big.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{big:?}");
+        assert!(big.thumbnail.width > 100, "{big:?}");
+        let mid = watch_layout_with(Rect::new(1, 1, 200, 30), 44, (6, 4));
+        assert_eq!(mid.thumbnail.y + mid.thumbnail.height, mid.related.y, "{mid:?}");
+        // Smaller windows, smaller thumbnails, then none.
+        let sizes: Vec<u16> =
+            [200u16, 160, 130, 110, 100].iter().map(|&w| watch_layout_with(Rect::new(1, 1, w, 60), 44, (6, 10)).thumbnail.width).collect();
+        assert!(sizes.windows(2).all(|p| p[0] >= p[1]), "{sizes:?}");
+        assert_eq!(*sizes.last().unwrap(), 0, "{sizes:?}");
+        assert_eq!(watch_thumbnail_size(3, 200), (0, 0), "under 4 rows: none");
+    }
+
+    #[test]
+    fn up_next_is_at_most_21_rows_and_scrolls_when_shorter() {
+        let (s, _) = details_tab(Some("Corto."));
+        for (w, h) in [(80, 30), (120, 40), (120, 60), (200, 50), (200, 90), (100, 120)] {
+            tab_screen(&s, w, h);
+            let inner = Block::bordered().inner(screen_areas(Rect::new(0, 0, w, h), &s).content);
+            let layout = tab_layout(s.active_tab().unwrap(), inner, s.config.ui.comments_width);
+            assert!(layout.related.height <= UP_NEXT_MAX_ROWS + 2, "{w}x{h}: {}", layout.related.height);
+            assert_eq!(layout.related.bottom(), layout.left.bottom(), "Up next pinned to the bottom at {w}x{h}");
+            if let Some(c) = layout.comments.filter(|c| c.x > inner.x) {
+                assert_eq!(c.height, inner.height, "comments keep full height at {w}x{h}");
+            }
+        }
+        // A short pane scrolls so the selection (last of 21) stays on screen.
+        let inner = Rect::new(0, 0, 40, 5);
+        assert_eq!(list_row(inner, 20, 21, Position::new(0, 4)), Some(Spot::Row(20)));
+        assert_eq!(list_row(inner, 20, 21, Position::new(0, 0)), Some(Spot::Row(16)));
+    }
+
+    #[test]
     fn uppercase_keys_are_bold_lowercase_are_not() {
         use ratatui::style::Modifier;
         for key in ["Q", "M", "L", "W", "X  Del", "T", "G"] {
@@ -5085,7 +5386,7 @@ mod tests {
         assert!(area.width <= 76 && area.x >= 2, "{area:?}");
         let text = confirm_text(&lines);
         assert!(text.contains("[Deleted video]") && text.contains("YouTube Watch Later?"), "{text}");
-        assert_eq!(area.height as usize, lines.len() + 4);
+        assert_eq!(area.height as usize, lines.len() + 5);
         // The colours stay on their words.
         let cyan: String = lines
             .iter()
@@ -5097,7 +5398,7 @@ mod tests {
         // A long title wraps over several lines, nothing cut.
         let long = "A very long video title that goes on and on about many things ".repeat(2);
         let (area, lines) = confirm_layout(screen, close_remove_question(long.trim()));
-        assert!(lines.len() > 1 && area.height as usize == lines.len() + 4);
+        assert!(lines.len() > 1 && area.height as usize == lines.len() + 5);
         let words = confirm_text(&lines).replace('\n', " ");
         assert!(words.contains(long.trim()) && words.ends_with("YouTube Watch Later?"), "{words}");
         // In a full draw, the hint keeps its own line.
@@ -5106,6 +5407,20 @@ mod tests {
         let screen = render_screen(&s, 80, 24).join("\n");
         assert!(screen.contains("YouTube?"), "{screen}");
         assert!(screen.lines().any(|l| l.contains("s = sí · cualquier otra tecla = no") && !l.contains("YouTube")));
+    }
+
+    #[test]
+    fn confirm_has_a_blank_line_above_and_below() {
+        let mut s = state();
+        s.confirm = Some(Confirm::Quit(0));
+        let area = dialog_area(&s, Rect::new(0, 0, 80, 24)).unwrap();
+        let screen = render_screen(&s, 80, 24);
+        let row = |y: u16| -> String {
+            screen[usize::from(y)].chars().skip(usize::from(area.x) + 1).take(usize::from(area.width) - 2).collect()
+        };
+        let (first, last) = (area.y + 1, area.y + area.height - 2);
+        assert!(row(first).trim().is_empty() && !row(first + 1).trim().is_empty(), "{}", screen.join("\n"));
+        assert!(row(last).trim().is_empty() && !row(last - 1).trim().is_empty(), "{}", screen.join("\n"));
     }
 
     #[test]

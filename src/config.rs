@@ -162,6 +162,12 @@ impl Size {
         if value >= self.max || up > self.max { self.min } else { up.max(self.min) }
     }
 
+    /// One step narrower (`dir < 0`) or wider, within the limits.
+    pub fn step_by(self, value: u16, dir: i8) -> u16 {
+        let v = if dir < 0 { value.saturating_sub(self.step) } else { value.saturating_add(self.step) };
+        v.clamp(self.min, self.max)
+    }
+
     pub fn contains(self, value: u16) -> bool {
         (self.min..=self.max).contains(&value)
     }
@@ -188,8 +194,10 @@ pub struct UiConfig {
     pub icons: IconSet,
     /// Interface language; unset follows the system locale.
     pub lang: Option<Lang>,
-    /// Video thumbnails in the preview panel (kitty only).
-    pub thumbnails: bool,
+    /// Video thumbnails in the preview panel and video tabs.
+    pub thumbnails: ThumbMode,
+    /// Thumbnails made blocky on purpose.
+    pub thumb_pixelation: Pixelation,
     /// Clicks and the wheel (selecting text then needs Shift).
     pub mouse: bool,
     /// The tubevibe logo for a moment when the app opens.
@@ -321,6 +329,117 @@ impl IconSet {
     }
 }
 
+/// Settings → Thumbnails: the terminal's own pictures (kitty, sixel,
+/// iTerm2; half blocks elsewhere), half blocks always, or none.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThumbMode {
+    #[default]
+    Picture,
+    Blocks,
+    Off,
+}
+
+/// Also reads the old `thumbnails = true / false`.
+impl<'de> Deserialize<'de> for ThumbMode {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Bool(bool),
+            Text(String),
+        }
+        match Raw::deserialize(d)? {
+            Raw::Bool(true) => Ok(Self::Picture),
+            Raw::Bool(false) => Ok(Self::Off),
+            Raw::Text(t) => match t.trim().to_ascii_lowercase().as_str() {
+                "picture" | "on" | "true" => Ok(Self::Picture),
+                "blocks" => Ok(Self::Blocks),
+                "off" | "false" => Ok(Self::Off),
+                other => Err(serde::de::Error::custom(format!("unknown thumbnails `{other}`: picture, blocks or off"))),
+            },
+        }
+    }
+}
+
+impl ThumbMode {
+    pub const ALL: [Self; 3] = [Self::Picture, Self::Blocks, Self::Off];
+
+    pub fn next(self) -> Self {
+        let at = Self::ALL.iter().position(|a| *a == self).unwrap_or(0);
+        Self::ALL[(at + 1) % Self::ALL.len()]
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Picture => "picture",
+            Self::Blocks => "blocks",
+            Self::Off => "off",
+        }
+    }
+
+    pub fn label(self, lang: Lang) -> &'static str {
+        match self {
+            Self::Picture => lang.pick("Imagen", "Picture"),
+            Self::Blocks => lang.pick("Bloques", "Blocks"),
+            Self::Off => lang.pick("No", "Off"),
+        }
+    }
+}
+
+/// Settings → Thumbnail Pixelation: the thumbnail shrunk to a small grid and
+/// blown up again (nearest neighbour), so it looks like pixel art.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Pixelation {
+    #[default]
+    Off,
+    Low,
+    Medium,
+    High,
+    Max,
+}
+
+impl Pixelation {
+    pub const ALL: [Self; 5] = [Self::Off, Self::Low, Self::Medium, Self::High, Self::Max];
+
+    pub fn next(self) -> Self {
+        let at = Self::ALL.iter().position(|a| *a == self).unwrap_or(0);
+        Self::ALL[(at + 1) % Self::ALL.len()]
+    }
+
+    /// Pixels across the shrunk thumbnail (`None`: full resolution).
+    pub fn grid(self) -> Option<u32> {
+        match self {
+            Self::Off => None,
+            Self::Low => Some(64),
+            Self::Medium => Some(32),
+            Self::High => Some(16),
+            Self::Max => Some(8),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Max => "max",
+        }
+    }
+
+    pub fn label(self, lang: Lang) -> &'static str {
+        match self {
+            Self::Off => lang.pick("No", "Off"),
+            Self::Low => lang.pick("Baja", "Low"),
+            Self::Medium => lang.pick("Media", "Medium"),
+            Self::High => lang.pick("Alta", "High"),
+            Self::Max => lang.pick("Máxima", "Max"),
+        }
+    }
+}
+
 /// Subtitle / dubbing languages offered by the settings screen (any code works in the file).
 pub const LANGUAGES: [(&str, Text); 9] = [
     ("es", Text::new("Español", "Spanish")),
@@ -434,7 +553,8 @@ impl Default for UiConfig {
             comments_width: COMMENTS_WIDTH.default,
             icons: IconSet::Emoji,
             lang: None,
-            thumbnails: true,
+            thumbnails: ThumbMode::Picture,
+            thumb_pixelation: Pixelation::Off,
             mouse: true,
             splash: true,
             check_updates: true,
@@ -960,5 +1080,20 @@ mod tests {
         assert_eq!(MENU_WIDTH.next(26), 28);
         assert_eq!(COMMENTS_WIDTH.next(78), 30);
         assert_eq!(COMMENTS_WIDTH.next(45), 49, "an old percent steps on");
+    }
+
+    #[test]
+    fn thumbnails_read_old_bools_and_new_modes() {
+        let ui = |t: &str| Config::parse(&format!("[ui]\n{t}\n")).unwrap();
+        assert_eq!(Config::default().ui.thumbnails, ThumbMode::Picture);
+        assert_eq!(ui("thumbnails = true").0.ui.thumbnails, ThumbMode::Picture);
+        assert_eq!(ui("thumbnails = false").0.ui.thumbnails, ThumbMode::Off);
+        assert_eq!(ui("thumbnails = \"Blocks\"").0.ui.thumbnails, ThumbMode::Blocks);
+        let (c, w) = ui("thumbnails = \"hologram\"\nthumb_pixelation = \"high\"");
+        assert_eq!((c.ui.thumbnails, c.ui.thumb_pixelation, w.len()), (ThumbMode::Picture, Pixelation::High, 1));
+        assert!(ThumbMode::ALL.iter().all(|m| ui(&format!("thumbnails = \"{}\"", m.as_str())).0.ui.thumbnails == *m));
+        assert!(Pixelation::ALL.iter().all(|m| ui(&format!("thumb_pixelation = \"{}\"", m.as_str())).0.ui.thumb_pixelation == *m));
+        assert_eq!(ThumbMode::Off.next(), ThumbMode::Picture);
+        assert_eq!(Pixelation::ALL.map(Pixelation::grid), [None, Some(64), Some(32), Some(16), Some(8)]);
     }
 }

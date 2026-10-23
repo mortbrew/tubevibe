@@ -21,7 +21,7 @@ use ratatui::layout::Rect;
 
 use tubevibe::anim::Animations;
 use tubevibe::app::{Action, Effect, Playback, PlayerCommand, SettingValue, State};
-use tubevibe::config::{self, Config, PlayerMode};
+use tubevibe::config::{self, Config, ThumbMode};
 use tubevibe::domain::TabId;
 use tubevibe::i18n::Lang;
 use tubevibe::media::{self, MediaKind};
@@ -96,6 +96,9 @@ struct Cli {
     config: Option<PathBuf>,
 }
 
+/// Thumbnail areas this tall or more get YouTube's big picture.
+const BIG_THUMB_ROWS: u16 = 10;
+
 fn main() -> anyhow::Result<()> {
     // Where this binary is now: after Update Now replaces it, Linux names
     // the running one "… (deleted)", so Restart Now uses this path.
@@ -138,6 +141,9 @@ fn main() -> anyhow::Result<()> {
     // Unknown or broken settings never stop the app: a line in the status bar.
     runtime.state.update(Action::ConfigWarnings(config_warnings));
     let mut terminal = ratatui::init();
+    // Before reading keys: the terminal answers on stdin.
+    runtime.thumbs.set_graphics(tubevibe::thumbs::detect());
+    ui::set_cell_aspect(runtime.thumbs.cell_aspect());
     let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle("tubevibe"));
     set_focus_reports(true);
     let result = runtime.run(&mut terminal);
@@ -428,21 +434,11 @@ impl Runtime {
             if dirty || self.animations.running() {
                 let loading = self.loading_since.map(|t| t.elapsed());
                 let embedded = self.mode().in_pane();
-                // Thumbnails need kitty itself, whatever the video mode.
-                let kitty = player::resolve_mode(PlayerMode::Auto, |key| std::env::var(key).ok()) == Mode::Embedded;
-                let thumbnails = kitty && self.state.config.ui.thumbnails;
+                let thumbs_mode = self.state.config.ui.thumbnails;
+                let pixelation = self.state.config.ui.thumb_pixelation;
+                let thumbnails = thumbs_mode != ThumbMode::Off;
                 let playing = self.state.active_tab().and_then(|t| self.players.get(&t.id)).map(Player::info);
                 let view = ui::View { embedded, now: now(), loading, opening, thumbnails, playing };
-                let t = Instant::now();
-                self.animations.observe(&self.state, terminal.size()?.into());
-                terminal.draw(|f| {
-                    ui::draw(f, &self.state, &view);
-                    self.animations.render(f);
-                })?;
-                dbg(format!("draw {:?}", t.elapsed()));
-                let t = Instant::now();
-                self.place_videos(terminal.size()?.into());
-                dbg(format!("place {:?}", t.elapsed()));
                 if thumbnails {
                     let tab = self.state.active_tab();
                     let current = tab.and_then(|t| t.playback.video.as_ref()).map(|v| v.id.as_str());
@@ -451,11 +447,30 @@ impl Runtime {
                             .into_iter()
                             .chain(self.state.videos_from_selection(THUMBS_AHEAD).iter().map(|v| v.id.as_str())),
                     );
-                    self.thumbs.show(ui::thumbnail_area(&self.state, terminal.size()?.into()));
-                } else {
-                    self.thumbs.show(None);
                 }
-                dirty = false;
+                let target = thumbnails.then(|| ui::thumbnail_area(&self.state, terminal.size().map(Rect::from).unwrap_or_default())).flatten();
+                // A big area (a video tab, a large preview) gets the big picture.
+                if let Some((id, area)) = &target
+                    && area.height >= BIG_THUMB_ROWS
+                {
+                    self.thumbs.want_big(id);
+                }
+                let t = Instant::now();
+                self.animations.observe(&self.state, terminal.size()?.into());
+                terminal.draw(|f| {
+                    ui::draw(f, &self.state, &view);
+                    self.thumbs.draw(f, target.clone(), thumbs_mode, pixelation);
+                    self.animations.render(f);
+                })?;
+                dbg(format!("draw {:?}", t.elapsed()));
+                let t = Instant::now();
+                self.place_videos(terminal.size()?.into());
+                dbg(format!("place {:?}", t.elapsed()));
+                // No whole-screen clears (they flicker): a picture that goes
+                // is overwritten by the cells ratatui writes back over it.
+                self.thumbs.needs_clear.set(false);
+                // A new thumbnail settling after the selection moved: draw again.
+                dirty = self.thumbs.settling();
             }
             self.state.video_window = self.mode() == Mode::Window;
             if self.mode() == Mode::Overlay

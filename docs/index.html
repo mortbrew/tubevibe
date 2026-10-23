@@ -76,7 +76,7 @@
 </div>
 
 <h2 id="install">Install</h2>
-<p>Every release on <a href="https://github.com/mortbrew/tubevibe/releases/latest">GitHub Releases</a> has builds for Linux, macOS and Windows. All of them need <a href="https://mpv.io">mpv</a> and <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>. On Linux or macOS the installer picks the right file:</p>
+<p>Every release on <a href="https://github.com/mortbrew/tubevibe/releases/latest">GitHub Releases</a> has prebuilt builds for Linux (x86_64 and ARM64 tarballs, and a .deb). macOS and Windows users can build from source with cargo (below). All of them need <a href="https://mpv.io">mpv</a> and <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>. On Linux the installer picks the right file (on macOS it builds from source):</p>
 <pre>curl -sSf https://raw.githubusercontent.com/mortbrew/tubevibe/main/install.sh | sh</pre>
 <p>From source, anywhere Rust 1.88+ runs:</p>
 <pre>cargo install --locked --git https://github.com/mortbrew/tubevibe</pre>

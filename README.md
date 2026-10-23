@@ -54,7 +54,7 @@ Every video opens in its own tab.
 - **Search** videos in all of YouTube (about a second, more results load as
   you scroll), only in your channels, or inside a channel (`Tab` switches the
   scope); search channels (with their description, whole in the side panel)
-- A **preview** of the selected video with its **thumbnail** (in kitty), its
+- A **preview** of the selected video with its **thumbnail** (any terminal: real pictures in kitty, sixel and iTerm2 terminals, coloured half blocks elsewhere, e.g. Alacritty), its
   length and **what it weighs** to download at your quality
   (*💾 Download ≈ 84 MB (1080p)*), asked to yt-dlp once the selection rests
   on it, and YouTube's **AI summary** of it (*✦ AI Summary*) when it has one
@@ -136,8 +136,12 @@ Every video opens in its own tab.
 - Log in with any installed browser (Brave, Chrome, Chromium, Vivaldi, Edge,
   Opera, Firefox — profiles are detected), or **import a `cookies.txt`** on
   machines without a browser (servers, SSH)
-- A settings screen for everything; changes go to `config.toml`, keeping your
-  comments. `$EDITOR` can open the file from the app
+- A settings screen for everything, grouped under TUBEVIBE, ACCOUNT, PLAYBACK,
+  FEEDS, LOOK, ANIMATION and FOLDERS, with a line on what the highlighted
+  setting does; changes go to `config.toml`, keeping your comments. `$EDITOR`
+  can open the file from the app
+- Settings → *App Menu Entry* adds (or removes) a `tubevibe.desktop` launcher in
+  `~/.local/share/applications`, so app launchers like walker list tubevibe
 - The bottom bar always shows the keys that work right now; `?` lists
   them all
 - English or Spanish, following the system language until you pick one
@@ -180,8 +184,9 @@ Every release on
 | Linux x86_64 | `tubevibe-x86_64-linux.tar.gz` |
 | Linux ARM64 | `tubevibe-aarch64-linux.tar.gz` |
 | Debian / Ubuntu / Mint (x86_64) | `tubevibe_amd64.deb` (`sudo apt install ./tubevibe_amd64.deb`) |
-| macOS (Apple Silicon) | `tubevibe-aarch64-macos.tar.gz` |
-| Windows x86_64 | `tubevibe-x86_64-windows-setup.exe` (installer, can install mpv and yt-dlp with winget) or the portable `tubevibe-x86_64-windows.zip` |
+
+Prebuilt releases are **Linux only**. On macOS or Windows, build from source
+with cargo (below); everything else works the same.
 
 On Linux x86_64, one line puts it in `~/.local/bin` (which should be in your
 `PATH`; use `aarch64` instead of `x86_64` on ARM):
@@ -190,8 +195,8 @@ On Linux x86_64, one line puts it in `~/.local/bin` (which should be in your
 mkdir -p ~/.local/bin && curl -fsSL https://github.com/mortbrew/tubevibe/releases/latest/download/tubevibe-x86_64-linux.tar.gz | tar xz -C ~/.local/bin --strip-components=1 tubevibe/tubevibe
 ```
 
-Or the installer for Linux / macOS, which picks the right file, falls back to
-building from source where there is none, and checks mpv and yt-dlp (and,
+Or the installer (Linux, and macOS where it builds from source), which picks
+the right file, falls back to building from source where there is none, and checks mpv and yt-dlp (and,
 to build, the C compiler and Rust 1.88+), printing the commands for whatever
 is missing:
 
@@ -223,14 +228,15 @@ startup* turns this off).
 **About** in the menu (the menu entry shows ⬆ when a new version is out):
 the **Update Now** button is selected (`Tab` moves between it and the menu)
 and `Enter` presses it. It downloads the new release file for your system
-(Linux x86_64 / aarch64, macOS Apple Silicon, Windows x86_64), checks that
+(Linux x86_64 / aarch64), checks that
 the new program runs, swaps it in for the running one and asks you to
 restart tubevibe. The button only works for a copy installed from a release
-file (for example the one-liner into `~/.local/bin`, or the Windows
-installer); otherwise it is greyed out and About says why: a copy built from
+file (for example the one-liner into `~/.local/bin`); otherwise it is greyed out and About says why: a copy built from
 source (`target/release/`) says to run `git pull && cargo build --release`;
 one installed with `cargo install`, the `.deb` (`/usr/bin`) or Homebrew says
-to update it the same way; and a copy in a folder you can't write to says so.
+to update it the same way; a copy in a folder you can't write to says so;
+and on macOS or Windows, with no prebuilt file, it says to build from source
+and shows the `cargo install` command.
 
 (The original tubetui has its own packages on its
 [website](https://polblancoo.github.io/tubetui/#descargas); those install
@@ -362,7 +368,8 @@ comments_width = 46      # comments in a video tab, in columns: 30–78, step 4 
 restore_tabs = true      # reopen the tabs that were open last time (kept in ~/.local/share/tubevibe/tabs.json)
 omarchy_theme = true     # use the current Omarchy theme's colours (Tokyo Night when off or not on Omarchy)
 lang = "en"              # en | es (unset: the system language)
-thumbnails = true        # thumbnail in the preview panel (kitty)
+thumbnails = "picture"   # "picture" (best the terminal can do), "blocks" (half blocks) or "off"
+thumb_pixelation = "off" # "off", "low", "medium", "high" or "max"
 mouse = true             # clicks and wheel; hold Shift to select text
 splash = true            # the tubevibe logo for a moment when it opens (any key skips it)
 check_updates = true     # on startup, tell me about new versions and how to install them here
