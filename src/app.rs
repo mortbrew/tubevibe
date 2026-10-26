@@ -1459,7 +1459,7 @@ impl State {
         }
     }
 
-    fn logged_in(&self) -> bool {
+    pub fn logged_in(&self) -> bool {
         let session = &self.config.session;
         !session.cookies_file.is_empty() || !session.browser.is_empty()
     }

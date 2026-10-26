@@ -1159,6 +1159,15 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   stretch on wide windows. The picture still fills the height down to Up Next,
   and is centred vertically when it does not. The drawing centres the picture
   in its cells too, so kitty, sixel, iTerm2 and half blocks all line up.
+- **Settings look like boxvibe's** (same labels, Title Case and theme colours):
+  the title carries the 🔧 icon in the text colour; the border is bright (the text
+  colour) while the list has the keys and dim otherwise; one cell of air inside the
+  border on both sides; rows indent three spaces before the icon; the selected row
+  is a reverse-video bar (no `▌` marker) that turns into a shade when the menu has
+  the keys; a login in use shows green and none shows muted; the description
+  under the list wraps with trimmed lines, flush with the rows. In a narrow window
+  long labels are cut with `…` so every value stays in view (before, at 80 columns
+  the values were pushed off the pane).
 - **`O` opens Settings** (it was `S`), like boxvibe; `S` is free. It works from
   the same places as the other capital-letter screens, and typing in a text
   field still types it. Help, the README and the keymap tests follow.

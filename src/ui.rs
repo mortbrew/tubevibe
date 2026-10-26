@@ -2061,15 +2061,19 @@ fn settings_areas(inner: Rect) -> (Rect, Rect) {
     (list, about)
 }
 
-/// Settings, like boxvibe's: uppercase sections, one row per setting with
-/// its value, and what the highlighted one does under the list.
+/// Settings, like boxvibe's: its panel (a bright border while it has the
+/// keys), uppercase sections, one row per setting with its value, a
+/// reverse-video bar on the selected one and what it does under the list.
 fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usize, title: String, area: Rect) {
     let lang = state.lang();
     let focused = state.focus == Focus::List;
-    let block = focus_panel(title, focused);
+    let block = settings_panel(&title, icons, focused);
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    // One cell of air inside the border, on both sides.
+    let inner = Rect { x: inner.x + 1, width: inner.width.saturating_sub(2), ..inner };
     let (list_area, about_area) = settings_areas(inner);
+    let label_width = fitted_label_width(lang, usize::from(list_area.width));
     let rows = settings_rows(lang);
     let mut items = Vec::with_capacity(rows.len());
     let mut shown = 0;
@@ -2080,7 +2084,7 @@ fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usiz
                     shown = r;
                 }
                 let setting = Setting::ALL[*i];
-                items.push(setting_row(state, icons.setting(setting), setting));
+                items.push(setting_row(state, icons.setting(setting), setting, label_width));
             }
             None => match rows.get(r + 1) {
                 Some(Some(next)) => {
@@ -2094,16 +2098,32 @@ fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usiz
             },
         }
     }
-    let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
-    let list = List::new(items).highlight_symbol(if focused { "▌" } else { " " }).highlight_style(highlight);
+    let list = List::new(items).highlight_style(settings_selection(focused));
     frame.render_stateful_widget(list, list_area, &mut ListState::default().with_selected(Some(shown)));
     if let Some(setting) = Setting::ALL.get(selected) {
-        let about = Line::from(Span::styled(format!(" {}", setting.about(lang)), MUTED));
+        let about = Line::from(Span::styled(setting.about(lang), MUTED));
         frame.render_widget(
-            Paragraph::new(vec![Line::raw(""), about]).wrap(ratatui::widgets::Wrap { trim: false }),
+            Paragraph::new(vec![Line::raw(""), about]).wrap(ratatui::widgets::Wrap { trim: true }),
             about_area,
         );
     }
+}
+
+/// Settings' panel, as boxvibe draws it: the icon and name in the text
+/// colour, the border bright (the text colour) while the list has the keys
+/// and dim otherwise. With no border to light, the title does.
+fn settings_panel<'a>(title: &str, icons: &Icons, focused: bool) -> Block<'a> {
+    let text = format!(" {} {} ", icons.section(Section::Configuracion), title.trim());
+    let mut title = Line::from(Span::styled(text, Style::new().fg(FG)));
+    if focused && BORDERS.get() == BorderStyle::None {
+        title = title.patch_style(Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD));
+    }
+    framed().border_style(Style::new().fg(if focused { FG } else { LINE })).title(title)
+}
+
+/// The selected setting: reverse video while the list has the keys, a shade otherwise.
+fn settings_selection(focused: bool) -> Style {
+    if focused { Style::new().fg(BG).bg(FG).add_modifier(Modifier::BOLD) } else { Style::new().bg(HIGHLIGHT) }
 }
 
 /// Width of the settings' label column: the longest label and a gap, so
@@ -2112,15 +2132,38 @@ fn setting_label_width(lang: Lang) -> usize {
     Setting::ALL.iter().map(|s| Span::raw(s.label(lang)).width()).max().unwrap_or(0) + 3
 }
 
-fn setting_row(state: &State, icon: &str, setting: Setting) -> ListItem<'static> {
+/// Cells before the label: three spaces, the icon cell and a space.
+const SETTING_PREFIX: usize = 6;
+/// The room a value keeps even when the labels are long.
+const SETTING_VALUE_MIN: usize = 20;
+
+/// The label column for a list `width` cells wide: all the room the
+/// longest label needs, or, in a narrow window, what leaves the values
+/// their place (long labels are cut with `…` instead of pushing them out).
+fn fitted_label_width(lang: Lang, width: usize) -> usize {
+    setting_label_width(lang).min(width.saturating_sub(SETTING_PREFIX + SETTING_VALUE_MIN)).max(12)
+}
+
+/// A value's style: yellow and bold, but green for a login that is in use
+/// and muted for none.
+fn setting_value_style(state: &State, setting: Setting) -> Style {
+    match setting {
+        Setting::Browser | Setting::Logout if state.logged_in() => Style::new().fg(GREEN).bold(),
+        Setting::Browser | Setting::Logout => Style::new().fg(MUTED),
+        _ => Style::new().fg(YELLOW).bold(),
+    }
+}
+
+fn setting_row(state: &State, icon: &str, setting: Setting, label_width: usize) -> ListItem<'static> {
     let value = state.setting_value(setting);
     let lang = state.lang();
+    let label = cut_cells(setting.label(lang), label_width.saturating_sub(2)).0;
     let mut spans = vec![
-        Span::raw(format!(" {} ", pad_cells(icon, 2))),
-        Span::styled(pad_cells(setting.label(lang), setting_label_width(lang)), FG),
+        Span::raw(format!("   {} ", pad_cells(icon, 2))),
+        Span::styled(pad_cells(&label, label_width), FG),
     ];
     if !value.is_empty() {
-        spans.push(Span::styled(value, Style::new().fg(YELLOW).bold()));
+        spans.push(Span::styled(value, setting_value_style(state, setting)));
     }
     if let Some(note) = state.kitty_note(setting) {
         spans.push(Span::styled(format!("  {note}"), RED));
@@ -3270,7 +3313,7 @@ mod tests {
                     .enumerate()
                     .map(|(i, setting)| {
                         // Icon cell and label column: the value starts right after.
-                        Span::raw(format!(" {} ", pad_cells(icons.settings[i], 2))).width()
+                        Span::raw(format!("   {} ", pad_cells(icons.settings[i], 2))).width()
                             + Span::raw(pad_cells(setting.label(lang), setting_label_width(lang))).width()
                     })
                     .collect();
@@ -3297,6 +3340,101 @@ mod tests {
         }
         assert!(columns.len() > 10, "{screen}");
         assert!(columns.iter().all(|(_, c)| *c == columns[0].1), "{columns:?}\n{screen}");
+    }
+
+    /// Where the Settings pane's border starts: the second `┌` on the top row.
+    fn pane_left(buf: &ratatui::buffer::Buffer) -> u16 {
+        (0..buf.area.width).filter(|x| buf[(*x, 0)].symbol() == "┌").nth(1).unwrap()
+    }
+
+    /// The cell behind a two-cell emoji, which the buffer leaves unstyled.
+    fn behind_wide(buf: &ratatui::buffer::Buffer, x: u16, y: u16) -> bool {
+        x > 0 && Span::raw(buf[(x - 1, y)].symbol().to_owned()).width() == 2
+    }
+
+    fn settings_buffer(width: u16, height: u16, select: Setting, focus: Focus) -> ratatui::buffer::Buffer {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        s.config.ui.icons = IconSet::Emoji;
+        s = {
+            s.menu = Section::ALL.iter().position(|x| *x == Section::Configuracion).unwrap();
+            s.update(Action::Enter);
+            s
+        };
+        s.focus = Focus::List;
+        let at = Setting::ALL.iter().position(|x| *x == select).unwrap();
+        for _ in 0..at {
+            s.update(Action::Down);
+        }
+        s.focus = focus;
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn buffer_row(buf: &ratatui::buffer::Buffer, y: u16) -> String {
+        (0..buf.area.width).map(|x| buf[(x, y)].symbol().to_owned()).collect()
+    }
+
+    /// Settings looks like boxvibe's: icon in the title, a bright border,
+    /// an indented row with its icon, a reverse-video bar one cell in from the
+    /// border, and values coloured (yellow, muted for no login).
+    #[test]
+    fn settings_look_like_boxvibes() {
+        let buf = settings_buffer(130, 70, Setting::BorderStyle, Focus::List);
+        let lines: Vec<String> = (0..70).map(|y| buffer_row(&buf, y)).collect();
+        let left = pane_left(&buf);
+        assert!(lines[0].contains("┌ 🔧") && lines[0].contains("Settings"), "{}", lines[0]);
+        let corner = (left, 0);
+        assert_eq!(buf[corner].fg, FG, "a bright border while it has the keys");
+        // The selected row: reverse video from one cell inside the border to one before the right one.
+        let y = lines.iter().position(|l| l.contains("Border Style")).unwrap() as u16;
+        let right = 129;
+        for x in (left + 2..right - 1).filter(|x| !behind_wide(&buf, *x, y)) {
+            let c = &buf[(x, y)];
+            assert_eq!((c.fg, c.bg), (BG, FG), "x={x}");
+            assert!(c.modifier.contains(Modifier::BOLD));
+        }
+        assert_eq!(buf[(left + 1, y)].bg, Color::Reset, "air left of the bar");
+        assert_eq!(buf[(right - 1, y)].bg, Color::Reset, "air right of the bar");
+        assert!(!lines[usize::from(y)].contains('▌'), "no marker, the bar is the selection");
+        // Rows start with three spaces, then the icon, like boxvibe's.
+        let icon_at = lines[usize::from(y) - 1].find("😀").map(|b| lines[usize::from(y) - 1][..b].chars().count()).unwrap();
+        assert_eq!(icon_at, usize::from(left) + 5);
+        // Header, label and value colours.
+        let row = |text: &str| lines.iter().position(|l| l.contains(text)).unwrap() as u16;
+        let header = row("LOOK");
+        assert_eq!((buf[(left + 2, header)].fg, buf[(left + 2, header)].modifier.contains(Modifier::BOLD)), (ORANGE, true));
+        let icons_y = row("Icons");
+        let value_x = lines[usize::from(icons_y)].find("Emoji").map(|b| lines[usize::from(icons_y)][..b].chars().count()).unwrap();
+        assert_eq!(buf[(value_x as u16, icons_y)].fg, YELLOW);
+        let session = row("Log Out");
+        let at = lines[usize::from(session)].find("Not Logged In").map(|b| lines[usize::from(session)][..b].chars().count()).unwrap();
+        assert_eq!(buf[(at as u16, session)].fg, MUTED, "no login is muted");
+        // The description sits under the list, muted, flush with the rows' left edge (one cell in).
+        let about = row("How every pane");
+        assert_eq!(buf[(left + 2, about)].fg, MUTED);
+        assert_eq!(lines[usize::from(about)].chars().nth(usize::from(left) + 2), Some('H'));
+    }
+
+    #[test]
+    fn settings_border_dims_when_the_menu_has_the_keys_and_the_bar_turns_to_a_shade() {
+        let buf = settings_buffer(130, 70, Setting::BorderStyle, Focus::Menu);
+        let left = pane_left(&buf);
+        assert_eq!(buf[(left, 0)].fg, LINE);
+        let y = (0..70).find(|y| buffer_row(&buf, *y).contains("Border Style")).unwrap();
+        assert_eq!(buf[(left + 8, y)].bg, HIGHLIGHT);
+        assert_eq!(buf[(left + 8, y)].fg, FG);
+    }
+
+    #[test]
+    fn a_narrow_settings_screen_keeps_every_value_in_view() {
+        let buf = settings_buffer(80, 30, Setting::BorderStyle, Focus::List);
+        let lines: Vec<String> = (0..30).map(|y| buffer_row(&buf, y)).collect();
+        let line = lines.iter().find(|l| l.contains("Video Language")).unwrap_or_else(|| panic!("{}", lines.join("\n")));
+        assert!(line.contains("Original + Subtitles"), "{line}");
+        let long = lines.iter().find(|l| l.contains("Hide YouTube Watch")).unwrap();
+        assert!(long.contains('…') && long.contains("On"), "{long}");
     }
 
     /// Emoji whose width terminals disagree on (text-presentation ones like
@@ -5315,7 +5453,6 @@ mod tests {
             let inner = Rect::new(1, 1, w, h);
             let l = watch_layout_with(inner, 44, rows);
             let t = l.thumbnail;
-            let related_top = l.related.y;
             if t.width > 0 {
                 let above = l.related.y.saturating_sub(l.left.y + 1);
                 let slack = above - t.height;
