@@ -1144,6 +1144,10 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   owner-only (`0600`) and the cache folder `0700`. An export left by an older
   version is trimmed the next time it is used.
 
+- **TLS crates updated (security).** `rustls` 0.23.46, `rustls-webpki` 0.103.16
+  and `webpki-roots` 1.0.11 (lockfile only); `cargo audit` goes from 6
+  advisories to none.
+
 ## Unreleased (0.8.9)
 
 ### Room to breathe
