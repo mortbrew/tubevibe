@@ -831,7 +831,7 @@ pub enum Action {
     },
     /// Open this section of the menu (a click on it).
     OpenSection(usize),
-    /// `R`, `S`, `A`, `Y`, `V`: open that menu section from anywhere.
+    /// `R`, `O`, `A`, `Y`, `V`: open that menu section from anywhere.
     GoSection(Section),
     /// Select this row of the list (a click on it).
     Select(usize),
