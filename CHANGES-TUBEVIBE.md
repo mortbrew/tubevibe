@@ -1148,6 +1148,12 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   and `webpki-roots` 1.0.11 (lockfile only); `cargo audit` goes from 6
   advisories to none.
 
+- **History waits for the login.** Opening History right at startup showed
+  "Not logged in" while the browser login was still being read. It now says
+  it is waiting, and asks YouTube as soon as the login is ready (the feeds'
+  hidden watched videos wait the same way). If the login fails, you get its
+  error and the local history.
+
 ## Unreleased (0.8.9)
 
 ### Room to breathe

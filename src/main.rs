@@ -352,6 +352,7 @@ impl Runtime {
         if let Some(palette) = runtime.poll_theme() {
             runtime.state.update(palette);
         }
+        runtime.state.begin_session();
         runtime.start_session(false);
         runtime.send(Action::AskBrowser);
         runtime.background(|| {
