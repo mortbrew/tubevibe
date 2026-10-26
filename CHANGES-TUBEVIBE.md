@@ -1182,6 +1182,12 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   the help scrolls, as before, and the title says so. Same shortcuts, both
   languages.
 
+- **Settings says when more is off screen.** In a window too short for every
+  setting, the last row of the list shows a muted chevron and "more" (the
+  menu's own chevrons: `▼` below, `▲` above, in the active icon set); the
+  selected setting and its description always stay in view. Nothing shows
+  when everything fits. (boxvibe's Settings has no such cue.)
+
 ## Unreleased (0.8.9)
 
 ### Room to breathe

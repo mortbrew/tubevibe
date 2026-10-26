@@ -2126,6 +2126,14 @@ fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usiz
     let (list_area, about_area) = settings_areas(inner);
     let label_width = fitted_label_width(lang, usize::from(list_area.width));
     let rows = settings_rows(lang);
+    // More rows than room: the last row of the list goes to the "more" cue,
+    // so no setting is ever drawn under it.
+    let (list_area, cue_area) = if rows.len() > usize::from(list_area.height) && list_area.height >= 3 {
+        let [list, cue] = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(list_area);
+        (list, Some(cue))
+    } else {
+        (list_area, None)
+    };
     let mut items = Vec::with_capacity(rows.len());
     let mut shown = 0;
     for (r, row) in rows.iter().enumerate() {
@@ -2150,7 +2158,20 @@ fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usiz
         }
     }
     let list = List::new(items).highlight_style(settings_selection(focused));
-    frame.render_stateful_widget(list, list_area, &mut ListState::default().with_selected(Some(shown)));
+    let mut list_state = ListState::default().with_selected(Some(shown));
+    frame.render_stateful_widget(list, list_area, &mut list_state);
+    if let Some(cue) = cue_area {
+        let offset = list_state.offset();
+        let (above, below) = (offset > 0, offset + usize::from(list_area.height) < rows.len());
+        let more = lang.pick("más", "more");
+        let mut spans = vec![Span::raw(" ")];
+        for (hidden, icon) in [(above, icons.more_above), (below, icons.more_below)] {
+            if hidden {
+                spans.push(Span::raw(format!("{icon} {more}  ")));
+            }
+        }
+        frame.render_widget(Paragraph::new(Line::from(spans).fg(MUTED).bold()), cue);
+    }
     if let Some(setting) = Setting::ALL.get(selected) {
         let about = Line::from(Span::styled(setting.about(lang), MUTED));
         frame.render_widget(
@@ -5829,5 +5850,50 @@ mod tests {
         assert!(title.contains("tubevibe Ayuda · cualquier tecla cierra"), "{title}");
         let bar = buffer_row(&buf, 69);
         assert!(bar.contains("Esc  cerrar") && bar.contains("?  cerrar"), "{bar}");
+    }
+
+    /// A short Settings window says more rows are off screen, in the menu's
+    /// chevron style; the selected row and its description stay in view.
+    #[test]
+    fn a_short_settings_window_says_more_is_below_and_above() {
+        let i = icons(IconSet::Emoji);
+        let last = *Setting::ALL.last().unwrap();
+        let first = Setting::ALL[0];
+        let on_screen =
+            |buf: &ratatui::buffer::Buffer, h: u16, text: &str| (0..h).any(|y| buffer_row(buf, y).contains(text));
+        for (w, h) in [(80u16, 20u16), (130, 24), (80, 12)] {
+            let top = settings_buffer(w, h, first, Focus::List);
+            let screen: String = (0..h).map(|y| buffer_row(&top, y)).collect::<Vec<_>>().join("\n");
+            assert!(screen.contains(i.more_below) && screen.contains("more"), "{w}x{h}: ▼ at the top:\n{screen}");
+            assert!(!screen.contains(i.more_above), "{w}x{h}: nothing above the first row:\n{screen}");
+            assert!(on_screen(&top, h, first.label(Lang::En)), "{w}x{h}: the selected row");
+            assert!(on_screen(&top, h, first.about(Lang::En).split(' ').next().unwrap()), "{w}x{h}: its description");
+            let y = (0..h).find(|y| buffer_row(&top, *y).contains("more")).unwrap();
+            let left = pane_left(&top);
+            let cue = (left..w).find(|x| top[(*x, y)].symbol() == i.more_below).unwrap();
+            assert_eq!((top[(cue, y)].fg, top[(cue, y)].modifier.contains(Modifier::BOLD)), (MUTED, true), "muted");
+
+            let end = settings_buffer(w, h, last, Focus::List);
+            let screen: String = (0..h).map(|y| buffer_row(&end, y)).collect::<Vec<_>>().join("\n");
+            assert!(screen.contains(i.more_above) && screen.contains("more"), "{w}x{h}: ▲ at the end:\n{screen}");
+            assert!(!screen.contains(i.more_below), "{w}x{h}: nothing below the last row:\n{screen}");
+            assert!(on_screen(&end, h, last.label(Lang::En)), "{w}x{h}: the selected row");
+            assert!(on_screen(&end, h, last.about(Lang::En).split(' ').next().unwrap()), "{w}x{h}: its description");
+        }
+        // In the middle, both ways.
+        let middle = settings_buffer(80, 20, Setting::ALL[Setting::ALL.len() / 2], Focus::List);
+        let screen: String = (0..20).map(|y| buffer_row(&middle, y)).collect::<Vec<_>>().join("\n");
+        assert!(screen.contains(i.more_above) && screen.contains(i.more_below), "{screen}");
+    }
+
+    #[test]
+    fn a_tall_settings_window_shows_no_more_cue() {
+        let i = icons(IconSet::Emoji);
+        for select in [Setting::ALL[0], *Setting::ALL.last().unwrap()] {
+            let buf = settings_buffer(130, 70, select, Focus::List);
+            let screen: String = (0..70).map(|y| buffer_row(&buf, y)).collect::<Vec<_>>().join("\n");
+            let cue = screen.contains(" more") || screen.contains(i.more_above) || screen.contains(i.more_below);
+            assert!(!cue, "{screen}");
+        }
     }
 }
