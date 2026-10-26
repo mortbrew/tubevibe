@@ -707,13 +707,23 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
     let text_rows = detail_rows.saturating_add(summary_rows).min(left.height);
     let related_rows = left.height.saturating_sub(text_rows).saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
     let [top, related] = Layout::vertical([Constraint::Fill(1), Constraint::Length(related_rows)]).areas(left);
-    // The picture sits a cell in from the top and left borders and meets
-    // "Up next"; the text keeps a 2-column gap after it and a column before
-    // the right edge (1 column in from the left without a picture).
-    let (width, rows) = watch_thumbnail_size(top.height.saturating_sub(1), left.width);
-    let thumbnail = Rect { x: top.x + 1, y: top.y + 1, width, height: rows };
-    let gap = if width > 0 { 1 + width + 2 } else { 1 };
-    let text = Rect { x: top.x + gap, width: top.width.saturating_sub(gap + 1), ..top };
+    // The picture meets "Up next" (a cell in from the top), then a 2-column
+    // gap and the text, at most WATCH_TEXT_MAX_WIDTH wide. Picture, gap and
+    // text are centred as a group in the column (never closer than a cell to
+    // either edge), the picture centred in the rows above "Up next" when it
+    // does not fill them. Without a picture the text keeps a cell on each side.
+    let avail = top.height.saturating_sub(1);
+    let (width, rows) = watch_thumbnail_size(avail, left.width);
+    let picture = if width > 0 { width + 2 } else { 0 };
+    let text_width = (left.width.saturating_sub(picture + 2)).min(WATCH_TEXT_MAX_WIDTH);
+    let group = if width > 0 { picture + text_width } else { 0 };
+    let start = if width > 0 { top.x + (left.width.saturating_sub(group) / 2).max(1) } else { top.x + 1 };
+    let thumbnail = Rect { x: start, y: top.y + 1 + (avail - rows) / 2 * u16::from(width > 0), width, height: rows };
+    let text = if width > 0 {
+        Rect { x: start + picture, width: text_width, ..top }
+    } else {
+        Rect { x: top.x + 1, width: top.width.saturating_sub(2), ..top }
+    };
     let details = Rect { height: detail_rows.min(text.height), ..text };
     let summary = Rect {
         y: details.y + details.height,
@@ -747,6 +757,9 @@ fn rows_16_9(columns: u16) -> u16 {
 
 /// Columns the details and summary keep beside the thumbnail on a video tab.
 const WATCH_TEXT_MIN_WIDTH: u16 = 40;
+/// Columns the details and summary take at most beside the thumbnail: wider
+/// windows centre picture and text instead of stretching the lines.
+const WATCH_TEXT_MAX_WIDTH: u16 = 66;
 
 /// Columns and rows of the video tab's thumbnail in `rows` above "Up next" of
 /// a `columns`-wide column: all the rows, 16:9 (a cell is about twice as tall
@@ -5304,12 +5317,21 @@ mod tests {
             let t = l.thumbnail;
             let related_top = l.related.y;
             if t.width > 0 {
-                assert_eq!((t.x, t.y), (l.left.x + 1, l.left.y + 1), "{w}x{h}: a cell in from the top and left");
-                let full = t.y + t.height == related_top;
-                assert!(full || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
+                let above = l.related.y.saturating_sub(l.left.y + 1);
+                let slack = above - t.height;
+                assert_eq!(t.y, l.left.y + 1 + slack / 2, "{w}x{h}: centred in the rows above Up next: {l:?}");
+                assert!(slack == 0 || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
                 assert_eq!(t.width, columns_16_9(t.height), "{w}x{h}: 16:9");
                 assert_eq!(l.details.x, t.x + t.width + 2, "{w}x{h}: text beside it");
-                assert_eq!(l.details.right() + 1, l.left.right(), "{w}x{h}: a column before the right edge");
+                assert!(l.details.width <= WATCH_TEXT_MAX_WIDTH, "{w}x{h}: text is capped");
+                // Picture + gap + text sit in the middle of the column, a cell
+                // from the edges at least, the two margins equal (±1 for odd).
+                let (before, after) = (t.x - l.left.x, l.left.right() - l.details.right());
+                assert!(before >= 1 && after >= 1, "{w}x{h}: {l:?}");
+                assert!(before.abs_diff(after) <= 1 || before == 1 || after == 1, "{w}x{h}: balanced {before}/{after}");
+                if l.details.width == WATCH_TEXT_MAX_WIDTH {
+                    assert!(before.abs_diff(after) <= 1, "{w}x{h}: centred {before}/{after}: {l:?}");
+                }
             }
             assert!(l.details.width >= WATCH_TEXT_MIN_WIDTH, "{w}x{h}: text keeps its width: {l:?}");
             assert_eq!(l.summary.x, l.details.x, "{w}x{h}: summary under the details");
@@ -5330,6 +5352,27 @@ mod tests {
         assert!(sizes.windows(2).all(|p| p[0] >= p[1]), "{sizes:?}");
         assert_eq!(*sizes.last().unwrap(), 0, "{sizes:?}");
         assert_eq!(watch_thumbnail_size(3, 200), (0, 0), "under 4 rows: none");
+    }
+
+    #[test]
+    fn the_video_tab_picture_and_text_are_centred_as_a_group() {
+        // A short, very wide window: the picture is capped by the rows, the
+        // text by its maximum, and the group sits in the middle.
+        let l = watch_layout_with(Rect::new(0, 0, 330, 24), 44, (6, 4));
+        let (t, d) = (l.thumbnail, l.details);
+        assert_eq!(d.width, WATCH_TEXT_MAX_WIDTH, "{l:?}");
+        let (before, after) = (t.x - l.left.x, l.left.right() - d.right());
+        assert!(before > 5 && before.abs_diff(after) <= 1, "{before}/{after}: {l:?}");
+        assert_eq!(d.x, t.right() + 2, "gap kept");
+        // Taller than the text's 40 columns allow: picture shrinks to leave
+        // the minimum text and the picture sits mid-height.
+        let l = watch_layout_with(Rect::new(0, 0, 150, 90), 44, (6, 4));
+        let t = l.thumbnail;
+        assert!(t.width > 0 && t.y > l.left.y + 1, "centred vertically: {l:?}");
+        assert!((t.y - (l.left.y + 1)).abs_diff(l.related.y - t.bottom()) <= 1, "equal slack above and below: {l:?}");
+        // No picture: the text keeps its cell on each side, as before.
+        let l = watch_layout_with(Rect::new(0, 0, 60, 12), 44, (3, 0));
+        assert_eq!((l.thumbnail.width, l.details.x, l.details.width), (0, l.left.x + 1, l.left.width - 2));
     }
 
     #[test]

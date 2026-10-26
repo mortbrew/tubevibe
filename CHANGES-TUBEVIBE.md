@@ -1153,6 +1153,12 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   error and the local history.
 - **Browser picker lists the browser you used last first.** Sorted by when each
   profile's cookie database was last written; the others keep their order.
+- **Video tab: picture and text centred.** The thumbnail, the gap and the text
+  beside it (title, channel, stats, AI Summary) sit in the middle of the pane as
+  one group, the text at most 66 columns wide (40 at least) so lines no longer
+  stretch on wide windows. The picture still fills the height down to Up Next,
+  and is centred vertically when it does not. The drawing centres the picture
+  in its cells too, so kitty, sixel, iTerm2 and half blocks all line up.
 
 ## Unreleased (0.8.9)
 
