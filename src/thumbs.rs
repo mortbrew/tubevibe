@@ -239,7 +239,10 @@ impl Thumbnails {
         }
         let Some(s) = shown.as_mut() else { return };
         let fit = s.protocol.size_for(Resize::Scale(None), area.as_size());
-        let at = Rect::new(area.x, area.y, fit.width.min(area.width), fit.height.min(area.height));
+        // Centred in the area, whichever protocol draws it (a picture a cell
+        // or two short of the area does not hug its top-left corner).
+        let (w, h) = (fit.width.min(area.width), fit.height.min(area.height));
+        let at = Rect::new(area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h);
         frame.render_stateful_widget(StatefulImage::default().resize(Resize::Scale(None)), at, &mut s.protocol);
     }
 
@@ -458,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn the_picture_scales_up_to_fill_its_cells_from_the_top_left() {
+    fn the_picture_scales_up_to_fill_its_cells() {
         let mut thumbs = Thumbnails::empty();
         thumbs.arrived("a".into(), Some(stripes()));
         // 320x180 pixels in 64x18 cells (half blocks: 1x2 px a cell would be
@@ -472,9 +475,31 @@ mod tests {
         let cells = painted(&terminal);
         let (x0, y0) = (cells.iter().map(|c| c.0).min().unwrap(), cells.iter().map(|c| c.1).min().unwrap());
         let (x1, y1) = (cells.iter().map(|c| c.0).max().unwrap(), cells.iter().map(|c| c.1).max().unwrap());
-        assert_eq!((x0, y0), (3, 2), "top-left, not centred");
+        assert_eq!((x0, y0), (3, 2), "the area is exactly its size: no slack to centre");
         assert!(x1 >= 3 + 60 || y1 >= 2 + 16, "fills the area: {x1},{y1}");
         assert!(x1 < 3 + 64 && y1 < 2 + 18, "inside it");
+    }
+
+    #[test]
+    fn a_picture_smaller_than_its_area_is_centred_in_it() {
+        let mut thumbs = Thumbnails::empty();
+        thumbs.arrived("a".into(), Some(stripes()));
+        // 60x30 cells for a 16:9 picture: full width, about 17 rows; the spare
+        // rows split above and below. The same in a roomy area to the right.
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        let t = Instant::now();
+        for area in [Rect::new(2, 1, 60, 30), Rect::new(2, 1, 90, 20)] {
+            for now in [t, t + SETTLE] {
+                terminal.draw(|f| thumbs.draw_at(f, Some(("a".into(), area)), ThumbMode::Blocks, Pixelation::Off, now)).unwrap();
+            }
+            let cells = painted(&terminal);
+            let (x0, y0) = (cells.iter().map(|c| c.0).min().unwrap(), cells.iter().map(|c| c.1).min().unwrap());
+            let (x1, y1) = (cells.iter().map(|c| c.0).max().unwrap(), cells.iter().map(|c| c.1).max().unwrap());
+            let (left, right) = (x0 - area.x, area.right() - 1 - x1);
+            let (above, below) = (y0 - area.y, area.bottom() - 1 - y1);
+            assert!(left.abs_diff(right) <= 1 && above.abs_diff(below) <= 1, "{area:?}: {left}/{right} {above}/{below}");
+            assert!(above > 0 || left > 0, "{area:?}: there was room to centre in");
+        }
     }
 
     #[test]

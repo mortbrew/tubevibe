@@ -264,7 +264,7 @@ setting.
 | `L` | English / español |
 | `Q` | quit (asks first; says so if downloads are running) |
 | `R` | open My Recommendations, from anywhere (reloads only if older than 60 s, like the menu) |
-| `S` | open Settings, from anywhere |
+| `O` | open Settings, from anywhere |
 | `A` | open About, from anywhere |
 | `Y` | open YouTube Watch Later, from anywhere |
 | `V` | open tubevibe Watch Later, from anywhere |

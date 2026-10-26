@@ -831,7 +831,7 @@ pub enum Action {
     },
     /// Open this section of the menu (a click on it).
     OpenSection(usize),
-    /// `R`, `S`, `A`, `Y`, `V`: open that menu section from anywhere.
+    /// `R`, `O`, `A`, `Y`, `V`: open that menu section from anywhere.
     GoSection(Section),
     /// Select this row of the list (a click on it).
     Select(usize),
@@ -1251,6 +1251,12 @@ pub struct State {
     recheck: Option<(Pending, Items, Option<String>)>,
     /// My channels were read again once already.
     subs_rechecked: bool,
+    /// The login is being read (yt-dlp and the browser); what needs it waits.
+    session_loading: bool,
+    /// The first page of History, asked for while the login was being read.
+    history_waiting: Option<u64>,
+    /// My YouTube history (to hide what I watched) wanted while the login was being read.
+    hide_history_waiting: bool,
     next_tab: u64,
     next_request: u64,
     next_download: u64,
@@ -1316,6 +1322,9 @@ impl State {
             pending: None,
             recheck: None,
             subs_rechecked: false,
+            session_loading: false,
+            history_waiting: None,
+            hide_history_waiting: false,
             next_tab: 0,
             next_request: 0,
             next_download: 0,
@@ -1434,7 +1443,23 @@ impl State {
         }
     }
 
-    fn logged_in(&self) -> bool {
+    /// The runtime started reading the login: History and the hidden
+    /// watched videos wait for it.
+    pub fn begin_session(&mut self) {
+        self.session_loading = true;
+    }
+
+    /// `LoadHistory` for the feeds, or nothing yet if the login is still being read.
+    fn load_history_effect(&mut self) -> Option<Effect> {
+        if self.session_loading {
+            self.hide_history_waiting = true;
+            None
+        } else {
+            Some(Effect::LoadHistory)
+        }
+    }
+
+    pub fn logged_in(&self) -> bool {
         let session = &self.config.session;
         !session.cookies_file.is_empty() || !session.browser.is_empty()
     }
@@ -1586,7 +1611,9 @@ impl State {
         }
         // A new login, or another language: My Recommendations is read again.
         let title = Section::Inicio.label(self.lang());
-        if effects.iter().any(|e| matches!(e, Effect::StartSession { .. }))
+        let new_login = effects.iter().any(|e| matches!(e, Effect::StartSession { .. }));
+        self.session_loading |= new_login;
+        if new_login
             || self.home_cache.as_ref().is_some_and(|(_, l)| l.title != title)
         {
             self.home_cache = None;
@@ -1941,7 +1968,7 @@ impl State {
                 }
                 .into();
                 if !self.show_watched && self.logged_in() {
-                    return vec![Effect::LoadHistory];
+                    return self.load_history_effect().into_iter().collect();
                 }
             }
             Action::UpdateFound(update) => {
@@ -2513,8 +2540,17 @@ impl State {
                     let id = self.next_request;
                     self.next_request += 1;
                     listing.more = Some(id);
-                    self.status = self.tr("Trayendo tu historial de YouTube…", "Fetching your YouTube history…").into();
-                    vec![Effect::YoutubeHistory { id, next: None }]
+                    if self.session_loading {
+                        // The login is still being read: ask once it is.
+                        self.history_waiting = Some(id);
+                        self.status =
+                            self.tr("Esperando tu sesión de YouTube…", "Waiting for your YouTube login…").into();
+                        Vec::new()
+                    } else {
+                        self.status =
+                            self.tr("Trayendo tu historial de YouTube…", "Fetching your YouTube history…").into();
+                        vec![Effect::YoutubeHistory { id, next: None }]
+                    }
                 } else {
                     if self.history.is_empty() {
                         self.status =
@@ -3180,7 +3216,7 @@ impl State {
     fn load_feed(&mut self, source: Source, title: String, filter: Filter) -> Vec<Effect> {
         let mut effects = self.load(source, title, filter, false, ListKind::Feed);
         if self.logged_in() && !self.show_watched {
-            effects.push(Effect::LoadHistory);
+            effects.extend(self.load_history_effect());
         }
         effects
     }
@@ -3243,6 +3279,9 @@ impl State {
     }
 
     fn session_ready(&mut self, subs: Result<HashSet<String>, String>) -> Vec<Effect> {
+        self.session_loading = false;
+        let waiting = self.history_waiting.take();
+        let hide_history = std::mem::take(&mut self.hide_history_waiting);
         match subs {
             Ok(subs) => {
                 self.status = if self.logged_in() {
@@ -3253,6 +3292,15 @@ impl State {
                 };
                 self.subs = subs;
                 let mut effects = vec![Effect::SaveSubs(self.subs.clone())];
+                // History, and the feeds' hidden videos, were waiting for the login.
+                if let Some(id) = waiting.filter(|id| self.stack.iter().any(|l| l.more == Some(*id))) {
+                    self.status =
+                        self.tr("Trayendo tu historial de YouTube…", "Fetching your YouTube history…").into();
+                    effects.push(Effect::YoutubeHistory { id, next: None });
+                }
+                if hide_history && self.logged_in() && !self.show_watched {
+                    effects.push(Effect::LoadHistory);
+                }
                 // The feed waiting for them, unless something else is loading now.
                 if let Some((pending, items, next)) = self.recheck.take()
                     && self.pending.is_none()
@@ -3266,6 +3314,12 @@ impl State {
             }
             Err(error) => {
                 self.status = error;
+                // No login to ask History with: it keeps what was watched here.
+                if let Some(id) = waiting {
+                    for listing in self.stack.iter_mut().filter(|l| l.more == Some(id)) {
+                        listing.more = None;
+                    }
+                }
                 if let Some((pending, ..)) = self.recheck.take()
                     && self.loading.as_ref() == Some(&pending.title)
                 {
@@ -5052,6 +5106,51 @@ mod tests {
         s.update(Action::Confirm(true));
         assert!(s.status.contains("YouTube"), "{}", s.status);
         assert_eq!(ids(&s), ["y2", "y3"]);
+    }
+
+    #[test]
+    fn history_waits_for_the_login_instead_of_failing() {
+        let mut s = with_videos(&["a"]);
+        s.config.session.browser = "brave".into();
+        s.begin_session();
+        // Opened right at startup: no request yet, and no "Not logged in".
+        assert!(open(&mut s, Section::Historial).is_empty());
+        assert_eq!(s.listing().unwrap().kind, ListKind::History);
+        assert!(s.status.contains("Waiting for your YouTube login") || s.status.contains("Esperando"), "{}", s.status);
+        assert!(!s.status.contains("Not logged in"), "{}", s.status);
+        // The login is ready: History is asked for now.
+        let effects = s.update(Action::SessionReady { cookies: None, subs: Ok(HashSet::new()) });
+        let id = match effects.iter().find(|e| matches!(e, Effect::YoutubeHistory { .. })) {
+            Some(Effect::YoutubeHistory { id, next: None }) => *id,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(s.listing().unwrap().more, Some(id));
+        // Later sessions do not ask again, and later opens ask at once.
+        let again = s.update(Action::SessionReady { cookies: None, subs: Ok(HashSet::new()) });
+        assert!(!again.iter().any(|e| matches!(e, Effect::YoutubeHistory { .. })));
+        assert!(matches!(open(&mut s, Section::Historial).as_slice(), [Effect::YoutubeHistory { .. }]));
+    }
+
+    #[test]
+    fn history_waiting_for_a_login_that_fails_keeps_the_local_list() {
+        let mut s = with_videos(&["a"]);
+        s.config.session.browser = "brave".into();
+        s.begin_session();
+        open(&mut s, Section::Historial);
+        let effects = s.update(Action::SessionReady { cookies: None, subs: Err("brave has no YouTube login".into()) });
+        assert!(!effects.iter().any(|e| matches!(e, Effect::YoutubeHistory { .. })));
+        assert_eq!(s.status, "brave has no YouTube login");
+        assert_eq!(s.listing().unwrap().more, None, "not left loading");
+    }
+
+    #[test]
+    fn hiding_watched_videos_waits_for_the_login_too() {
+        let mut s = with_videos(&["a"]);
+        s.config.session.browser = "brave".into();
+        s.begin_session();
+        assert!(!open(&mut s, Section::Inicio).contains(&Effect::LoadHistory));
+        let effects = s.update(Action::SessionReady { cookies: None, subs: Ok(HashSet::new()) });
+        assert!(effects.contains(&Effect::LoadHistory));
     }
 
     #[test]
@@ -7809,7 +7908,7 @@ mod tests {
         let shift = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
         let pos = |sec| Section::ALL.iter().position(|s| *s == sec).unwrap();
         for (c, sec) in [
-            ('S', Section::Configuracion),
+            ('O', Section::Configuracion),
             ('A', Section::AcercaDe),
             ('Y', Section::VerDespues),
             ('V', Section::Guardados),

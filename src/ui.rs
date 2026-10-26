@@ -532,6 +532,57 @@ pub fn draw(frame: &mut Frame, state: &State, view: &View) {
     BORDERS.set(state.config.ui.border_style);
     draw_screen(frame, state, view);
     theme::recolor(frame.buffer_mut(), &state.palette);
+    // Behind the help everything fades, the hint bar too, so the popup stands out.
+    if state.help
+        && !state.splash
+        && let Some(popup) = dialog_area(state, frame.area())
+    {
+        dim_behind(frame.buffer_mut(), popup, state.palette.background);
+    }
+}
+
+/// How much of its brightness and of its colour a cell keeps behind a popup.
+const DIM_BRIGHTNESS: f32 = 0.4;
+const DIM_SATURATION: f32 = 0.5;
+
+/// Every cell outside `popup` faded toward the theme background, to about 40%
+/// and greyer (boxvibe's dim).
+fn dim_behind(buffer: &mut ratatui::buffer::Buffer, popup: Rect, background: Color) {
+    let area = buffer.area;
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            if popup.contains(Position::new(x, y)) {
+                continue;
+            }
+            let cell = &mut buffer[(x, y)];
+            cell.fg = dim_color(cell.fg, background);
+            cell.bg = dim_color(cell.bg, background);
+        }
+    }
+}
+
+/// One colour, dimmed: RGB is desaturated, then blended toward the
+/// background; named and indexed colours (nothing to blend) turn dark grey.
+fn dim_color(color: Color, background: Color) -> Color {
+    let (br, bg, bb) = match background {
+        Color::Rgb(r, g, b) => (f32::from(r), f32::from(g), f32::from(b)),
+        _ => (0.0, 0.0, 0.0),
+    };
+    match color {
+        Color::Reset => Color::Reset,
+        c if c == background => c,
+        Color::Rgb(r, g, b) => {
+            let (r, g, b) = (f32::from(r), f32::from(g), f32::from(b));
+            let grey = 0.299 * r + 0.587 * g + 0.114 * b;
+            let fade = |c: f32, base: f32| {
+                let c = grey + (c - grey) * DIM_SATURATION;
+                (base + (c - base) * DIM_BRIGHTNESS).round().clamp(0.0, 255.0) as u8
+            };
+            Color::Rgb(fade(r, br), fade(g, bg), fade(b, bb))
+        }
+        Color::Black => Color::Black,
+        _ => Color::DarkGray,
+    }
 }
 
 fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
@@ -707,13 +758,23 @@ fn watch_layout_with(inner: Rect, width: u16, (detail_rows, summary_rows): (u16,
     let text_rows = detail_rows.saturating_add(summary_rows).min(left.height);
     let related_rows = left.height.saturating_sub(text_rows).saturating_sub(1).min(UP_NEXT_MAX_ROWS + 2);
     let [top, related] = Layout::vertical([Constraint::Fill(1), Constraint::Length(related_rows)]).areas(left);
-    // The picture sits a cell in from the top and left borders and meets
-    // "Up next"; the text keeps a 2-column gap after it and a column before
-    // the right edge (1 column in from the left without a picture).
-    let (width, rows) = watch_thumbnail_size(top.height.saturating_sub(1), left.width);
-    let thumbnail = Rect { x: top.x + 1, y: top.y + 1, width, height: rows };
-    let gap = if width > 0 { 1 + width + 2 } else { 1 };
-    let text = Rect { x: top.x + gap, width: top.width.saturating_sub(gap + 1), ..top };
+    // The picture meets "Up next" (a cell in from the top), then a 2-column
+    // gap and the text, at most WATCH_TEXT_MAX_WIDTH wide. Picture, gap and
+    // text are centred as a group in the column (never closer than a cell to
+    // either edge), the picture centred in the rows above "Up next" when it
+    // does not fill them. Without a picture the text keeps a cell on each side.
+    let avail = top.height.saturating_sub(1);
+    let (width, rows) = watch_thumbnail_size(avail, left.width);
+    let picture = if width > 0 { width + 2 } else { 0 };
+    let text_width = (left.width.saturating_sub(picture + 2)).min(WATCH_TEXT_MAX_WIDTH);
+    let group = if width > 0 { picture + text_width } else { 0 };
+    let start = if width > 0 { top.x + (left.width.saturating_sub(group) / 2).max(1) } else { top.x + 1 };
+    let thumbnail = Rect { x: start, y: top.y + 1 + (avail - rows) / 2 * u16::from(width > 0), width, height: rows };
+    let text = if width > 0 {
+        Rect { x: start + picture, width: text_width, ..top }
+    } else {
+        Rect { x: top.x + 1, width: top.width.saturating_sub(2), ..top }
+    };
     let details = Rect { height: detail_rows.min(text.height), ..text };
     let summary = Rect {
         y: details.y + details.height,
@@ -747,6 +808,9 @@ fn rows_16_9(columns: u16) -> u16 {
 
 /// Columns the details and summary keep beside the thumbnail on a video tab.
 const WATCH_TEXT_MIN_WIDTH: u16 = 40;
+/// Columns the details and summary take at most beside the thumbnail: wider
+/// windows centre picture and text instead of stretching the lines.
+const WATCH_TEXT_MAX_WIDTH: u16 = 66;
 
 /// Columns and rows of the video tab's thumbnail in `rows` above "Up next" of
 /// a `columns`-wide column: all the rows, 16:9 (a cell is about twice as tall
@@ -2048,16 +2112,28 @@ fn settings_areas(inner: Rect) -> (Rect, Rect) {
     (list, about)
 }
 
-/// Settings, like boxvibe's: uppercase sections, one row per setting with
-/// its value, and what the highlighted one does under the list.
+/// Settings, like boxvibe's: its panel (a bright border while it has the
+/// keys), uppercase sections, one row per setting with its value, a
+/// reverse-video bar on the selected one and what it does under the list.
 fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usize, title: String, area: Rect) {
     let lang = state.lang();
     let focused = state.focus == Focus::List;
-    let block = focus_panel(title, focused);
+    let block = settings_panel(&title, icons, focused);
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    // One cell of air inside the border, on both sides.
+    let inner = Rect { x: inner.x + 1, width: inner.width.saturating_sub(2), ..inner };
     let (list_area, about_area) = settings_areas(inner);
+    let label_width = fitted_label_width(lang, usize::from(list_area.width));
     let rows = settings_rows(lang);
+    // More rows than room: the last row of the list goes to the "more" cue,
+    // so no setting is ever drawn under it.
+    let (list_area, cue_area) = if rows.len() > usize::from(list_area.height) && list_area.height >= 3 {
+        let [list, cue] = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(list_area);
+        (list, Some(cue))
+    } else {
+        (list_area, None)
+    };
     let mut items = Vec::with_capacity(rows.len());
     let mut shown = 0;
     for (r, row) in rows.iter().enumerate() {
@@ -2067,7 +2143,7 @@ fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usiz
                     shown = r;
                 }
                 let setting = Setting::ALL[*i];
-                items.push(setting_row(state, icons.setting(setting), setting));
+                items.push(setting_row(state, icons.setting(setting), setting, label_width));
             }
             None => match rows.get(r + 1) {
                 Some(Some(next)) => {
@@ -2081,16 +2157,45 @@ fn draw_settings(frame: &mut Frame, state: &State, icons: &Icons, selected: usiz
             },
         }
     }
-    let highlight = if focused { Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD) } else { Style::new() };
-    let list = List::new(items).highlight_symbol(if focused { "▌" } else { " " }).highlight_style(highlight);
-    frame.render_stateful_widget(list, list_area, &mut ListState::default().with_selected(Some(shown)));
+    let list = List::new(items).highlight_style(settings_selection(focused));
+    let mut list_state = ListState::default().with_selected(Some(shown));
+    frame.render_stateful_widget(list, list_area, &mut list_state);
+    if let Some(cue) = cue_area {
+        let offset = list_state.offset();
+        let (above, below) = (offset > 0, offset + usize::from(list_area.height) < rows.len());
+        let more = lang.pick("más", "more");
+        let mut spans = vec![Span::raw(" ")];
+        for (hidden, icon) in [(above, icons.more_above), (below, icons.more_below)] {
+            if hidden {
+                spans.push(Span::raw(format!("{icon} {more}  ")));
+            }
+        }
+        frame.render_widget(Paragraph::new(Line::from(spans).fg(MUTED).bold()), cue);
+    }
     if let Some(setting) = Setting::ALL.get(selected) {
-        let about = Line::from(Span::styled(format!(" {}", setting.about(lang)), MUTED));
+        let about = Line::from(Span::styled(setting.about(lang), MUTED));
         frame.render_widget(
-            Paragraph::new(vec![Line::raw(""), about]).wrap(ratatui::widgets::Wrap { trim: false }),
+            Paragraph::new(vec![Line::raw(""), about]).wrap(ratatui::widgets::Wrap { trim: true }),
             about_area,
         );
     }
+}
+
+/// Settings' panel, as boxvibe draws it: the icon and name in the text
+/// colour, the border bright (the text colour) while the list has the keys
+/// and dim otherwise. With no border to light, the title does.
+fn settings_panel<'a>(title: &str, icons: &Icons, focused: bool) -> Block<'a> {
+    let text = format!(" {} {} ", icons.section(Section::Configuracion), title.trim());
+    let mut title = Line::from(Span::styled(text, Style::new().fg(FG)));
+    if focused && BORDERS.get() == BorderStyle::None {
+        title = title.patch_style(Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD));
+    }
+    framed().border_style(Style::new().fg(if focused { FG } else { LINE })).title(title)
+}
+
+/// The selected setting: reverse video while the list has the keys, a shade otherwise.
+fn settings_selection(focused: bool) -> Style {
+    if focused { Style::new().fg(BG).bg(FG).add_modifier(Modifier::BOLD) } else { Style::new().bg(HIGHLIGHT) }
 }
 
 /// Width of the settings' label column: the longest label and a gap, so
@@ -2099,15 +2204,38 @@ fn setting_label_width(lang: Lang) -> usize {
     Setting::ALL.iter().map(|s| Span::raw(s.label(lang)).width()).max().unwrap_or(0) + 3
 }
 
-fn setting_row(state: &State, icon: &str, setting: Setting) -> ListItem<'static> {
+/// Cells before the label: three spaces, the icon cell and a space.
+const SETTING_PREFIX: usize = 6;
+/// The room a value keeps even when the labels are long.
+const SETTING_VALUE_MIN: usize = 20;
+
+/// The label column for a list `width` cells wide: all the room the
+/// longest label needs, or, in a narrow window, what leaves the values
+/// their place (long labels are cut with `…` instead of pushing them out).
+fn fitted_label_width(lang: Lang, width: usize) -> usize {
+    setting_label_width(lang).min(width.saturating_sub(SETTING_PREFIX + SETTING_VALUE_MIN)).max(12)
+}
+
+/// A value's style: yellow and bold, but green for a login that is in use
+/// and muted for none.
+fn setting_value_style(state: &State, setting: Setting) -> Style {
+    match setting {
+        Setting::Browser | Setting::Logout if state.logged_in() => Style::new().fg(GREEN).bold(),
+        Setting::Browser | Setting::Logout => Style::new().fg(MUTED),
+        _ => Style::new().fg(YELLOW).bold(),
+    }
+}
+
+fn setting_row(state: &State, icon: &str, setting: Setting, label_width: usize) -> ListItem<'static> {
     let value = state.setting_value(setting);
     let lang = state.lang();
+    let label = cut_cells(setting.label(lang), label_width.saturating_sub(2)).0;
     let mut spans = vec![
-        Span::raw(format!(" {} ", pad_cells(icon, 2))),
-        Span::styled(pad_cells(setting.label(lang), setting_label_width(lang)), FG),
+        Span::raw(format!("   {} ", pad_cells(icon, 2))),
+        Span::styled(pad_cells(&label, label_width), FG),
     ];
     if !value.is_empty() {
-        spans.push(Span::styled(value, Style::new().fg(YELLOW).bold()));
+        spans.push(Span::styled(value, setting_value_style(state, setting)));
     }
     if let Some(note) = state.kitty_note(setting) {
         spans.push(Span::styled(format!("  {note}"), RED));
@@ -2218,7 +2346,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         };
         vec![yes, key(lang.pick("Otra tecla", "Other Key"), "no", "no")]
     } else if state.help {
-        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar ayuda", "close help")]
+        vec![key("Esc", "cerrar", "close")]
     } else if state.context.is_some() {
         vec![
             key("↑ ↓", "elegir", "choose"),
@@ -2428,7 +2556,8 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             !(MOVING.contains(&k.as_str()) || (k == "Tab" && !select_button) || (menu && k == "Enter"))
         });
     }
-    hints.push(all_keys);
+    // With the help open the last key closes it again, like boxvibe's bar.
+    hints.push(if state.help { key("?", "cerrar", "close") } else { all_keys });
     hints
 }
 
@@ -2473,98 +2602,247 @@ pub fn dialog_area(state: &State, screen: Rect) -> Option<Rect> {
     }
 }
 
-/// A help section: its title and its rows, already wrapped to the box.
-type HelpBox = (&'static str, Vec<Line<'static>>);
+/// Help, like boxvibe's: one centred popup, a bold orange uppercase header
+/// per section, the keys as filled key caps in a left column and what they
+/// do in one straight column beside them, then a muted closing line. A wide
+/// window gets a wider popup with the sections flowed into two balanced
+/// columns; a narrower one keeps a single column, wide enough for its longest
+/// line (and the title), with longer descriptions wrapped under themselves.
+const HELP_INDENT: usize = 2;
+/// A window this wide (or wider) gets two columns.
+const HELP_TWO_COLUMNS_FROM: u16 = 100;
+/// The widest the two-column popup gets, and the space left either side of it.
+const HELP_MAX_WIDTH: u16 = 120;
+const HELP_MARGIN: u16 = 3;
+/// Blank cells between the two columns.
+const HELP_GUTTER: usize = 3;
 
-/// The help's layout for a screen `width` wide: its width, the two columns
-/// of boxes (rows wrapped, continuation lines indented under the
-/// description) and the taller column's height.
-fn help_layout(width: u16, lang: Lang) -> (u16, [Vec<HelpBox>; 2], u16) {
-    let width = width.min(118);
-    // Outer border, a gap between the columns, each box's border.
-    let column = width.saturating_sub(3) / 2;
-    let text = usize::from(column.saturating_sub(2));
-    let mut boxes: Vec<HelpBox> = keymap::help(lang)
-        .into_iter()
-        .map(|(title, rows)| (title, help_rows(&rows, text)))
-        .collect();
-    let sizes: Vec<usize> = boxes.iter().map(|(_, lines)| lines.len() + 2).collect();
-    let split =
-        (1..boxes.len()).min_by_key(|&k| sizes[..k].iter().sum::<usize>().max(sizes[k..].iter().sum())).unwrap_or(1);
-    let right = boxes.split_off(split);
-    let height = |c: &[HelpBox]| c.iter().map(|(_, l)| l.len() as u16 + 2).sum::<u16>();
-    let tallest = height(&boxes).max(height(&right));
-    (width, [boxes, right], tallest)
+/// A way to cut Help in two: (rows in the taller column, distance from equal
+/// widths, the left column's width, the first item of the right column).
+type Cut = (usize, usize, usize, usize);
+
+/// One header or one key row (with its wrapped lines) of Help.
+struct HelpItem {
+    title: String,
+    header: bool,
+    lines: Vec<Line<'static>>,
 }
 
-/// One section's rows in `width` cells: keys aligned, then what they do,
-/// wrapped by cell width under itself.
-fn help_rows(rows: &[(String, &'static str)], width: usize) -> Vec<Line<'static>> {
-    let keys = rows.iter().map(|(k, _)| Span::raw(k.as_str()).width()).max().unwrap_or(0) + 2;
-    let room = width.saturating_sub(keys + 1).max(1);
-    let mut lines = Vec::new();
-    for (key, description) in rows {
-        let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
-        for (n, line) in wrapped.into_iter().enumerate() {
-            let lead = if n == 0 {
-                Span::styled(format!(" {}", pad_cells(key, keys)), key_style(key, CYAN))
-            } else {
-                Span::raw(" ".repeat(keys + 1))
-            };
-            let mut spans = vec![lead];
-            spans.extend(line.spans);
-            lines.push(Line::from(spans));
-        }
-    }
-    lines
-}
-
-/// The help's size: the taller column inside the outer border, capped to
-/// the screen (then it scrolls).
-fn help_area(screen: Rect, lang: Lang) -> Rect {
-    let (width, _, tallest) = help_layout(screen.width, lang);
-    centered(screen, width, tallest + 2)
-}
-
-fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
-    let (_, columns, tallest) = help_layout(frame.area().width, lang);
-    let area = help_area(frame.area(), lang);
-    frame.render_widget(Clear, area);
-    let scrolls = tallest + 2 > area.height;
-    let title = match (scrolls, lang) {
-        (false, Lang::Es) => " ⌨  Atajos de teclado · cualquier tecla cierra ",
-        (false, _) => " ⌨  Keyboard Shortcuts · Any Key Closes ",
-        (true, Lang::Es) => " ⌨  Atajos · ↑ ↓ desplazar · otra tecla cierra ",
-        (true, _) => " ⌨  Shortcuts · ↑ ↓ Scroll · Other Keys Close ",
-    };
-    let block = panel(title, MAGENTA);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    if inner.is_empty() {
-        return;
-    }
-    // Drawn whole off screen, then the visible rows copied in.
-    let full = Rect::new(0, 0, inner.width, tallest.max(1));
-    let mut buffer = ratatui::buffer::Buffer::empty(full);
-    let halves: [Rect; 2] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).spacing(1).areas(full);
-    for (boxes, column) in columns.iter().zip(halves) {
-        let heights = boxes.iter().map(|(_, lines)| Constraint::Length(lines.len() as u16 + 2));
-        for ((title, lines), cell) in boxes.iter().zip(Layout::vertical(heights).split(column).iter()) {
-            let block =
-                framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
-            ratatui::widgets::Widget::render(Paragraph::new(lines.clone()).block(block), *cell, &mut buffer);
-        }
-    }
-    let top = scroll.min(tallest.saturating_sub(inner.height));
-    for y in 0..inner.height.min(tallest - top) {
-        for x in 0..inner.width {
-            if let (Some(from), Some(to)) =
-                (buffer.cell((x, y + top)).cloned(), frame.buffer_mut().cell_mut((inner.x + x, inner.y + y)))
-            {
-                *to = from;
+/// Help's popup: where it goes and every line in it, already wrapped. A
+/// short window drops the blank rows between the sections first; what is
+/// still too tall scrolls.
+fn help_layout(screen: Rect, lang: Lang) -> (Rect, Vec<Line<'static>>) {
+    let full = screen;
+    // One space between the keys of a cap, as in boxvibe's.
+    let mut sections = keymap::help(lang);
+    for (_, rows) in &mut sections {
+        for (key, _) in rows.iter_mut() {
+            while key.contains("  ") {
+                *key = key.replace("  ", " ");
             }
         }
     }
+    // Every key cap is padded to the widest one, so the descriptions line up.
+    let rows = || sections.iter().flat_map(|(_, rows)| rows.iter());
+    let key_w = rows().map(|(k, _)| Span::raw(k.as_str()).width()).max().unwrap_or(0);
+    let lead = HELP_INDENT + key_w + 2 + 2;
+    let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1).to_string();
+    let titles_w = [false, true].map(|scrolls| help_title(lang, scrolls).width() + 2).into_iter().max().unwrap_or(0);
+    // The longest line unwrapped, with the blank cell after it.
+    let longest = rows().map(|(_, d)| lead + Span::raw(*d).width()).max().unwrap_or(0) + 1;
+    let two = full.width >= HELP_TWO_COLUMNS_FROM;
+    let width = if two {
+        let natural = 2 * longest.max(2 + Span::raw(footer.as_str()).width()) + HELP_GUTTER + 2;
+        let room = full.width.saturating_sub(2 * HELP_MARGIN).min(HELP_MAX_WIDTH);
+        natural.max(titles_w + 3).min(usize::from(room)) as u16
+    } else {
+        let longest = longest.max(2 + Span::raw(footer.as_str()).width());
+        (longest.max(titles_w) + 2).min(usize::from(full.width)) as u16
+    };
+    let inner = usize::from(width.saturating_sub(2));
+    // Every header and key row of Help, its descriptions wrapped in `room`.
+    let make_items = |room: usize| -> Vec<HelpItem> {
+        sections
+            .iter()
+            .flat_map(|(title, rows)| {
+                let header = HelpItem {
+                    title: title.to_uppercase(),
+                    header: true,
+                    lines: vec![Line::from(Span::styled(
+                        format!(" {}", title.to_uppercase()),
+                        Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+                    ))],
+                };
+                let keys = rows.iter().map(move |(key, description)| {
+                    let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
+                    let lines = wrapped
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, line)| {
+                            let mut spans = if i == 0 {
+                                vec![
+                                    Span::raw(" ".repeat(HELP_INDENT)),
+                                    Span::styled(format!(" {key} "), key_style(key, BG).bg(FG)),
+                                    Span::raw(" ".repeat(key_w - Span::raw(key.as_str()).width() + 2)),
+                                ]
+                            } else {
+                                vec![Span::raw(" ".repeat(lead))]
+                            };
+                            spans.extend(line.spans);
+                            Line::from(spans)
+                        })
+                        .collect();
+                    HelpItem { title: title.to_uppercase(), header: false, lines }
+                });
+                std::iter::once(header).chain(keys)
+            })
+            .collect()
+    };
+    // A column of items: a blank line between sections, and a header again
+    // when a section carries on from the other column.
+    let column = |items: &[HelpItem], blanks: bool| -> Vec<Line<'static>> {
+        let mut lines: Vec<Line<'static>> = Vec::new();
+        for (n, item) in items.iter().enumerate() {
+            if item.header && blanks && n > 0 {
+                lines.push(Line::raw(""));
+            }
+            if n == 0 && !item.header {
+                lines.push(Line::from(Span::styled(
+                    format!(" {} (cont.)", item.title),
+                    Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+                )));
+            }
+            lines.extend(item.lines.iter().cloned());
+        }
+        lines
+    };
+    let closing_width = inner.saturating_sub(2).max(1);
+    let closing = |lines: &mut Vec<Line<'static>>, blanks: bool| {
+        if blanks {
+            lines.push(Line::raw(""));
+        }
+        let closing = wrap_spans(&[Span::styled(footer.clone(), MUTED)], closing_width);
+        lines.extend(closing.into_iter().map(|mut l| {
+            l.spans.insert(0, Span::styled(" ", MUTED));
+            l
+        }));
+    };
+    let one_column = |blanks: bool| {
+        let mut lines = column(&make_items(inner.saturating_sub(lead + 1).max(1)), blanks);
+        closing(&mut lines, blanks);
+        lines
+    };
+    // Two columns, each as wide as its sections need: try every width of the
+    // left one and every place to cut, and keep the shortest result (cutting
+    // inside a section has to save a few rows to be worth it, then a section
+    // starts the second column again with "(cont.)").
+    let two_columns = |blanks: bool| {
+        let total = inner - HELP_GUTTER;
+        let narrowest = (lead + 13).min(total / 2);
+        let by_width: Vec<Vec<HelpItem>> =
+            (0..=total).map(|w| if w.min(total - w) < narrowest { vec![] } else { make_items(w - lead - 1) }).collect();
+        let n = by_width[total / 2].len();
+        // Rows in `items[from..to]` as `column` makes them.
+        let rows = |items: &[HelpItem], from: usize, to: usize| -> usize {
+            let lines: usize = items[from..to].iter().map(|i| i.lines.len()).sum();
+            let headers = items[from..to].iter().skip(1).filter(|i| i.header).count();
+            lines + if blanks { headers } else { 0 } + usize::from(!items[from].header)
+        };
+        // The rows the popup has for the columns when it takes the status line.
+        let mut closing_rows = Vec::new();
+        closing(&mut closing_rows, blanks);
+        let limit = usize::from(full.height.saturating_sub(1)).saturating_sub(2 + closing_rows.len());
+        // (rows, how far from equal widths, left width, cut): the best that
+        // keeps every section whole, and the best that may split one.
+        let (mut whole, mut any): (Option<Cut>, Option<Cut>) = (None, None);
+        for left_w in narrowest..=total - narrowest {
+            let (left, right) = (&by_width[left_w], &by_width[total - left_w]);
+            for cut in (1..n).filter(|k| !left[k - 1].header) {
+                let tall = rows(left, 0, cut).max(rows(right, cut, n));
+                let key = (tall, left_w.abs_diff(total / 2), left_w, cut);
+                let slot = if left[cut].header { &mut whole } else { &mut any };
+                if slot.is_none_or(|b| (key.0, key.1) < (b.0, b.1)) {
+                    *slot = Some(key);
+                }
+            }
+        }
+        // A section is only split when that is what saves scrolling.
+        let best = match (whole, any) {
+            (Some(w), Some(a)) if w.0 > limit && a.0 <= limit => Some(a),
+            (w, _) => w,
+        };
+        let (_, _, left_w, cut) = best.unwrap_or((0, 0, total / 2, n));
+        let left = column(&by_width[left_w][..cut], blanks);
+        let right = column(&by_width[total - left_w][cut..], blanks);
+        let mut lines: Vec<Line<'static>> = (0..left.len().max(right.len()))
+            .map(|y| {
+                let mut spans = left.get(y).map(|l| l.spans.clone()).unwrap_or_default();
+                if let Some(right) = right.get(y) {
+                    let used: usize = spans.iter().map(Span::width).sum();
+                    spans.push(Span::raw(" ".repeat((left_w + HELP_GUTTER).saturating_sub(used))));
+                    spans.extend(right.spans.clone());
+                }
+                Line::from(spans)
+            })
+            .collect();
+        closing(&mut lines, blanks);
+        lines
+    };
+    let build = |blanks: bool| if two { two_columns(blanks) } else { one_column(blanks) };
+    // The status line and the hint bar stay free (the bar says what closes the
+    // help). A window that is just short of room for the whole help lends the
+    // status line too; beyond that the help scrolls.
+    let (roomy, tight) = (full.height.saturating_sub(2).max(1), full.height.saturating_sub(1).max(1));
+    let mut lines = build(true);
+    let mut screen = Rect { height: roomy, ..full };
+    if lines.len() as u16 + 2 > roomy {
+        lines = build(false);
+        if lines.len() as u16 + 2 > roomy && lines.len() as u16 + 2 <= tight {
+            screen.height = tight;
+        }
+    }
+    let height = (lines.len() as u16 + 2).min(screen.height);
+    (centered(screen, width, height), lines)
+}
+
+/// The popup's title: the keyboard, "tubevibe" as the menu's title shows it,
+/// "Help" and what closes it (or scrolls it, when it doesn't fit).
+fn help_title(lang: Lang, scrolls: bool) -> Line<'static> {
+    let rest = match (scrolls, lang) {
+        (false, Lang::Es) => " Ayuda · cualquier tecla cierra ",
+        (false, _) => " Help · Any Key Closes ",
+        (true, Lang::Es) => " Ayuda · ↑ ↓ desplazar · otra tecla cierra ",
+        (true, _) => " Help · ↑ ↓ Scroll · Other Keys Close ",
+    };
+    Line::from(vec![
+        Span::styled(" ⌨  ", Style::new().fg(FG).bold()),
+        Span::styled("tube", Style::new().fg(RED).bold()),
+        Span::styled(format!("vibe{rest}"), Style::new().fg(FG).bold()),
+    ])
+}
+
+/// The closing line under the keys.
+const HELP_FOOTER: (&str, &str) = (
+    "Tema, cuenta, animaciones y más: Configuración (Shift+O)",
+    "Theme, account, animations and more: Settings (Shift+O)",
+);
+
+fn help_area(screen: Rect, lang: Lang) -> Rect {
+    help_layout(screen, lang).0
+}
+
+fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
+    let (area, lines) = help_layout(frame.area(), lang);
+    frame.render_widget(Clear, area);
+    let scrolls = lines.len() as u16 + 2 > area.height;
+    let mut title = help_title(lang, scrolls);
+    if BORDERS.get() == BorderStyle::None {
+        title = title.patch_style(Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD));
+    }
+    let block = framed().border_style(Style::new().fg(FG)).title(title).style(Style::new().bg(BG));
+    let inner = block.inner(area);
+    let top = scroll.min((lines.len() as u16).saturating_sub(inner.height));
+    frame.render_widget(Paragraph::new(lines).scroll((top, 0)).block(block), area);
 }
 
 fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
@@ -3257,7 +3535,7 @@ mod tests {
                     .enumerate()
                     .map(|(i, setting)| {
                         // Icon cell and label column: the value starts right after.
-                        Span::raw(format!(" {} ", pad_cells(icons.settings[i], 2))).width()
+                        Span::raw(format!("   {} ", pad_cells(icons.settings[i], 2))).width()
                             + Span::raw(pad_cells(setting.label(lang), setting_label_width(lang))).width()
                     })
                     .collect();
@@ -3284,6 +3562,101 @@ mod tests {
         }
         assert!(columns.len() > 10, "{screen}");
         assert!(columns.iter().all(|(_, c)| *c == columns[0].1), "{columns:?}\n{screen}");
+    }
+
+    /// Where the Settings pane's border starts: the second `┌` on the top row.
+    fn pane_left(buf: &ratatui::buffer::Buffer) -> u16 {
+        (0..buf.area.width).filter(|x| buf[(*x, 0)].symbol() == "┌").nth(1).unwrap()
+    }
+
+    /// The cell behind a two-cell emoji, which the buffer leaves unstyled.
+    fn behind_wide(buf: &ratatui::buffer::Buffer, x: u16, y: u16) -> bool {
+        x > 0 && Span::raw(buf[(x - 1, y)].symbol().to_owned()).width() == 2
+    }
+
+    fn settings_buffer(width: u16, height: u16, select: Setting, focus: Focus) -> ratatui::buffer::Buffer {
+        let mut s = state();
+        s.config.ui.lang = Some(Lang::En);
+        s.config.ui.icons = IconSet::Emoji;
+        s = {
+            s.menu = Section::ALL.iter().position(|x| *x == Section::Configuracion).unwrap();
+            s.update(Action::Enter);
+            s
+        };
+        s.focus = Focus::List;
+        let at = Setting::ALL.iter().position(|x| *x == select).unwrap();
+        for _ in 0..at {
+            s.update(Action::Down);
+        }
+        s.focus = focus;
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn buffer_row(buf: &ratatui::buffer::Buffer, y: u16) -> String {
+        (0..buf.area.width).map(|x| buf[(x, y)].symbol().to_owned()).collect()
+    }
+
+    /// Settings looks like boxvibe's: icon in the title, a bright border,
+    /// an indented row with its icon, a reverse-video bar one cell in from the
+    /// border, and values coloured (yellow, muted for no login).
+    #[test]
+    fn settings_look_like_boxvibes() {
+        let buf = settings_buffer(130, 70, Setting::BorderStyle, Focus::List);
+        let lines: Vec<String> = (0..70).map(|y| buffer_row(&buf, y)).collect();
+        let left = pane_left(&buf);
+        assert!(lines[0].contains("┌ 🔧") && lines[0].contains("Settings"), "{}", lines[0]);
+        let corner = (left, 0);
+        assert_eq!(buf[corner].fg, FG, "a bright border while it has the keys");
+        // The selected row: reverse video from one cell inside the border to one before the right one.
+        let y = lines.iter().position(|l| l.contains("Border Style")).unwrap() as u16;
+        let right = 129;
+        for x in (left + 2..right - 1).filter(|x| !behind_wide(&buf, *x, y)) {
+            let c = &buf[(x, y)];
+            assert_eq!((c.fg, c.bg), (BG, FG), "x={x}");
+            assert!(c.modifier.contains(Modifier::BOLD));
+        }
+        assert_eq!(buf[(left + 1, y)].bg, Color::Reset, "air left of the bar");
+        assert_eq!(buf[(right - 1, y)].bg, Color::Reset, "air right of the bar");
+        assert!(!lines[usize::from(y)].contains('▌'), "no marker, the bar is the selection");
+        // Rows start with three spaces, then the icon, like boxvibe's.
+        let icon_at = lines[usize::from(y) - 1].find("😀").map(|b| lines[usize::from(y) - 1][..b].chars().count()).unwrap();
+        assert_eq!(icon_at, usize::from(left) + 5);
+        // Header, label and value colours.
+        let row = |text: &str| lines.iter().position(|l| l.contains(text)).unwrap() as u16;
+        let header = row("LOOK");
+        assert_eq!((buf[(left + 2, header)].fg, buf[(left + 2, header)].modifier.contains(Modifier::BOLD)), (ORANGE, true));
+        let icons_y = row("Icons");
+        let value_x = lines[usize::from(icons_y)].find("Emoji").map(|b| lines[usize::from(icons_y)][..b].chars().count()).unwrap();
+        assert_eq!(buf[(value_x as u16, icons_y)].fg, YELLOW);
+        let session = row("Log Out");
+        let at = lines[usize::from(session)].find("Not Logged In").map(|b| lines[usize::from(session)][..b].chars().count()).unwrap();
+        assert_eq!(buf[(at as u16, session)].fg, MUTED, "no login is muted");
+        // The description sits under the list, muted, flush with the rows' left edge (one cell in).
+        let about = row("How every pane");
+        assert_eq!(buf[(left + 2, about)].fg, MUTED);
+        assert_eq!(lines[usize::from(about)].chars().nth(usize::from(left) + 2), Some('H'));
+    }
+
+    #[test]
+    fn settings_border_dims_when_the_menu_has_the_keys_and_the_bar_turns_to_a_shade() {
+        let buf = settings_buffer(130, 70, Setting::BorderStyle, Focus::Menu);
+        let left = pane_left(&buf);
+        assert_eq!(buf[(left, 0)].fg, LINE);
+        let y = (0..70).find(|y| buffer_row(&buf, *y).contains("Border Style")).unwrap();
+        assert_eq!(buf[(left + 8, y)].bg, HIGHLIGHT);
+        assert_eq!(buf[(left + 8, y)].fg, FG);
+    }
+
+    #[test]
+    fn a_narrow_settings_screen_keeps_every_value_in_view() {
+        let buf = settings_buffer(80, 30, Setting::BorderStyle, Focus::List);
+        let lines: Vec<String> = (0..30).map(|y| buffer_row(&buf, y)).collect();
+        let line = lines.iter().find(|l| l.contains("Video Language")).unwrap_or_else(|| panic!("{}", lines.join("\n")));
+        assert!(line.contains("Original + Subtitles"), "{line}");
+        let long = lines.iter().find(|l| l.contains("Hide YouTube Watch")).unwrap();
+        assert!(long.contains('…') && long.contains("On"), "{long}");
     }
 
     /// Emoji whose width terminals disagree on (text-presentation ones like
@@ -3588,9 +3961,9 @@ mod tests {
     fn help_shows_every_section_with_explanations() {
         let mut s = state();
         s.update(Action::ToggleHelp);
-        let screen = render(&s);
+        let screen = render_screen(&s, 99, 120).join("\n");
         for (title, rows) in keymap::help(Lang::Es) {
-            assert!(screen.contains(title), "{title}\n{screen}");
+            assert!(screen.contains(&title.to_uppercase()), "{title}\n{screen}");
             for (_, description) in rows {
                 assert!(screen.contains(description), "{description}\n{screen}");
             }
@@ -3793,7 +4166,7 @@ mod tests {
         }
         assert!(!screen.contains("Ver después"), "{screen}");
         s.update(Action::ToggleHelp);
-        assert!(render(&s).contains("Keyboard Shortcuts"));
+        assert!(render_screen(&s, 130, 120).join("\n").contains("tubevibe Help · Any Key Closes"));
     }
 
     #[test]
@@ -5302,14 +5675,22 @@ mod tests {
             let inner = Rect::new(1, 1, w, h);
             let l = watch_layout_with(inner, 44, rows);
             let t = l.thumbnail;
-            let related_top = l.related.y;
             if t.width > 0 {
-                assert_eq!((t.x, t.y), (l.left.x + 1, l.left.y + 1), "{w}x{h}: a cell in from the top and left");
-                let full = t.y + t.height == related_top;
-                assert!(full || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
+                let above = l.related.y.saturating_sub(l.left.y + 1);
+                let slack = above - t.height;
+                assert_eq!(t.y, l.left.y + 1 + slack / 2, "{w}x{h}: centred in the rows above Up next: {l:?}");
+                assert!(slack == 0 || l.details.width < WATCH_TEXT_MIN_WIDTH + 4, "{w}x{h}: down to Up next, or capped: {l:?}");
                 assert_eq!(t.width, columns_16_9(t.height), "{w}x{h}: 16:9");
                 assert_eq!(l.details.x, t.x + t.width + 2, "{w}x{h}: text beside it");
-                assert_eq!(l.details.right() + 1, l.left.right(), "{w}x{h}: a column before the right edge");
+                assert!(l.details.width <= WATCH_TEXT_MAX_WIDTH, "{w}x{h}: text is capped");
+                // Picture + gap + text sit in the middle of the column, a cell
+                // from the edges at least, the two margins equal (±1 for odd).
+                let (before, after) = (t.x - l.left.x, l.left.right() - l.details.right());
+                assert!(before >= 1 && after >= 1, "{w}x{h}: {l:?}");
+                assert!(before.abs_diff(after) <= 1 || before == 1 || after == 1, "{w}x{h}: balanced {before}/{after}");
+                if l.details.width == WATCH_TEXT_MAX_WIDTH {
+                    assert!(before.abs_diff(after) <= 1, "{w}x{h}: centred {before}/{after}: {l:?}");
+                }
             }
             assert!(l.details.width >= WATCH_TEXT_MIN_WIDTH, "{w}x{h}: text keeps its width: {l:?}");
             assert_eq!(l.summary.x, l.details.x, "{w}x{h}: summary under the details");
@@ -5330,6 +5711,27 @@ mod tests {
         assert!(sizes.windows(2).all(|p| p[0] >= p[1]), "{sizes:?}");
         assert_eq!(*sizes.last().unwrap(), 0, "{sizes:?}");
         assert_eq!(watch_thumbnail_size(3, 200), (0, 0), "under 4 rows: none");
+    }
+
+    #[test]
+    fn the_video_tab_picture_and_text_are_centred_as_a_group() {
+        // A short, very wide window: the picture is capped by the rows, the
+        // text by its maximum, and the group sits in the middle.
+        let l = watch_layout_with(Rect::new(0, 0, 330, 24), 44, (6, 4));
+        let (t, d) = (l.thumbnail, l.details);
+        assert_eq!(d.width, WATCH_TEXT_MAX_WIDTH, "{l:?}");
+        let (before, after) = (t.x - l.left.x, l.left.right() - d.right());
+        assert!(before > 5 && before.abs_diff(after) <= 1, "{before}/{after}: {l:?}");
+        assert_eq!(d.x, t.right() + 2, "gap kept");
+        // Taller than the text's 40 columns allow: picture shrinks to leave
+        // the minimum text and the picture sits mid-height.
+        let l = watch_layout_with(Rect::new(0, 0, 150, 90), 44, (6, 4));
+        let t = l.thumbnail;
+        assert!(t.width > 0 && t.y > l.left.y + 1, "centred vertically: {l:?}");
+        assert!((t.y - (l.left.y + 1)).abs_diff(l.related.y - t.bottom()) <= 1, "equal slack above and below: {l:?}");
+        // No picture: the text keeps its cell on each side, as before.
+        let l = watch_layout_with(Rect::new(0, 0, 60, 12), 44, (3, 0));
+        assert_eq!((l.thumbnail.width, l.details.x, l.details.width), (0, l.left.x + 1, l.left.width - 2));
     }
 
     #[test]
@@ -5442,31 +5844,242 @@ mod tests {
         }
     }
 
+    /// Every help line, whole, somewhere between the top and the bottom of
+    /// the scroll; and the popup stays inside the screen.
     #[test]
     fn no_help_row_is_clipped() {
         for lang in [Lang::Es, Lang::En] {
-            // 130x40: everything at once, no scrolling.
-            let (_, _, tallest) = help_layout(130, lang);
-            assert!(tallest + 2 <= 40, "{lang:?}: {tallest}");
-            for (w, h) in [(130u16, 40u16), (118, 40), (100, 40), (80, 30)] {
-                let (width, columns, tallest) = help_layout(w, lang);
-                let text = usize::from((width - 3) / 2 - 2);
+            for (w, h) in [(130u16, 70u16), (130, 40), (100, 40), (100, 30), (99, 40), (80, 30), (60, 24)] {
+                let (area, lines) = help_layout(Rect::new(0, 0, w, h), lang);
+                assert!(area.right() <= w && area.bottom() <= h, "{lang:?} {w}x{h}: {area:?}");
                 let mut s = state();
                 s.config.ui.lang = Some(lang);
                 s.help = true;
                 let mut seen = String::new();
-                for scroll in 0..=tallest {
+                for scroll in 0..=lines.len() as u16 {
                     s.help_scroll = scroll;
                     seen.push_str(&render_screen(&s, w, h).join("\n"));
                 }
-                for (title, lines) in columns.iter().flatten() {
-                    for line in lines {
-                        assert!(line.width() <= text, "{lang:?} {w}: {title}: {line:?}");
-                        let words: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
-                        assert!(seen.contains(words.trim()), "{lang:?} {w}x{h}: {title}: {words}");
-                    }
+                for line in &lines {
+                    assert!(line.width() <= usize::from(area.width) - 2, "{lang:?} {w}x{h}: {line:?}");
+                    let words: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+                    assert!(seen.contains(words.trim()), "{lang:?} {w}x{h}: {words}");
                 }
             }
+        }
+    }
+
+
+    fn help_buffer(width: u16, height: u16, lang: Lang, scroll: u16) -> (ratatui::buffer::Buffer, Rect) {
+        let mut s = state();
+        s.config.ui.lang = Some(lang);
+        s.config.ui.icons = IconSet::Emoji;
+        s.help = true;
+        s.help_scroll = scroll;
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        let area = dialog_area(&s, Rect::new(0, 0, width, height)).unwrap();
+        (terminal.backend().buffer().clone(), area)
+    }
+
+    /// The text of one row of the popup, cell by cell, borders left out.
+    fn popup_row(buf: &ratatui::buffer::Buffer, area: Rect, y: u16) -> String {
+        (area.x + 1..area.right() - 1).map(|x| buf[(x, y)].symbol().to_owned()).collect()
+    }
+
+    /// Help looks like boxvibe's: the keyboard and the name in the title, a
+    /// bright border, orange uppercase headers, filled key caps, one column
+    /// of descriptions, a muted closing line, the rest of the screen faded and
+    /// the bar saying what closes it.
+    #[test]
+    fn help_looks_like_boxvibes() {
+        for (w, h) in [(130u16, 70u16), (80, 30)] {
+            let (buf, area) = help_buffer(w, h, Lang::En, 0);
+            assert!(area.bottom() < h, "{w}x{h}: the hint bar stays visible: {area:?}");
+            assert_eq!(area.x, (w - area.width) / 2, "{w}x{h}: centred across");
+            let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+            assert!(title.starts_with("┌ ⌨  tubevibe Help · "), "{w}x{h}: {title}");
+            for corner in [(area.x, area.y), (area.right() - 1, area.bottom() - 1)] {
+                assert_eq!(buf[corner].fg, FG, "{w}x{h}: a bright border");
+                assert_eq!(buf[corner].bg, BG);
+            }
+            let name = |x: u16| (buf[(x, area.y)].fg, buf[(x, area.y)].modifier.contains(Modifier::BOLD));
+            let tube = area.x + 4;
+            assert_eq!(name(tube + 1), (RED, true), "tube in red, bold");
+            assert_eq!(name(tube + 5), (FG, true), "vibe and the rest in the text colour, bold");
+            // The first section's header.
+            let header = area.y + 1;
+            assert!(popup_row(&buf, area, header).starts_with(" COMMANDS (ANYWHERE)"), "{w}x{h}");
+            assert_eq!((buf[(area.x + 2, header)].fg, buf[(area.x + 2, header)].modifier), (ORANGE, Modifier::BOLD));
+            // Its first row: a key cap (the theme's background on its text), then
+            // the description in the column every row shares.
+            let row = header + 1;
+            assert!(popup_row(&buf, area, row).starts_with("   ? L "), "{w}x{h}: {}", popup_row(&buf, area, row));
+            let cap = buf[(area.x + 3, row)].clone();
+            assert_eq!((cap.fg, cap.bg), (BG, FG), "a filled key cap");
+            let description = |y: u16, text: &str| {
+                let at = popup_row(&buf, area, y).find(text).unwrap_or_else(|| panic!("{text}"));
+                popup_row(&buf, area, y)[..at].chars().count()
+            };
+            let column = description(row, "this help");
+            assert_eq!(description(row + 1, "menu on / off"), column, "{w}x{h}: one column of descriptions");
+            assert_eq!(description(row + 2, "quit / quit now"), column);
+            assert_eq!(buf[(area.x + 1 + column as u16, row)].fg, FG);
+            // Every row stays inside the border.
+            for y in area.y + 1..area.bottom() - 1 {
+                assert_eq!(buf[(area.right() - 1, y)].symbol(), "│", "{w}x{h}: row {y}");
+            }
+            // Behind it everything fades, the bar too, and its caps say how to close.
+            let behind = buf[(1, 1)].clone();
+            assert_ne!(behind.fg, BLUE, "the menu fades");
+            let bar = buffer_row(&buf, h - 1);
+            assert!(bar.contains("Esc  Close") && bar.contains("?  Close"), "{bar}");
+            assert_eq!(buf[(2, h - 1)].bg, dim_color(FG, BG), "the bar is faded too");
+        }
+    }
+
+    /// 130x70: all of Help at once, with its closing line, and nothing to
+    /// scroll; 80x30: the popup stays inside the window, wraps, and scrolls
+    /// to the closing line.
+    #[test]
+    fn help_fits_a_tall_window_and_scrolls_in_a_short_one() {
+        for lang in [Lang::En, Lang::Es] {
+            let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1);
+            let (buf, area) = help_buffer(130, 70, lang, 0);
+            let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+            assert!(!title.contains('↑'), "{lang:?}: nothing to scroll at 130x70: {title}");
+            assert!((1..area.height - 1).any(|y| popup_row(&buf, area, area.y + y).contains(footer)), "{lang:?}");
+            let (top, area) = help_buffer(80, 30, lang, 0);
+            assert!(area.right() <= 80 && area.bottom() <= 29, "{area:?}");
+            let title: String = (area.x..area.right()).map(|x| top[(x, area.y)].symbol().to_owned()).collect();
+            assert!(title.contains("↑ ↓"), "{lang:?}: it says it scrolls: {title}");
+            assert!(!(1..area.height - 1).any(|y| popup_row(&top, area, area.y + y).contains(footer)));
+            let (end, area) = help_buffer(80, 30, lang, 500);
+            assert!((1..area.height - 1).any(|y| popup_row(&end, area, area.y + y).contains(footer)), "{lang:?}");
+        }
+    }
+
+    /// A wide window flows Help into two columns, top-aligned and balanced,
+    /// with the closing line under both; a narrower one keeps one column.
+    #[test]
+    fn a_wide_help_flows_into_two_columns() {
+        for lang in [Lang::En, Lang::Es] {
+            let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1);
+            let sections = keymap::help(lang);
+            let first = sections[0].0.to_uppercase();
+            for (w, h, scrolls) in [(130u16, 70u16, false), (130, 40, false), (100, 30, true)] {
+                let (buf, area) = help_buffer(w, h, lang, 0);
+                let wide = (w - 2 * HELP_MARGIN).min(HELP_MAX_WIDTH);
+                assert_eq!(area.width, wide, "{lang:?} {w}x{h}: a wide, centred popup");
+                assert_eq!(area.x, (w - area.width) / 2);
+                let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+                assert_eq!(title.contains('↑'), scrolls, "{lang:?} {w}x{h}: {title}");
+                let first_row = popup_row(&buf, area, area.y + 1);
+                let cells: Vec<char> = first_row.chars().collect();
+                let left = first_row[..first_row.find(&first).unwrap_or_else(|| panic!("{first_row}"))].chars().count();
+                let end = left + first.chars().count();
+                let right = (end..cells.len()).find(|i| cells[*i] != ' ').unwrap_or_else(|| panic!("{first_row}"));
+                assert!(right - end >= HELP_GUTTER, "{lang:?} {w}x{h}: a gutter: {first_row}");
+                assert!(right > cells.len() / 3, "{lang:?} {w}x{h}: a header starts the second column: {first_row}");
+                for y in area.y + 1..area.bottom() - 1 {
+                    assert_eq!(buf[(area.right() - 1, y)].symbol(), "│", "{lang:?} {w}x{h}: row {y}");
+                }
+                // Both columns keep the key caps and the straight descriptions.
+                let row = area.y + 2;
+                let text = popup_row(&buf, area, row);
+                let is_cap = |x: &u16| buf[(*x, row)].bg == FG && buf[(*x, row)].fg == BG;
+                let caps: Vec<u16> = (area.x + 1..area.right() - 1).filter(is_cap).collect();
+                assert!(caps.first().is_some_and(|x| *x < area.x + 8), "{text}");
+                let half = area.x + area.width / 2;
+                assert!(caps.last().is_some_and(|x| *x > half), "a cap in the right column too: {text}");
+                if !scrolls {
+                    let below = (area.y + 1..area.bottom() - 1).find(|y| popup_row(&buf, area, *y).contains(footer));
+                    let below = below.unwrap_or_else(|| panic!("{lang:?} {w}x{h}: the closing line"));
+                    let text = popup_row(&buf, area, below);
+                    assert!(text.starts_with(&format!(" {footer}")), "under both columns: {text}");
+                    // Sections stay whole unless splitting one is what saves the scroll
+                    // (Spanish at 130x40).
+                    let split = (area.y + 1..below).any(|y| popup_row(&buf, area, y).contains("(cont.)"));
+                    assert!(!split || (lang, w, h) == (Lang::Es, 130, 40), "{lang:?} {w}x{h}: whole sections");
+                }
+            }
+            // The closing line is reachable by scrolling when it doesn't fit.
+            let (end, area) = help_buffer(100, 30, lang, 500);
+            assert!((area.y + 1..area.bottom() - 1).any(|y| popup_row(&end, area, y).contains(footer)), "{lang:?}");
+        }
+    }
+
+    /// Under 100 columns Help keeps one column, and scrolls when it is short.
+    #[test]
+    fn a_narrower_help_keeps_one_column() {
+        for lang in [Lang::En, Lang::Es] {
+            let sections = keymap::help(lang);
+            let (a, b) = (sections[0].0.to_uppercase(), sections[4].0.to_uppercase());
+            for (w, h) in [(80u16, 30u16), (99, 40)] {
+                let (buf, area) = help_buffer(w, h, lang, 0);
+                assert!(area.width < 90, "{lang:?} {w}x{h}: {area:?}");
+                let screen: Vec<String> = (area.y..area.bottom()).map(|y| popup_row(&buf, area, y)).collect();
+                assert!(screen.iter().all(|r| !(r.contains(&a) && r.contains(&b))), "{lang:?} {w}x{h}: one column");
+            }
+            let (buf, area) = help_buffer(80, 30, lang, 0);
+            let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+            assert!(title.contains('↑'), "{lang:?}: it scrolls: {title}");
+            let (_, area) = help_buffer(HELP_TWO_COLUMNS_FROM, 40, lang, 0);
+            assert!(area.width > 90, "two columns from {HELP_TWO_COLUMNS_FROM} wide");
+        }
+    }
+
+    #[test]
+    fn help_title_and_footer_speak_the_language() {
+        let (buf, area) = help_buffer(130, 70, Lang::Es, 0);
+        let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+        assert!(title.contains("tubevibe Ayuda · cualquier tecla cierra"), "{title}");
+        let bar = buffer_row(&buf, 69);
+        assert!(bar.contains("Esc  cerrar") && bar.contains("?  cerrar"), "{bar}");
+    }
+
+    /// A short Settings window says more rows are off screen, in the menu's
+    /// chevron style; the selected row and its description stay in view.
+    #[test]
+    fn a_short_settings_window_says_more_is_below_and_above() {
+        let i = icons(IconSet::Emoji);
+        let last = *Setting::ALL.last().unwrap();
+        let first = Setting::ALL[0];
+        let on_screen =
+            |buf: &ratatui::buffer::Buffer, h: u16, text: &str| (0..h).any(|y| buffer_row(buf, y).contains(text));
+        for (w, h) in [(80u16, 20u16), (130, 24), (80, 12)] {
+            let top = settings_buffer(w, h, first, Focus::List);
+            let screen: String = (0..h).map(|y| buffer_row(&top, y)).collect::<Vec<_>>().join("\n");
+            assert!(screen.contains(i.more_below) && screen.contains("more"), "{w}x{h}: ▼ at the top:\n{screen}");
+            assert!(!screen.contains(i.more_above), "{w}x{h}: nothing above the first row:\n{screen}");
+            assert!(on_screen(&top, h, first.label(Lang::En)), "{w}x{h}: the selected row");
+            assert!(on_screen(&top, h, first.about(Lang::En).split(' ').next().unwrap()), "{w}x{h}: its description");
+            let y = (0..h).find(|y| buffer_row(&top, *y).contains("more")).unwrap();
+            let left = pane_left(&top);
+            let cue = (left..w).find(|x| top[(*x, y)].symbol() == i.more_below).unwrap();
+            assert_eq!((top[(cue, y)].fg, top[(cue, y)].modifier.contains(Modifier::BOLD)), (MUTED, true), "muted");
+
+            let end = settings_buffer(w, h, last, Focus::List);
+            let screen: String = (0..h).map(|y| buffer_row(&end, y)).collect::<Vec<_>>().join("\n");
+            assert!(screen.contains(i.more_above) && screen.contains("more"), "{w}x{h}: ▲ at the end:\n{screen}");
+            assert!(!screen.contains(i.more_below), "{w}x{h}: nothing below the last row:\n{screen}");
+            assert!(on_screen(&end, h, last.label(Lang::En)), "{w}x{h}: the selected row");
+            assert!(on_screen(&end, h, last.about(Lang::En).split(' ').next().unwrap()), "{w}x{h}: its description");
+        }
+        // In the middle, both ways.
+        let middle = settings_buffer(80, 20, Setting::ALL[Setting::ALL.len() / 2], Focus::List);
+        let screen: String = (0..20).map(|y| buffer_row(&middle, y)).collect::<Vec<_>>().join("\n");
+        assert!(screen.contains(i.more_above) && screen.contains(i.more_below), "{screen}");
+    }
+
+    #[test]
+    fn a_tall_settings_window_shows_no_more_cue() {
+        let i = icons(IconSet::Emoji);
+        for select in [Setting::ALL[0], *Setting::ALL.last().unwrap()] {
+            let buf = settings_buffer(130, 70, select, Focus::List);
+            let screen: String = (0..70).map(|y| buffer_row(&buf, y)).collect::<Vec<_>>().join("\n");
+            let cue = screen.contains(" more") || screen.contains(i.more_above) || screen.contains(i.more_below);
+            assert!(!cue, "{screen}");
         }
     }
 }

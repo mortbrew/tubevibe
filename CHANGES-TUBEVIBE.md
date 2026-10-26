@@ -1135,7 +1135,70 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   layout and the width settings; stacked panes take the full width.
 
 
-## Unreleased (0.8.9)
+## 0.9.0: security fixes, boxvibe-style Settings and Help, centred video tab, O for Settings (2026-10-26)
+
+- **Cookie export trimmed (security).** yt-dlp's `--cookies-from-browser` exports
+  every site's cookies; right after the export only the YouTube and Google
+  ones (`youtube.com`, `google.*`, `googlevideo.com`, `ytimg.com`, …) are
+  kept. Every cookie file (the export, the per-run and mpv copies) is
+  owner-only (`0600`) and the cache folder `0700`. An export left by an older
+  version is trimmed the next time it is used.
+- **TLS crates updated (security).** `rustls` 0.23.46, `rustls-webpki` 0.103.16
+  and `webpki-roots` 1.0.11 (lockfile only); `cargo audit` goes from 6
+  advisories to none.
+- **History waits for the login.** Opening History right at startup showed
+  "Not logged in" while the browser login was still being read. It now says
+  it is waiting, and asks YouTube as soon as the login is ready (the feeds'
+  hidden watched videos wait the same way). If the login fails, you get its
+  error and the local history.
+- **Browser picker lists the browser you used last first.** Sorted by when each
+  profile's cookie database was last written; the others keep their order.
+- **Video tab: picture and text centred.** The thumbnail, the gap and the text
+  beside it (title, channel, stats, AI Summary) sit in the middle of the pane as
+  one group, the text at most 66 columns wide (40 at least) so lines no longer
+  stretch on wide windows. The picture still fills the height down to Up Next,
+  and is centred vertically when it does not. The drawing centres the picture
+  in its cells too, so kitty, sixel, iTerm2 and half blocks all line up.
+- **Settings look like boxvibe's** (same labels, Title Case and theme colours):
+  the title carries the 🔧 icon in the text colour; the border is bright (the text
+  colour) while the list has the keys and dim otherwise; one cell of air inside the
+  border on both sides; rows indent three spaces before the icon; the selected row
+  is a reverse-video bar (no `▌` marker) that turns into a shade when the menu has
+  the keys; a login in use shows green and none shows muted; the description
+  under the list wraps with trimmed lines, flush with the rows. In a narrow window
+  long labels are cut with `…` so every value stays in view (before, at 80 columns
+  the values were pushed off the pane).
+- **`O` opens Settings** (it was `S`), like boxvibe; `S` is free. It works from
+  the same places as the other capital-letter screens, and typing in a text
+  field still types it. Help, the README and the keymap tests follow.
+- **Help looks like boxvibe's.** One centred popup (as wide as its longest
+  line) instead of boxed columns: a bright border, a title with the keyboard
+  and "tubevibe Help · Any Key Closes", an orange bold uppercase header per
+  section, filled key caps with the descriptions in one straight column
+  (long ones wrap under themselves), and a muted line about Settings
+  (Shift+O) at the end. The rest of the screen fades while it is open and the
+  bar shows `Esc Close` and `? Close`. The popup leaves the status line and
+  the bar free; when everything still doesn't fit (its blank rows go first)
+  the help scrolls, as before, and the title says so. Same shortcuts, both
+  languages.
+
+- **Settings says when more is off screen.** In a window too short for every
+  setting, the last row of the list shows a muted chevron and "more" (the
+  menu's own chevrons: `▼` below, `▲` above, in the active icon set); the
+  selected setting and its description always stay in view. Nothing shows
+  when everything fits. (boxvibe's Settings has no such cue.)
+
+- **A wide Help flows into two columns.** From 100 columns up the Help popup
+  grows (up to 120 wide, centred) and the sections flow into two top-aligned,
+  balanced columns with a gutter between them, each with the same key caps and
+  aligned descriptions, the closing line under both. Sections stay whole
+  (one is split, with "(cont.)", only when that is what saves scrolling), and
+  each column is as wide as its own text needs. At 130x40 and 130x70 it fits
+  without scrolling (Spanish at 130x40 borrows the status line). Narrower
+  windows keep the single column, and scrolling keeps working when the
+  content still doesn't fit.
+
+## 0.8.9: Linux-only releases, key-cap bar, thumbnails, shorter labels (2026-10-23)
 
 ### Room to breathe
 
