@@ -1188,6 +1188,16 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   selected setting and its description always stay in view. Nothing shows
   when everything fits. (boxvibe's Settings has no such cue.)
 
+- **A wide Help flows into two columns.** From 100 columns up the Help popup
+  grows (up to 120 wide, centred) and the sections flow into two top-aligned,
+  balanced columns with a gutter between them, each with the same key caps and
+  aligned descriptions, the closing line under both. Sections stay whole
+  (one is split, with "(cont.)", only when that is what saves scrolling), and
+  each column is as wide as its own text needs. At 130x40 and 130x70 it fits
+  without scrolling (Spanish at 130x40 borrows the status line). Narrower
+  windows keep the single column, and scrolling keeps working when the
+  content still doesn't fit.
+
 ## Unreleased (0.8.9)
 
 ### Room to breathe

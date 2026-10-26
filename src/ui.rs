@@ -2604,10 +2604,29 @@ pub fn dialog_area(state: &State, screen: Rect) -> Option<Rect> {
 
 /// Help, like boxvibe's: one centred popup, a bold orange uppercase header
 /// per section, the keys as filled key caps in a left column and what they
-/// do in one straight column beside them, then a muted closing line. Wide
-/// enough for its longest line (and the title); a window too narrow for that
-/// wraps the descriptions under themselves.
+/// do in one straight column beside them, then a muted closing line. A wide
+/// window gets a wider popup with the sections flowed into two balanced
+/// columns; a narrower one keeps a single column, wide enough for its longest
+/// line (and the title), with longer descriptions wrapped under themselves.
 const HELP_INDENT: usize = 2;
+/// A window this wide (or wider) gets two columns.
+const HELP_TWO_COLUMNS_FROM: u16 = 100;
+/// The widest the two-column popup gets, and the space left either side of it.
+const HELP_MAX_WIDTH: u16 = 120;
+const HELP_MARGIN: u16 = 3;
+/// Blank cells between the two columns.
+const HELP_GUTTER: usize = 3;
+
+/// A way to cut Help in two: (rows in the taller column, distance from equal
+/// widths, the left column's width, the first item of the right column).
+type Cut = (usize, usize, usize, usize);
+
+/// One header or one key row (with its wrapped lines) of Help.
+struct HelpItem {
+    title: String,
+    header: bool,
+    lines: Vec<Line<'static>>,
+}
 
 /// Help's popup: where it goes and every line in it, already wrapped. A
 /// short window drops the blank rows between the sections first; what is
@@ -2629,50 +2648,147 @@ fn help_layout(screen: Rect, lang: Lang) -> (Rect, Vec<Line<'static>>) {
     let lead = HELP_INDENT + key_w + 2 + 2;
     let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1).to_string();
     let titles_w = [false, true].map(|scrolls| help_title(lang, scrolls).width() + 2).into_iter().max().unwrap_or(0);
-    // Its natural width: the longest line unwrapped, one blank cell and the borders.
-    let longest = rows().map(|(_, d)| lead + Span::raw(*d).width()).max().unwrap_or(0);
-    let longest = longest.max(1 + Span::raw(footer.as_str()).width());
-    let width = ((longest.max(titles_w) + 3).min(usize::from(screen.width))) as u16;
+    // The longest line unwrapped, with the blank cell after it.
+    let longest = rows().map(|(_, d)| lead + Span::raw(*d).width()).max().unwrap_or(0) + 1;
+    let two = full.width >= HELP_TWO_COLUMNS_FROM;
+    let width = if two {
+        let natural = 2 * longest.max(2 + Span::raw(footer.as_str()).width()) + HELP_GUTTER + 2;
+        let room = full.width.saturating_sub(2 * HELP_MARGIN).min(HELP_MAX_WIDTH);
+        natural.max(titles_w + 3).min(usize::from(room)) as u16
+    } else {
+        let longest = longest.max(2 + Span::raw(footer.as_str()).width());
+        (longest.max(titles_w) + 2).min(usize::from(full.width)) as u16
+    };
     let inner = usize::from(width.saturating_sub(2));
-    // Descriptions wrap in what is left of the row, with a blank cell at the edge.
-    let room = inner.saturating_sub(lead + 1).max(1);
-    let build = |blanks: bool| {
+    // Every header and key row of Help, its descriptions wrapped in `room`.
+    let make_items = |room: usize| -> Vec<HelpItem> {
+        sections
+            .iter()
+            .flat_map(|(title, rows)| {
+                let header = HelpItem {
+                    title: title.to_uppercase(),
+                    header: true,
+                    lines: vec![Line::from(Span::styled(
+                        format!(" {}", title.to_uppercase()),
+                        Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+                    ))],
+                };
+                let keys = rows.iter().map(move |(key, description)| {
+                    let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
+                    let lines = wrapped
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, line)| {
+                            let mut spans = if i == 0 {
+                                vec![
+                                    Span::raw(" ".repeat(HELP_INDENT)),
+                                    Span::styled(format!(" {key} "), key_style(key, BG).bg(FG)),
+                                    Span::raw(" ".repeat(key_w - Span::raw(key.as_str()).width() + 2)),
+                                ]
+                            } else {
+                                vec![Span::raw(" ".repeat(lead))]
+                            };
+                            spans.extend(line.spans);
+                            Line::from(spans)
+                        })
+                        .collect();
+                    HelpItem { title: title.to_uppercase(), header: false, lines }
+                });
+                std::iter::once(header).chain(keys)
+            })
+            .collect()
+    };
+    // A column of items: a blank line between sections, and a header again
+    // when a section carries on from the other column.
+    let column = |items: &[HelpItem], blanks: bool| -> Vec<Line<'static>> {
         let mut lines: Vec<Line<'static>> = Vec::new();
-        for (n, (title, rows)) in sections.iter().enumerate() {
-            if blanks && n > 0 {
+        for (n, item) in items.iter().enumerate() {
+            if item.header && blanks && n > 0 {
                 lines.push(Line::raw(""));
             }
-            lines.push(Line::from(Span::styled(
-                format!(" {}", title.to_uppercase()),
-                Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
-            )));
-            for (key, description) in rows {
-                let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
-                for (i, line) in wrapped.into_iter().enumerate() {
-                    let mut spans = if i == 0 {
-                        vec![
-                            Span::raw(" ".repeat(HELP_INDENT)),
-                            Span::styled(format!(" {key} "), key_style(key, BG).bg(FG)),
-                            Span::raw(" ".repeat(key_w - Span::raw(key.as_str()).width() + 2)),
-                        ]
-                    } else {
-                        vec![Span::raw(" ".repeat(lead))]
-                    };
-                    spans.extend(line.spans);
-                    lines.push(Line::from(spans));
-                }
+            if n == 0 && !item.header {
+                lines.push(Line::from(Span::styled(
+                    format!(" {} (cont.)", item.title),
+                    Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+                )));
             }
+            lines.extend(item.lines.iter().cloned());
         }
+        lines
+    };
+    let closing_width = inner.saturating_sub(2).max(1);
+    let closing = |lines: &mut Vec<Line<'static>>, blanks: bool| {
         if blanks {
             lines.push(Line::raw(""));
         }
-        let closing = wrap_spans(&[Span::styled(footer.clone(), MUTED)], inner.saturating_sub(2).max(1));
+        let closing = wrap_spans(&[Span::styled(footer.clone(), MUTED)], closing_width);
         lines.extend(closing.into_iter().map(|mut l| {
             l.spans.insert(0, Span::styled(" ", MUTED));
             l
         }));
+    };
+    let one_column = |blanks: bool| {
+        let mut lines = column(&make_items(inner.saturating_sub(lead + 1).max(1)), blanks);
+        closing(&mut lines, blanks);
         lines
     };
+    // Two columns, each as wide as its sections need: try every width of the
+    // left one and every place to cut, and keep the shortest result (cutting
+    // inside a section has to save a few rows to be worth it, then a section
+    // starts the second column again with "(cont.)").
+    let two_columns = |blanks: bool| {
+        let total = inner - HELP_GUTTER;
+        let narrowest = (lead + 13).min(total / 2);
+        let by_width: Vec<Vec<HelpItem>> =
+            (0..=total).map(|w| if w.min(total - w) < narrowest { vec![] } else { make_items(w - lead - 1) }).collect();
+        let n = by_width[total / 2].len();
+        // Rows in `items[from..to]` as `column` makes them.
+        let rows = |items: &[HelpItem], from: usize, to: usize| -> usize {
+            let lines: usize = items[from..to].iter().map(|i| i.lines.len()).sum();
+            let headers = items[from..to].iter().skip(1).filter(|i| i.header).count();
+            lines + if blanks { headers } else { 0 } + usize::from(!items[from].header)
+        };
+        // The rows the popup has for the columns when it takes the status line.
+        let mut closing_rows = Vec::new();
+        closing(&mut closing_rows, blanks);
+        let limit = usize::from(full.height.saturating_sub(1)).saturating_sub(2 + closing_rows.len());
+        // (rows, how far from equal widths, left width, cut): the best that
+        // keeps every section whole, and the best that may split one.
+        let (mut whole, mut any): (Option<Cut>, Option<Cut>) = (None, None);
+        for left_w in narrowest..=total - narrowest {
+            let (left, right) = (&by_width[left_w], &by_width[total - left_w]);
+            for cut in (1..n).filter(|k| !left[k - 1].header) {
+                let tall = rows(left, 0, cut).max(rows(right, cut, n));
+                let key = (tall, left_w.abs_diff(total / 2), left_w, cut);
+                let slot = if left[cut].header { &mut whole } else { &mut any };
+                if slot.is_none_or(|b| (key.0, key.1) < (b.0, b.1)) {
+                    *slot = Some(key);
+                }
+            }
+        }
+        // A section is only split when that is what saves scrolling.
+        let best = match (whole, any) {
+            (Some(w), Some(a)) if w.0 > limit && a.0 <= limit => Some(a),
+            (w, _) => w,
+        };
+        let (_, _, left_w, cut) = best.unwrap_or((0, 0, total / 2, n));
+        let left = column(&by_width[left_w][..cut], blanks);
+        let right = column(&by_width[total - left_w][cut..], blanks);
+        let mut lines: Vec<Line<'static>> = (0..left.len().max(right.len()))
+            .map(|y| {
+                let mut spans = left.get(y).map(|l| l.spans.clone()).unwrap_or_default();
+                if let Some(right) = right.get(y) {
+                    let used: usize = spans.iter().map(Span::width).sum();
+                    spans.push(Span::raw(" ".repeat((left_w + HELP_GUTTER).saturating_sub(used))));
+                    spans.extend(right.spans.clone());
+                }
+                Line::from(spans)
+            })
+            .collect();
+        closing(&mut lines, blanks);
+        lines
+    };
+    let build = |blanks: bool| if two { two_columns(blanks) } else { one_column(blanks) };
     // The status line and the hint bar stay free (the bar says what closes the
     // help). A window that is just short of room for the whole help lends the
     // status line too; beyond that the help scrolls.
@@ -3845,7 +3961,7 @@ mod tests {
     fn help_shows_every_section_with_explanations() {
         let mut s = state();
         s.update(Action::ToggleHelp);
-        let screen = render_screen(&s, 130, 120).join("\n");
+        let screen = render_screen(&s, 99, 120).join("\n");
         for (title, rows) in keymap::help(Lang::Es) {
             assert!(screen.contains(&title.to_uppercase()), "{title}\n{screen}");
             for (_, description) in rows {
@@ -5733,7 +5849,7 @@ mod tests {
     #[test]
     fn no_help_row_is_clipped() {
         for lang in [Lang::Es, Lang::En] {
-            for (w, h) in [(130u16, 70u16), (130, 40), (100, 40), (80, 30), (60, 24)] {
+            for (w, h) in [(130u16, 70u16), (130, 40), (100, 40), (100, 30), (99, 40), (80, 30), (60, 24)] {
                 let (area, lines) = help_layout(Rect::new(0, 0, w, h), lang);
                 assert!(area.right() <= w && area.bottom() <= h, "{lang:?} {w}x{h}: {area:?}");
                 let mut s = state();
@@ -5840,6 +5956,76 @@ mod tests {
             assert!(!(1..area.height - 1).any(|y| popup_row(&top, area, area.y + y).contains(footer)));
             let (end, area) = help_buffer(80, 30, lang, 500);
             assert!((1..area.height - 1).any(|y| popup_row(&end, area, area.y + y).contains(footer)), "{lang:?}");
+        }
+    }
+
+    /// A wide window flows Help into two columns, top-aligned and balanced,
+    /// with the closing line under both; a narrower one keeps one column.
+    #[test]
+    fn a_wide_help_flows_into_two_columns() {
+        for lang in [Lang::En, Lang::Es] {
+            let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1);
+            let sections = keymap::help(lang);
+            let first = sections[0].0.to_uppercase();
+            for (w, h, scrolls) in [(130u16, 70u16, false), (130, 40, false), (100, 30, true)] {
+                let (buf, area) = help_buffer(w, h, lang, 0);
+                let wide = (w - 2 * HELP_MARGIN).min(HELP_MAX_WIDTH);
+                assert_eq!(area.width, wide, "{lang:?} {w}x{h}: a wide, centred popup");
+                assert_eq!(area.x, (w - area.width) / 2);
+                let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+                assert_eq!(title.contains('↑'), scrolls, "{lang:?} {w}x{h}: {title}");
+                let first_row = popup_row(&buf, area, area.y + 1);
+                let cells: Vec<char> = first_row.chars().collect();
+                let left = first_row[..first_row.find(&first).unwrap_or_else(|| panic!("{first_row}"))].chars().count();
+                let end = left + first.chars().count();
+                let right = (end..cells.len()).find(|i| cells[*i] != ' ').unwrap_or_else(|| panic!("{first_row}"));
+                assert!(right - end >= HELP_GUTTER, "{lang:?} {w}x{h}: a gutter: {first_row}");
+                assert!(right > cells.len() / 3, "{lang:?} {w}x{h}: a header starts the second column: {first_row}");
+                for y in area.y + 1..area.bottom() - 1 {
+                    assert_eq!(buf[(area.right() - 1, y)].symbol(), "│", "{lang:?} {w}x{h}: row {y}");
+                }
+                // Both columns keep the key caps and the straight descriptions.
+                let row = area.y + 2;
+                let text = popup_row(&buf, area, row);
+                let is_cap = |x: &u16| buf[(*x, row)].bg == FG && buf[(*x, row)].fg == BG;
+                let caps: Vec<u16> = (area.x + 1..area.right() - 1).filter(is_cap).collect();
+                assert!(caps.first().is_some_and(|x| *x < area.x + 8), "{text}");
+                let half = area.x + area.width / 2;
+                assert!(caps.last().is_some_and(|x| *x > half), "a cap in the right column too: {text}");
+                if !scrolls {
+                    let below = (area.y + 1..area.bottom() - 1).find(|y| popup_row(&buf, area, *y).contains(footer));
+                    let below = below.unwrap_or_else(|| panic!("{lang:?} {w}x{h}: the closing line"));
+                    let text = popup_row(&buf, area, below);
+                    assert!(text.starts_with(&format!(" {footer}")), "under both columns: {text}");
+                    // Sections stay whole unless splitting one is what saves the scroll
+                    // (Spanish at 130x40).
+                    let split = (area.y + 1..below).any(|y| popup_row(&buf, area, y).contains("(cont.)"));
+                    assert!(!split || (lang, w, h) == (Lang::Es, 130, 40), "{lang:?} {w}x{h}: whole sections");
+                }
+            }
+            // The closing line is reachable by scrolling when it doesn't fit.
+            let (end, area) = help_buffer(100, 30, lang, 500);
+            assert!((area.y + 1..area.bottom() - 1).any(|y| popup_row(&end, area, y).contains(footer)), "{lang:?}");
+        }
+    }
+
+    /// Under 100 columns Help keeps one column, and scrolls when it is short.
+    #[test]
+    fn a_narrower_help_keeps_one_column() {
+        for lang in [Lang::En, Lang::Es] {
+            let sections = keymap::help(lang);
+            let (a, b) = (sections[0].0.to_uppercase(), sections[4].0.to_uppercase());
+            for (w, h) in [(80u16, 30u16), (99, 40)] {
+                let (buf, area) = help_buffer(w, h, lang, 0);
+                assert!(area.width < 90, "{lang:?} {w}x{h}: {area:?}");
+                let screen: Vec<String> = (area.y..area.bottom()).map(|y| popup_row(&buf, area, y)).collect();
+                assert!(screen.iter().all(|r| !(r.contains(&a) && r.contains(&b))), "{lang:?} {w}x{h}: one column");
+            }
+            let (buf, area) = help_buffer(80, 30, lang, 0);
+            let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+            assert!(title.contains('↑'), "{lang:?}: it scrolls: {title}");
+            let (_, area) = help_buffer(HELP_TWO_COLUMNS_FROM, 40, lang, 0);
+            assert!(area.width > 90, "two columns from {HELP_TWO_COLUMNS_FROM} wide");
         }
     }
 
