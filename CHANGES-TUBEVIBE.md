@@ -1135,7 +1135,7 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   layout and the width settings; stacked panes take the full width.
 
 
-## Unreleased (0.9.0)
+## 0.9.0: security fixes, boxvibe-style Settings and Help, centred video tab, O for Settings (2026-10-26)
 
 - **Cookie export trimmed (security).** yt-dlp's `--cookies-from-browser` exports
   every site's cookies; right after the export only the YouTube and Google
@@ -1198,7 +1198,7 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   windows keep the single column, and scrolling keeps working when the
   content still doesn't fit.
 
-## Unreleased (0.8.9)
+## 0.8.9: Linux-only releases, key-cap bar, thumbnails, shorter labels (2026-10-23)
 
 ### Room to breathe
 
