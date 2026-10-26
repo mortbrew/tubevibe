@@ -893,7 +893,7 @@ impl Runtime {
             Effect::ScanBrowsers { id } => {
                 let home = directories::BaseDirs::new().map(|d| d.home_dir().to_owned()).unwrap_or_default();
                 let mut profiles =
-                    session::scan_browsers(&home, &session::resolve_keyring(&self.state.config.session.keyring));
+                    session::scan_browsers_recent(&home, &session::resolve_keyring(&self.state.config.session.keyring));
                 profiles.push(String::new()); // "Sin sesión"
                 self.send(Action::Loaded(id, Ok(Items::Profiles(profiles))));
             }

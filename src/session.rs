@@ -73,6 +73,20 @@ const FIREFOX: &[&str] = &["Library/Application Support/Firefox/Profiles"];
 /// `--cookies-from-browser` specs (`brave+KEYRING:Default`, `firefox:abcd.default`,
 /// `firefox:/home/me/snap/firefox/common/.mozilla/firefox/abcd.default`).
 pub fn scan_browsers(home: &Path, keyring: &str) -> Vec<String> {
+    scan_browsers_used(home, keyring).into_iter().map(|(spec, _)| spec).collect()
+}
+
+/// [`scan_browsers`], the browser used most recently first. The rest keep
+/// their order, and the ones whose use is unknown go last.
+pub fn scan_browsers_recent(home: &Path, keyring: &str) -> Vec<String> {
+    let mut found = scan_browsers_used(home, keyring);
+    found.sort_by_key(|(_, used)| std::cmp::Reverse(*used)); // stable; `None` is the least
+    found.into_iter().map(|(spec, _)| spec).collect()
+}
+
+/// [`scan_browsers`], each with when the browser last wrote its cookies (unix
+/// time): the one in use shows today.
+pub fn scan_browsers_used(home: &Path, keyring: &str) -> Vec<(String, Option<i64>)> {
     let keyring = if keyring.is_empty() { String::new() } else { format!("+{keyring}") };
     let mut found = Vec::new();
     for (name, dirs) in CHROMIUM {
@@ -81,8 +95,9 @@ pub fn scan_browsers(home: &Path, keyring: &str) -> Vec<String> {
                 let is_profile = profile == "Default" || profile.starts_with("Profile ");
                 let base = home.join(dir).join(&profile);
                 if is_profile && (base.join("Cookies").exists() || base.join("Network/Cookies").exists()) {
+                    let used = last_written(&[&base.join("Cookies"), &base.join("Network/Cookies")]);
                     let profile = if i == 0 { profile } else { base.display().to_string() };
-                    found.push(format!("{name}{keyring}:{profile}"));
+                    found.push((format!("{name}{keyring}:{profile}"), used));
                 }
             }
         }
@@ -91,12 +106,31 @@ pub fn scan_browsers(home: &Path, keyring: &str) -> Vec<String> {
         for profile in subdirs(&home.join(dir)) {
             let base = home.join(dir).join(&profile);
             if base.join("cookies.sqlite").exists() {
+                let used = last_written(&[&base.join("cookies.sqlite")]);
                 let profile = if i == 0 { profile } else { base.display().to_string() };
-                found.push(format!("firefox:{profile}"));
+                found.push((format!("firefox:{profile}"), used));
             }
         }
     }
     found
+}
+
+/// When the newest of these cookie databases, or their journals (`-wal`,
+/// `-journal`), was written (unix time).
+fn last_written(databases: &[&Path]) -> Option<i64> {
+    databases
+        .iter()
+        .flat_map(|db| ["", "-wal", "-journal"].map(|suffix| with_suffix(db, suffix)))
+        .filter_map(|path| std::fs::metadata(path).and_then(|m| m.modified()).ok())
+        .filter_map(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .max()
+}
+
+fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    PathBuf::from(name)
 }
 
 /// The keyring to use: `configured` if set, else the one detected on this machine.
@@ -596,6 +630,36 @@ mod tests {
         assert_eq!(label(&format!("chrome+GNOMEKEYRING:{flatpak}")), "chrome (flatpak) · Default");
         assert_eq!(label("brave+GNOMEKEYRING:Profile 1"), "brave · Profile 1");
         assert_eq!(label("firefox"), "firefox");
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    #[test]
+    fn the_browser_used_last_comes_first() {
+        let home = temp_dir("recent");
+        let touch = |p: &str, secs_ago: u64| {
+            let path = home.join(p);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let file = std::fs::File::create(path).unwrap();
+            file.set_modified(SystemTime::now() - Duration::from_secs(secs_ago)).unwrap();
+        };
+        touch(".config/BraveSoftware/Brave-Browser/Default/Cookies", 5000);
+        touch(".config/google-chrome/Default/Cookies", 9000);
+        touch(".config/google-chrome/Profile 1/Network/Cookies", 9000);
+        touch(".mozilla/firefox/ab12.default/cookies.sqlite", 8000);
+        // Firefox wrote to its journal a minute ago: that is the use.
+        touch(".mozilla/firefox/ab12.default/cookies.sqlite-wal", 60);
+        touch(".config/vivaldi/Default/Cookies", 100_000);
+        assert_eq!(
+            scan_browsers_recent(&home, ""),
+            ["firefox:ab12.default", "brave:Default", "chrome:Default", "chrome:Profile 1", "vivaldi:Default"],
+            "newest first; a tie keeps the scan order"
+        );
+        // The plain scan is unchanged.
+        assert_eq!(scan_browsers(&home, "")[0], "brave:Default");
+        assert_eq!(scan_browsers(&home, "").len(), 5);
+        // Nothing to go by: the scan order.
+        let none = temp_dir("recent-none");
+        assert!(scan_browsers_recent(&none, "").is_empty());
     }
 
     #[test]

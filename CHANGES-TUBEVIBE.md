@@ -1143,16 +1143,16 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   kept. Every cookie file (the export, the per-run and mpv copies) is
   owner-only (`0600`) and the cache folder `0700`. An export left by an older
   version is trimmed the next time it is used.
-
 - **TLS crates updated (security).** `rustls` 0.23.46, `rustls-webpki` 0.103.16
   and `webpki-roots` 1.0.11 (lockfile only); `cargo audit` goes from 6
   advisories to none.
-
 - **History waits for the login.** Opening History right at startup showed
   "Not logged in" while the browser login was still being read. It now says
   it is waiting, and asks YouTube as soon as the login is ready (the feeds'
   hidden watched videos wait the same way). If the login fails, you get its
   error and the local history.
+- **Browser picker lists the browser you used last first.** Sorted by when each
+  profile's cookie database was last written; the others keep their order.
 
 ## Unreleased (0.8.9)
 
