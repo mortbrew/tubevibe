@@ -1135,6 +1135,15 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   layout and the width settings; stacked panes take the full width.
 
 
+## Unreleased (0.9.0)
+
+- **Cookie export trimmed (security).** yt-dlp's `--cookies-from-browser` exports
+  every site's cookies; right after the export only the YouTube and Google
+  ones (`youtube.com`, `google.*`, `googlevideo.com`, `ytimg.com`, …) are
+  kept. Every cookie file (the export, the per-run and mpv copies) is
+  owner-only (`0600`) and the cache folder `0700`. An export left by an older
+  version is trimmed the next time it is used.
+
 ## Unreleased (0.8.9)
 
 ### Room to breathe
