@@ -1159,6 +1159,9 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
   stretch on wide windows. The picture still fills the height down to Up Next,
   and is centred vertically when it does not. The drawing centres the picture
   in its cells too, so kitty, sixel, iTerm2 and half blocks all line up.
+- **`O` opens Settings** (it was `S`), like boxvibe; `S` is free. It works from
+  the same places as the other capital-letter screens, and typing in a text
+  field still types it. Help, the README and the keymap tests follow.
 
 ## Unreleased (0.8.9)
 

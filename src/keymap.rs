@@ -42,7 +42,7 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
     ('}', "}", Action::ResizeMenu(1), Text::new("menú más ancho (se guarda)", "menu wider (saved)")),
     ('Q', "Q", Action::AskQuit, Text::new("salir", "quit")),
     ('R', "R", Action::GoSection(Section::Inicio), Text::new("abrir Mis recomendados", "open My Recommendations")),
-    ('S', "S", Action::GoSection(Section::Configuracion), Text::new("abrir Configuración", "open Settings")),
+    ('O', "O", Action::GoSection(Section::Configuracion), Text::new("abrir Configuración", "open Settings")),
     ('A', "A", Action::GoSection(Section::AcercaDe), Text::new("abrir Acerca de", "open About")),
     (
         'Y',
@@ -168,7 +168,7 @@ pub fn global_rows(lang: Lang) -> Vec<(String, &'static str)> {
         ("?  L".into(), pick("esta ayuda · idioma: English", "this help · language: español")),
         ("M  {  }".into(), pick("menú sí / no · más angosto / ancho", "menu on / off · narrower / wider")),
         ("Q  Ctrl+C".into(), pick("salir / salir ya", "quit / quit now")),
-        ("R  S  A".into(), pick("Recomendados, Configuración, Acerca de", "My Recommendations, Settings, About")),
+        ("R  O  A".into(), pick("Recomendados, Configuración, Acerca de", "My Recommendations, Settings, About")),
         ("Y  V".into(), pick("abrir Ver después: YouTube / tubevibe", "open Watch Later: YouTube / tubevibe")),
     ]
 }
@@ -594,6 +594,20 @@ mod tests {
         // Windows reports both press and release.
         let release = KeyEvent { kind: KeyEventKind::Release, state: KeyEventState::NONE, ..ctrl('y') };
         assert_eq!(map(release, LISTS), None);
+    }
+
+    #[test]
+    fn capital_o_opens_settings_and_capital_s_does_nothing() {
+        let shift = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+        for ctx in [LISTS, TAB, KeyContext { related: true, ..TAB }] {
+            assert_eq!(map(shift('O'), ctx), Some(Action::GoSection(Section::Configuracion)), "{ctx:?}");
+            assert_eq!(map(shift('S'), ctx), None, "S is free: {ctx:?}");
+        }
+        // Typing still types both.
+        assert_eq!(map(shift('O'), TYPING), Some(Action::Input('O')));
+        assert_eq!(map(shift('S'), TYPING), Some(Action::Input('S')));
+        // The lowercase o keeps its own job on a video tab.
+        assert_eq!(map(char('o'), TAB), Some(Action::CycleSubLang));
     }
 
     #[test]

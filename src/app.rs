@@ -7908,7 +7908,7 @@ mod tests {
         let shift = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
         let pos = |sec| Section::ALL.iter().position(|s| *s == sec).unwrap();
         for (c, sec) in [
-            ('S', Section::Configuracion),
+            ('O', Section::Configuracion),
             ('A', Section::AcercaDe),
             ('Y', Section::VerDespues),
             ('V', Section::Guardados),
