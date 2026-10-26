@@ -1171,6 +1171,16 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 - **`O` opens Settings** (it was `S`), like boxvibe; `S` is free. It works from
   the same places as the other capital-letter screens, and typing in a text
   field still types it. Help, the README and the keymap tests follow.
+- **Help looks like boxvibe's.** One centred popup (as wide as its longest
+  line) instead of boxed columns: a bright border, a title with the keyboard
+  and "tubevibe Help · Any Key Closes", an orange bold uppercase header per
+  section, filled key caps with the descriptions in one straight column
+  (long ones wrap under themselves), and a muted line about Settings
+  (Shift+O) at the end. The rest of the screen fades while it is open and the
+  bar shows `Esc Close` and `? Close`. The popup leaves the status line and
+  the bar free; when everything still doesn't fit (its blank rows go first)
+  the help scrolls, as before, and the title says so. Same shortcuts, both
+  languages.
 
 ## Unreleased (0.8.9)
 

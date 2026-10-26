@@ -532,6 +532,57 @@ pub fn draw(frame: &mut Frame, state: &State, view: &View) {
     BORDERS.set(state.config.ui.border_style);
     draw_screen(frame, state, view);
     theme::recolor(frame.buffer_mut(), &state.palette);
+    // Behind the help everything fades, the hint bar too, so the popup stands out.
+    if state.help
+        && !state.splash
+        && let Some(popup) = dialog_area(state, frame.area())
+    {
+        dim_behind(frame.buffer_mut(), popup, state.palette.background);
+    }
+}
+
+/// How much of its brightness and of its colour a cell keeps behind a popup.
+const DIM_BRIGHTNESS: f32 = 0.4;
+const DIM_SATURATION: f32 = 0.5;
+
+/// Every cell outside `popup` faded toward the theme background, to about 40%
+/// and greyer (boxvibe's dim).
+fn dim_behind(buffer: &mut ratatui::buffer::Buffer, popup: Rect, background: Color) {
+    let area = buffer.area;
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            if popup.contains(Position::new(x, y)) {
+                continue;
+            }
+            let cell = &mut buffer[(x, y)];
+            cell.fg = dim_color(cell.fg, background);
+            cell.bg = dim_color(cell.bg, background);
+        }
+    }
+}
+
+/// One colour, dimmed: RGB is desaturated, then blended toward the
+/// background; named and indexed colours (nothing to blend) turn dark grey.
+fn dim_color(color: Color, background: Color) -> Color {
+    let (br, bg, bb) = match background {
+        Color::Rgb(r, g, b) => (f32::from(r), f32::from(g), f32::from(b)),
+        _ => (0.0, 0.0, 0.0),
+    };
+    match color {
+        Color::Reset => Color::Reset,
+        c if c == background => c,
+        Color::Rgb(r, g, b) => {
+            let (r, g, b) = (f32::from(r), f32::from(g), f32::from(b));
+            let grey = 0.299 * r + 0.587 * g + 0.114 * b;
+            let fade = |c: f32, base: f32| {
+                let c = grey + (c - grey) * DIM_SATURATION;
+                (base + (c - base) * DIM_BRIGHTNESS).round().clamp(0.0, 255.0) as u8
+            };
+            Color::Rgb(fade(r, br), fade(g, bg), fade(b, bb))
+        }
+        Color::Black => Color::Black,
+        _ => Color::DarkGray,
+    }
 }
 
 fn draw_screen(frame: &mut Frame, state: &State, view: &View) {
@@ -2274,7 +2325,7 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
         };
         vec![yes, key(lang.pick("Otra tecla", "Other Key"), "no", "no")]
     } else if state.help {
-        vec![key(lang.pick("Cualquier tecla", "Any Key"), "cerrar ayuda", "close help")]
+        vec![key("Esc", "cerrar", "close")]
     } else if state.context.is_some() {
         vec![
             key("↑ ↓", "elegir", "choose"),
@@ -2484,7 +2535,8 @@ fn hint_rows(state: &State) -> Vec<(String, &'static str)> {
             !(MOVING.contains(&k.as_str()) || (k == "Tab" && !select_button) || (menu && k == "Enter"))
         });
     }
-    hints.push(all_keys);
+    // With the help open the last key closes it again, like boxvibe's bar.
+    hints.push(if state.help { key("?", "cerrar", "close") } else { all_keys });
     hints
 }
 
@@ -2529,98 +2581,131 @@ pub fn dialog_area(state: &State, screen: Rect) -> Option<Rect> {
     }
 }
 
-/// A help section: its title and its rows, already wrapped to the box.
-type HelpBox = (&'static str, Vec<Line<'static>>);
+/// Help, like boxvibe's: one centred popup, a bold orange uppercase header
+/// per section, the keys as filled key caps in a left column and what they
+/// do in one straight column beside them, then a muted closing line. Wide
+/// enough for its longest line (and the title); a window too narrow for that
+/// wraps the descriptions under themselves.
+const HELP_INDENT: usize = 2;
 
-/// The help's layout for a screen `width` wide: its width, the two columns
-/// of boxes (rows wrapped, continuation lines indented under the
-/// description) and the taller column's height.
-fn help_layout(width: u16, lang: Lang) -> (u16, [Vec<HelpBox>; 2], u16) {
-    let width = width.min(118);
-    // Outer border, a gap between the columns, each box's border.
-    let column = width.saturating_sub(3) / 2;
-    let text = usize::from(column.saturating_sub(2));
-    let mut boxes: Vec<HelpBox> = keymap::help(lang)
-        .into_iter()
-        .map(|(title, rows)| (title, help_rows(&rows, text)))
-        .collect();
-    let sizes: Vec<usize> = boxes.iter().map(|(_, lines)| lines.len() + 2).collect();
-    let split =
-        (1..boxes.len()).min_by_key(|&k| sizes[..k].iter().sum::<usize>().max(sizes[k..].iter().sum())).unwrap_or(1);
-    let right = boxes.split_off(split);
-    let height = |c: &[HelpBox]| c.iter().map(|(_, l)| l.len() as u16 + 2).sum::<u16>();
-    let tallest = height(&boxes).max(height(&right));
-    (width, [boxes, right], tallest)
-}
-
-/// One section's rows in `width` cells: keys aligned, then what they do,
-/// wrapped by cell width under itself.
-fn help_rows(rows: &[(String, &'static str)], width: usize) -> Vec<Line<'static>> {
-    let keys = rows.iter().map(|(k, _)| Span::raw(k.as_str()).width()).max().unwrap_or(0) + 2;
-    let room = width.saturating_sub(keys + 1).max(1);
-    let mut lines = Vec::new();
-    for (key, description) in rows {
-        let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
-        for (n, line) in wrapped.into_iter().enumerate() {
-            let lead = if n == 0 {
-                Span::styled(format!(" {}", pad_cells(key, keys)), key_style(key, CYAN))
-            } else {
-                Span::raw(" ".repeat(keys + 1))
-            };
-            let mut spans = vec![lead];
-            spans.extend(line.spans);
-            lines.push(Line::from(spans));
-        }
-    }
-    lines
-}
-
-/// The help's size: the taller column inside the outer border, capped to
-/// the screen (then it scrolls).
-fn help_area(screen: Rect, lang: Lang) -> Rect {
-    let (width, _, tallest) = help_layout(screen.width, lang);
-    centered(screen, width, tallest + 2)
-}
-
-fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
-    let (_, columns, tallest) = help_layout(frame.area().width, lang);
-    let area = help_area(frame.area(), lang);
-    frame.render_widget(Clear, area);
-    let scrolls = tallest + 2 > area.height;
-    let title = match (scrolls, lang) {
-        (false, Lang::Es) => " ⌨  Atajos de teclado · cualquier tecla cierra ",
-        (false, _) => " ⌨  Keyboard Shortcuts · Any Key Closes ",
-        (true, Lang::Es) => " ⌨  Atajos · ↑ ↓ desplazar · otra tecla cierra ",
-        (true, _) => " ⌨  Shortcuts · ↑ ↓ Scroll · Other Keys Close ",
-    };
-    let block = panel(title, MAGENTA);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    if inner.is_empty() {
-        return;
-    }
-    // Drawn whole off screen, then the visible rows copied in.
-    let full = Rect::new(0, 0, inner.width, tallest.max(1));
-    let mut buffer = ratatui::buffer::Buffer::empty(full);
-    let halves: [Rect; 2] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).spacing(1).areas(full);
-    for (boxes, column) in columns.iter().zip(halves) {
-        let heights = boxes.iter().map(|(_, lines)| Constraint::Length(lines.len() as u16 + 2));
-        for ((title, lines), cell) in boxes.iter().zip(Layout::vertical(heights).split(column).iter()) {
-            let block =
-                framed().border_style(Style::new().fg(LINE)).title(Line::from(format!(" {title} ")).fg(BLUE).bold());
-            ratatui::widgets::Widget::render(Paragraph::new(lines.clone()).block(block), *cell, &mut buffer);
-        }
-    }
-    let top = scroll.min(tallest.saturating_sub(inner.height));
-    for y in 0..inner.height.min(tallest - top) {
-        for x in 0..inner.width {
-            if let (Some(from), Some(to)) =
-                (buffer.cell((x, y + top)).cloned(), frame.buffer_mut().cell_mut((inner.x + x, inner.y + y)))
-            {
-                *to = from;
+/// Help's popup: where it goes and every line in it, already wrapped. A
+/// short window drops the blank rows between the sections first; what is
+/// still too tall scrolls.
+fn help_layout(screen: Rect, lang: Lang) -> (Rect, Vec<Line<'static>>) {
+    let full = screen;
+    // One space between the keys of a cap, as in boxvibe's.
+    let mut sections = keymap::help(lang);
+    for (_, rows) in &mut sections {
+        for (key, _) in rows.iter_mut() {
+            while key.contains("  ") {
+                *key = key.replace("  ", " ");
             }
         }
     }
+    // Every key cap is padded to the widest one, so the descriptions line up.
+    let rows = || sections.iter().flat_map(|(_, rows)| rows.iter());
+    let key_w = rows().map(|(k, _)| Span::raw(k.as_str()).width()).max().unwrap_or(0);
+    let lead = HELP_INDENT + key_w + 2 + 2;
+    let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1).to_string();
+    let titles_w = [false, true].map(|scrolls| help_title(lang, scrolls).width() + 2).into_iter().max().unwrap_or(0);
+    // Its natural width: the longest line unwrapped, one blank cell and the borders.
+    let longest = rows().map(|(_, d)| lead + Span::raw(*d).width()).max().unwrap_or(0);
+    let longest = longest.max(1 + Span::raw(footer.as_str()).width());
+    let width = ((longest.max(titles_w) + 3).min(usize::from(screen.width))) as u16;
+    let inner = usize::from(width.saturating_sub(2));
+    // Descriptions wrap in what is left of the row, with a blank cell at the edge.
+    let room = inner.saturating_sub(lead + 1).max(1);
+    let build = |blanks: bool| {
+        let mut lines: Vec<Line<'static>> = Vec::new();
+        for (n, (title, rows)) in sections.iter().enumerate() {
+            if blanks && n > 0 {
+                lines.push(Line::raw(""));
+            }
+            lines.push(Line::from(Span::styled(
+                format!(" {}", title.to_uppercase()),
+                Style::new().fg(ORANGE).add_modifier(Modifier::BOLD),
+            )));
+            for (key, description) in rows {
+                let wrapped = wrap_spans(&[Span::styled(description.to_string(), FG)], room);
+                for (i, line) in wrapped.into_iter().enumerate() {
+                    let mut spans = if i == 0 {
+                        vec![
+                            Span::raw(" ".repeat(HELP_INDENT)),
+                            Span::styled(format!(" {key} "), key_style(key, BG).bg(FG)),
+                            Span::raw(" ".repeat(key_w - Span::raw(key.as_str()).width() + 2)),
+                        ]
+                    } else {
+                        vec![Span::raw(" ".repeat(lead))]
+                    };
+                    spans.extend(line.spans);
+                    lines.push(Line::from(spans));
+                }
+            }
+        }
+        if blanks {
+            lines.push(Line::raw(""));
+        }
+        let closing = wrap_spans(&[Span::styled(footer.clone(), MUTED)], inner.saturating_sub(2).max(1));
+        lines.extend(closing.into_iter().map(|mut l| {
+            l.spans.insert(0, Span::styled(" ", MUTED));
+            l
+        }));
+        lines
+    };
+    // The status line and the hint bar stay free (the bar says what closes the
+    // help). A window that is just short of room for the whole help lends the
+    // status line too; beyond that the help scrolls.
+    let (roomy, tight) = (full.height.saturating_sub(2).max(1), full.height.saturating_sub(1).max(1));
+    let mut lines = build(true);
+    let mut screen = Rect { height: roomy, ..full };
+    if lines.len() as u16 + 2 > roomy {
+        lines = build(false);
+        if lines.len() as u16 + 2 > roomy && lines.len() as u16 + 2 <= tight {
+            screen.height = tight;
+        }
+    }
+    let height = (lines.len() as u16 + 2).min(screen.height);
+    (centered(screen, width, height), lines)
+}
+
+/// The popup's title: the keyboard, "tubevibe" as the menu's title shows it,
+/// "Help" and what closes it (or scrolls it, when it doesn't fit).
+fn help_title(lang: Lang, scrolls: bool) -> Line<'static> {
+    let rest = match (scrolls, lang) {
+        (false, Lang::Es) => " Ayuda · cualquier tecla cierra ",
+        (false, _) => " Help · Any Key Closes ",
+        (true, Lang::Es) => " Ayuda · ↑ ↓ desplazar · otra tecla cierra ",
+        (true, _) => " Help · ↑ ↓ Scroll · Other Keys Close ",
+    };
+    Line::from(vec![
+        Span::styled(" ⌨  ", Style::new().fg(FG).bold()),
+        Span::styled("tube", Style::new().fg(RED).bold()),
+        Span::styled(format!("vibe{rest}"), Style::new().fg(FG).bold()),
+    ])
+}
+
+/// The closing line under the keys.
+const HELP_FOOTER: (&str, &str) = (
+    "Tema, cuenta, animaciones y más: Configuración (Shift+O)",
+    "Theme, account, animations and more: Settings (Shift+O)",
+);
+
+fn help_area(screen: Rect, lang: Lang) -> Rect {
+    help_layout(screen, lang).0
+}
+
+fn draw_help(frame: &mut Frame, lang: Lang, scroll: u16) {
+    let (area, lines) = help_layout(frame.area(), lang);
+    frame.render_widget(Clear, area);
+    let scrolls = lines.len() as u16 + 2 > area.height;
+    let mut title = help_title(lang, scrolls);
+    if BORDERS.get() == BorderStyle::None {
+        title = title.patch_style(Style::new().bg(HIGHLIGHT).add_modifier(Modifier::BOLD));
+    }
+    let block = framed().border_style(Style::new().fg(FG)).title(title).style(Style::new().bg(BG));
+    let inner = block.inner(area);
+    let top = scroll.min((lines.len() as u16).saturating_sub(inner.height));
+    frame.render_widget(Paragraph::new(lines).scroll((top, 0)).block(block), area);
 }
 
 fn draw_confirm(frame: &mut Frame, confirm: &Confirm, lang: Lang) {
@@ -3739,9 +3824,9 @@ mod tests {
     fn help_shows_every_section_with_explanations() {
         let mut s = state();
         s.update(Action::ToggleHelp);
-        let screen = render(&s);
+        let screen = render_screen(&s, 130, 120).join("\n");
         for (title, rows) in keymap::help(Lang::Es) {
-            assert!(screen.contains(title), "{title}\n{screen}");
+            assert!(screen.contains(&title.to_uppercase()), "{title}\n{screen}");
             for (_, description) in rows {
                 assert!(screen.contains(description), "{description}\n{screen}");
             }
@@ -3944,7 +4029,7 @@ mod tests {
         }
         assert!(!screen.contains("Ver después"), "{screen}");
         s.update(Action::ToggleHelp);
-        assert!(render(&s).contains("Keyboard Shortcuts"));
+        assert!(render_screen(&s, 130, 120).join("\n").contains("tubevibe Help · Any Key Closes"));
     }
 
     #[test]
@@ -5622,31 +5707,127 @@ mod tests {
         }
     }
 
+    /// Every help line, whole, somewhere between the top and the bottom of
+    /// the scroll; and the popup stays inside the screen.
     #[test]
     fn no_help_row_is_clipped() {
         for lang in [Lang::Es, Lang::En] {
-            // 130x40: everything at once, no scrolling.
-            let (_, _, tallest) = help_layout(130, lang);
-            assert!(tallest + 2 <= 40, "{lang:?}: {tallest}");
-            for (w, h) in [(130u16, 40u16), (118, 40), (100, 40), (80, 30)] {
-                let (width, columns, tallest) = help_layout(w, lang);
-                let text = usize::from((width - 3) / 2 - 2);
+            for (w, h) in [(130u16, 70u16), (130, 40), (100, 40), (80, 30), (60, 24)] {
+                let (area, lines) = help_layout(Rect::new(0, 0, w, h), lang);
+                assert!(area.right() <= w && area.bottom() <= h, "{lang:?} {w}x{h}: {area:?}");
                 let mut s = state();
                 s.config.ui.lang = Some(lang);
                 s.help = true;
                 let mut seen = String::new();
-                for scroll in 0..=tallest {
+                for scroll in 0..=lines.len() as u16 {
                     s.help_scroll = scroll;
                     seen.push_str(&render_screen(&s, w, h).join("\n"));
                 }
-                for (title, lines) in columns.iter().flatten() {
-                    for line in lines {
-                        assert!(line.width() <= text, "{lang:?} {w}: {title}: {line:?}");
-                        let words: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
-                        assert!(seen.contains(words.trim()), "{lang:?} {w}x{h}: {title}: {words}");
-                    }
+                for line in &lines {
+                    assert!(line.width() <= usize::from(area.width) - 2, "{lang:?} {w}x{h}: {line:?}");
+                    let words: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+                    assert!(seen.contains(words.trim()), "{lang:?} {w}x{h}: {words}");
                 }
             }
         }
+    }
+
+
+    fn help_buffer(width: u16, height: u16, lang: Lang, scroll: u16) -> (ratatui::buffer::Buffer, Rect) {
+        let mut s = state();
+        s.config.ui.lang = Some(lang);
+        s.config.ui.icons = IconSet::Emoji;
+        s.help = true;
+        s.help_scroll = scroll;
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| draw(f, &s, &VIEW)).unwrap();
+        let area = dialog_area(&s, Rect::new(0, 0, width, height)).unwrap();
+        (terminal.backend().buffer().clone(), area)
+    }
+
+    /// The text of one row of the popup, cell by cell, borders left out.
+    fn popup_row(buf: &ratatui::buffer::Buffer, area: Rect, y: u16) -> String {
+        (area.x + 1..area.right() - 1).map(|x| buf[(x, y)].symbol().to_owned()).collect()
+    }
+
+    /// Help looks like boxvibe's: the keyboard and the name in the title, a
+    /// bright border, orange uppercase headers, filled key caps, one column
+    /// of descriptions, a muted closing line, the rest of the screen faded and
+    /// the bar saying what closes it.
+    #[test]
+    fn help_looks_like_boxvibes() {
+        for (w, h) in [(130u16, 70u16), (80, 30)] {
+            let (buf, area) = help_buffer(w, h, Lang::En, 0);
+            assert!(area.bottom() < h, "{w}x{h}: the hint bar stays visible: {area:?}");
+            assert_eq!(area.x, (w - area.width) / 2, "{w}x{h}: centred across");
+            let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+            assert!(title.starts_with("┌ ⌨  tubevibe Help · "), "{w}x{h}: {title}");
+            for corner in [(area.x, area.y), (area.right() - 1, area.bottom() - 1)] {
+                assert_eq!(buf[corner].fg, FG, "{w}x{h}: a bright border");
+                assert_eq!(buf[corner].bg, BG);
+            }
+            let name = |x: u16| (buf[(x, area.y)].fg, buf[(x, area.y)].modifier.contains(Modifier::BOLD));
+            let tube = area.x + 4;
+            assert_eq!(name(tube + 1), (RED, true), "tube in red, bold");
+            assert_eq!(name(tube + 5), (FG, true), "vibe and the rest in the text colour, bold");
+            // The first section's header.
+            let header = area.y + 1;
+            assert!(popup_row(&buf, area, header).starts_with(" COMMANDS (ANYWHERE)"), "{w}x{h}");
+            assert_eq!((buf[(area.x + 2, header)].fg, buf[(area.x + 2, header)].modifier), (ORANGE, Modifier::BOLD));
+            // Its first row: a key cap (the theme's background on its text), then
+            // the description in the column every row shares.
+            let row = header + 1;
+            assert!(popup_row(&buf, area, row).starts_with("   ? L "), "{w}x{h}: {}", popup_row(&buf, area, row));
+            let cap = buf[(area.x + 3, row)].clone();
+            assert_eq!((cap.fg, cap.bg), (BG, FG), "a filled key cap");
+            let description = |y: u16, text: &str| {
+                let at = popup_row(&buf, area, y).find(text).unwrap_or_else(|| panic!("{text}"));
+                popup_row(&buf, area, y)[..at].chars().count()
+            };
+            let column = description(row, "this help");
+            assert_eq!(description(row + 1, "menu on / off"), column, "{w}x{h}: one column of descriptions");
+            assert_eq!(description(row + 2, "quit / quit now"), column);
+            assert_eq!(buf[(area.x + 1 + column as u16, row)].fg, FG);
+            // Every row stays inside the border.
+            for y in area.y + 1..area.bottom() - 1 {
+                assert_eq!(buf[(area.right() - 1, y)].symbol(), "│", "{w}x{h}: row {y}");
+            }
+            // Behind it everything fades, the bar too, and its caps say how to close.
+            let behind = buf[(1, 1)].clone();
+            assert_ne!(behind.fg, BLUE, "the menu fades");
+            let bar = buffer_row(&buf, h - 1);
+            assert!(bar.contains("Esc  Close") && bar.contains("?  Close"), "{bar}");
+            assert_eq!(buf[(2, h - 1)].bg, dim_color(FG, BG), "the bar is faded too");
+        }
+    }
+
+    /// 130x70: all of Help at once, with its closing line, and nothing to
+    /// scroll; 80x30: the popup stays inside the window, wraps, and scrolls
+    /// to the closing line.
+    #[test]
+    fn help_fits_a_tall_window_and_scrolls_in_a_short_one() {
+        for lang in [Lang::En, Lang::Es] {
+            let footer = lang.pick(HELP_FOOTER.0, HELP_FOOTER.1);
+            let (buf, area) = help_buffer(130, 70, lang, 0);
+            let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+            assert!(!title.contains('↑'), "{lang:?}: nothing to scroll at 130x70: {title}");
+            assert!((1..area.height - 1).any(|y| popup_row(&buf, area, area.y + y).contains(footer)), "{lang:?}");
+            let (top, area) = help_buffer(80, 30, lang, 0);
+            assert!(area.right() <= 80 && area.bottom() <= 29, "{area:?}");
+            let title: String = (area.x..area.right()).map(|x| top[(x, area.y)].symbol().to_owned()).collect();
+            assert!(title.contains("↑ ↓"), "{lang:?}: it says it scrolls: {title}");
+            assert!(!(1..area.height - 1).any(|y| popup_row(&top, area, area.y + y).contains(footer)));
+            let (end, area) = help_buffer(80, 30, lang, 500);
+            assert!((1..area.height - 1).any(|y| popup_row(&end, area, area.y + y).contains(footer)), "{lang:?}");
+        }
+    }
+
+    #[test]
+    fn help_title_and_footer_speak_the_language() {
+        let (buf, area) = help_buffer(130, 70, Lang::Es, 0);
+        let title: String = (area.x..area.right()).map(|x| buf[(x, area.y)].symbol().to_owned()).collect();
+        assert!(title.contains("tubevibe Ayuda · cualquier tecla cierra"), "{title}");
+        let bar = buffer_row(&buf, 69);
+        assert!(bar.contains("Esc  cerrar") && bar.contains("?  cerrar"), "{bar}");
     }
 }
