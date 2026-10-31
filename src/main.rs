@@ -124,6 +124,8 @@ fn main() -> anyhow::Result<()> {
     }
     // Until a language is chosen, follow the system's.
     config.ui.lang.get_or_insert_with(|| Lang::from_locale(&system_locale()));
+    // Subtitles and dubbing in that language too, unless config.toml says otherwise.
+    config.fill_language_defaults();
     // An imported cookies file named by its old path: the copy in the new folder.
     if let Some(moved) = store::moved_path(Path::new(&config.session.cookies_file), &copied).filter(|p| p.exists()) {
         config.session.cookies_file = moved.display().to_string();

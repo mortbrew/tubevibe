@@ -6738,6 +6738,7 @@ mod tests {
     #[test]
     fn subtitle_language_cycles_and_saves() {
         let mut s = state();
+        s.config.player.sub_lang = "es".into();
         assert_eq!(s.setting_value(Setting::SubLang), "Español (es)");
         assert_eq!(change(&mut s, Setting::SubLang), [saved("player", "sub_lang", text("en"))]);
         assert_eq!(s.setting_value(Setting::SubLang), "Inglés (en)");
@@ -7005,6 +7006,7 @@ mod tests {
     #[test]
     fn sub_language_changes_the_current_video_and_is_saved() {
         let mut s = with_videos(&["a"]);
+        s.config.player.sub_lang = "es".into();
         let a = play(&mut s, 0);
         assert_eq!(
             s.update(Action::CycleSubLang),

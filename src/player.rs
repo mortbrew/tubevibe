@@ -1049,7 +1049,7 @@ mod tests {
 
     #[test]
     fn dubbed_prefers_audio_in_sub_lang() {
-        let config = PlayerConfig { language: Language::Dubbed, prefer_codec: String::new(), ..Default::default() };
+        let config = PlayerConfig { language: Language::Dubbed, prefer_codec: String::new(), sub_lang: "es".into(), ..Default::default() };
         assert_eq!(
             ytdl_format(&config, Mode::Window),
             "bv*[height<=720]+ba[language^=es]/bv*[height<=720]+ba/b[height<=720]/b",
@@ -1059,7 +1059,7 @@ mod tests {
 
     #[test]
     fn subtitles_are_fetched_and_shown_only_in_subtitles_mode() {
-        let config = PlayerConfig::default();
+        let config = PlayerConfig { sub_lang: "es".into(), ..Default::default() };
         let args = mpv_args(&launch(&config, Mode::Window), None, "s");
         assert!(args.contains(&"--sid=auto".into()));
         assert!(args.contains(&"--slang=es".into()));

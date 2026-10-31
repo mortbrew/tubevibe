@@ -66,7 +66,8 @@ pub struct PlayerConfig {
     /// to stay in sync).
     pub hwdec: bool,
     pub language: Language,
-    /// Subtitle / dubbing language code.
+    /// Subtitle / dubbing language code. Empty (not in `config.toml`) means
+    /// the app language's, filled in at startup by [`Config::fill_language_defaults`].
     pub sub_lang: String,
     /// Keep listening when leaving the video tab (only the last video plays).
     pub background_audio: bool,
@@ -535,7 +536,7 @@ impl Default for PlayerConfig {
             prefer_codec: "avc1".into(),
             hwdec: true,
             language: Language::Subtitles,
-            sub_lang: "es".into(),
+            sub_lang: String::new(),
             background_audio: true,
             sponsorblock: true,
             // tubevibe: open the tab first, Enter plays (upstream plays at once).
@@ -742,6 +743,16 @@ impl Config {
         Self::parse(&text).map_err(|source| ConfigError::Parse { path: path.into(), source })
     }
 
+    /// Fills the language settings left unset in `config.toml` from the app
+    /// language (`ui.lang`, itself the system's until chosen): subtitles and
+    /// dubbing in English for an English app, Spanish for a Spanish one.
+    /// A value the user saved is kept.
+    pub fn fill_language_defaults(&mut self) {
+        if self.player.sub_lang.trim().is_empty() {
+            self.player.sub_lang = self.ui.lang.unwrap_or_default().as_str().into();
+        }
+    }
+
     /// `~/.config/tubevibe/config.toml` on Linux, the platform equivalent elsewhere.
     pub fn default_path() -> Option<PathBuf> {
         directories::ProjectDirs::from("", "", "tubevibe").map(|dirs| dirs.config_dir().join("config.toml"))
@@ -799,6 +810,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sub_lang_follows_the_app_language_until_saved() {
+        let mut en = Config::parse("[ui]\nlang = \"en\"\n").unwrap().0;
+        en.fill_language_defaults();
+        assert_eq!(en.player.sub_lang, "en");
+        let mut es = Config::parse("[ui]\nlang = \"es\"\n").unwrap().0;
+        es.fill_language_defaults();
+        assert_eq!(es.player.sub_lang, "es");
+        let mut saved = Config::parse("[ui]\nlang = \"en\"\n[player]\nsub_lang = \"fr\"\n").unwrap().0;
+        saved.fill_language_defaults();
+        assert_eq!(saved.player.sub_lang, "fr", "a saved choice is kept");
+        let mut saved_es = Config::parse("[ui]\nlang = \"en\"\n[player]\nsub_lang = \"es\"\n").unwrap().0;
+        saved_es.fill_language_defaults();
+        assert_eq!(saved_es.player.sub_lang, "es");
+    }
+
+    #[test]
     fn defaults() {
         let c = Config::default();
         assert_eq!(c.session.browser, "");
@@ -808,7 +835,7 @@ mod tests {
         assert_eq!(c.player.prefer_codec, "avc1");
         assert!(c.player.hwdec);
         assert_eq!(c.player.language, Language::Subtitles);
-        assert_eq!(c.player.sub_lang, "es");
+        assert_eq!(c.player.sub_lang, "", "follows the app language until chosen");
         assert!(c.ui.sidebar);
         assert_eq!(c.ui.icons, IconSet::Emoji);
         assert_eq!(c.ui.lang, None, "follows the system until chosen");
