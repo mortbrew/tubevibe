@@ -45,7 +45,7 @@ jobs:
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
@@ -63,12 +63,12 @@ jobs:
       - name: Debian package
         if: matrix.arch == 'x86_64'
         run: cargo deb --no-build --output dist/tubevibe_amd64.deb
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG }}
           fail_on_unmatched_files: true
           files: dist/tubevibe-${{ matrix.arch }}-linux.tar.gz
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: matrix.arch == 'x86_64'
         with:
           tag_name: ${{ env.TAG }}
