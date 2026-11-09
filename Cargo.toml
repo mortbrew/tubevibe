@@ -2,7 +2,7 @@
 name = "tubevibe"
 version = "0.9.1"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 description = "YouTube and your local videos and music in the terminal: tabs, video embedded in kitty via mpv, subscriptions, playlists, history with resume, downloads, SponsorBlock, chapters, comments and browser login"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mortbrew/tubevibe"

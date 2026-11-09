@@ -99,7 +99,7 @@ builds from source where there's no prebuilt file:
 curl -sSf https://raw.githubusercontent.com/mortbrew/tubevibe/main/install.sh | sh
 ```
 
-**From source** (Rust 1.88 or newer, any platform):
+**From source** (Rust 1.90 or newer, any platform):
 
 ```sh
 cargo install --locked --git https://github.com/mortbrew/tubevibe
