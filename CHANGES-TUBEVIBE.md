@@ -1437,3 +1437,16 @@ cursor row keeps its own focus highlight, and exactly one row is marked.
 - Help, README, the website and every hint name the new keys; the help's
   first box lists the commands that work anywhere, with `Alt+,` / `Alt+.`
   and `Ctrl+C`.
+
+## Unreleased (0.9.1)
+
+### Subtitles and dubbing follow the app language (`sub-lang-default`)
+
+- With a fresh config, *Subtitles and Dubbing Language* was Spanish (es)
+  even in an English app (upstream's default). Now, until you pick one,
+  it follows the app language (`[ui] lang`, which itself follows the system
+  locale until chosen): English → `en`, Spanish → `es`. It is worked out
+  once at startup (`Config::fill_language_defaults`), so switching the app
+  language with `L` mid-session doesn't change it until the next start.
+- A `sub_lang` already saved in `config.toml` is always kept.
+- `PlayerConfig::default()` now has an empty `sub_lang`, meaning "not set".
