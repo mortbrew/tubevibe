@@ -61,10 +61,7 @@ pub const GLOBAL: &[(char, &str, Action, Text)] = &[
 /// Keys that act on the selected video, in lists and in video tabs.
 pub const ON_VIDEO: &[(&str, Text)] = &[
     ("w", Text::new("Ver después de YouTube", "YouTube Watch Later")),
-    (
-        "W",
-        Text::new("Ver después de tubevibe", "tubevibe Watch Later"),
-    ),
+    ("W", Text::new("Ver después de tubevibe", "tubevibe Watch Later")),
     ("s", Text::new("suscribirse / desuscribirse", "subscribe / unsubscribe")),
     ("g", Text::new("me gusta", "like")),
     ("G", Text::new("no me gusta", "dislike")),
@@ -380,14 +377,20 @@ pub fn help(lang: Lang) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             menu.truncate(2);
             menu.push(("Tab  /".into(), lang.pick("lista / buscar", "list / search")));
             menu.push(("x".into(), lang.pick("cerrar la pestaña del cursor", "close the tab under the cursor")));
-            menu.push(("X".into(), lang.pick("cerrarla y quitarla de su lista", "close the tab and remove it from its list")));
+            menu.push((
+                "X".into(),
+                lang.pick("cerrarla y quitarla de su lista", "close the tab and remove it from its list"),
+            ));
             menu
         }),
         (lang.pick("Listas", "Lists"), rows(IN_LISTS, lang)),
         (lang.pick("Sobre un video (lista o pestaña)", "On a Video (List or Tab)"), {
             // t only in the help: the bar has no room for it.
             let mut on_video = rows(ON_VIDEO, lang);
-            on_video.push(("t".into(), lang.pick("abrir en una pestaña nueva e ir a ella", "open in a new tab and go to it")));
+            on_video.push((
+                "t".into(),
+                lang.pick("abrir en una pestaña nueva e ir a ella", "open in a new tab and go to it"),
+            ));
             on_video.push((
                 "T".into(),
                 lang.pick("abrir en una pestaña nueva, sin ir a ella", "open in a new tab in the background"),
@@ -616,7 +619,10 @@ mod tests {
             let help = help(lang);
             let (_, commands) = &help[0];
             for (_, name, ..) in GLOBAL {
-                assert!(commands.iter().any(|(k, _)| k.split_whitespace().any(|t| t == *name)), "{name} missing from help");
+                assert!(
+                    commands.iter().any(|(k, _)| k.split_whitespace().any(|t| t == *name)),
+                    "{name} missing from help"
+                );
             }
             assert!(!commands.iter().any(|(k, _)| k == "0-9"), "no tab digits any more");
         }
@@ -668,8 +674,14 @@ mod tests {
 
     #[test]
     fn help_is_translated() {
-        assert_eq!(help(Lang::En)[0].1.iter().find(|(k, _)| k == "Y  V").unwrap().1, "open Watch Later: YouTube / tubevibe");
-        assert_eq!(help(Lang::Es)[0].1.iter().find(|(k, _)| k == "Y  V").unwrap().1, "abrir Ver después: YouTube / tubevibe");
+        assert_eq!(
+            help(Lang::En)[0].1.iter().find(|(k, _)| k == "Y  V").unwrap().1,
+            "open Watch Later: YouTube / tubevibe"
+        );
+        assert_eq!(
+            help(Lang::Es)[0].1.iter().find(|(k, _)| k == "Y  V").unwrap().1,
+            "abrir Ver después: YouTube / tubevibe"
+        );
         assert_eq!(rows(IN_TAB, Lang::En)[0].0, "Space");
         assert_eq!(rows(IN_TAB, Lang::Es)[0].0, "Espacio");
         assert!(rows(IN_LISTS, Lang::En).iter().any(|(k, _)| k == "X  Del"));

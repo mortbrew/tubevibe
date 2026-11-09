@@ -12,10 +12,11 @@ pub const MARKER: &str = "X-Tubevibe-Generated=true";
 /// `$XDG_DATA_HOME/applications`, else `~/.local/share/applications`.
 /// Tests get a temp folder instead, so they never touch the real home.
 pub fn applications_dir() -> Option<PathBuf> {
-    if cfg!(test) {
-        return Some(std::env::temp_dir().join(format!("tubevibe-test-apps-{}", std::process::id())));
-    }
-    applications_dir_from(std::env::var_os("XDG_DATA_HOME"), std::env::var_os("HOME"))
+    #[cfg(test)]
+    let dir = Some(crate::config::temp_dir_keep("apps"));
+    #[cfg(not(test))]
+    let dir = applications_dir_from(std::env::var_os("XDG_DATA_HOME"), std::env::var_os("HOME"));
+    dir
 }
 
 /// `applications_dir` from given `XDG_DATA_HOME` and `HOME` values; a
@@ -121,9 +122,7 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tubevibe-desktop-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
+        crate::config::temp_dir(&format!("desktop-{name}"))
     }
 
     #[test]
@@ -175,7 +174,10 @@ mod tests {
             Some(PathBuf::from("/home/t/.local/share/applications"))
         );
         assert_eq!(applications_dir_from(None, None), None);
-        assert!(applications_dir().unwrap().starts_with(std::env::temp_dir()), "tests never use the real home");
+        assert!(
+            applications_dir().unwrap().starts_with(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target")),
+            "tests never use the real home"
+        );
     }
 
     #[test]

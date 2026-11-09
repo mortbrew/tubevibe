@@ -111,8 +111,7 @@ pub fn parse_dirs(text: &str) -> Vec<String> {
 mod tests {
     #[test]
     fn trash_file_takes_only_a_regular_file() {
-        let dir = std::env::temp_dir().join(format!("tubevibe-trash-test-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::config::temp_dir("trash");
         std::fs::create_dir_all(dir.join("folder")).unwrap();
         // Refused before the trash is ever touched.
         assert_eq!(trash_file(&dir.join("missing.mp4")), Err(TrashError::Gone));
@@ -147,7 +146,10 @@ mod tests {
         let videos = scan(std::slice::from_ref(&root), MediaKind::Video);
         let names: Vec<_> = videos.iter().map(|f| (f.folder.as_str(), f.name.as_str())).collect();
         let root_name = root.file_name().unwrap().to_string_lossy().into_owned();
-        assert_eq!(names, [("Serie/T1", "e01"), (root_name.as_str(), "a"), (root_name.as_str(), "b")]);
+        // Sorted by folder then name, whatever the scratch folder is called.
+        let mut expected = vec![("Serie/T1", "e01"), (root_name.as_str(), "a"), (root_name.as_str(), "b")];
+        expected.sort_by_key(|(folder, name)| (folder.to_lowercase(), name.to_lowercase()));
+        assert_eq!(names, expected);
         let music = scan(&[root], MediaKind::Music);
         assert_eq!(music.len(), 1);
         assert_eq!((music[0].folder.as_str(), music[0].name.as_str()), ("Disco", "01 Tema"));

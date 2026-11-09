@@ -174,9 +174,7 @@ pub fn tarball(os: &str, arch: &str) -> Option<&'static str> {
 
 /// The release file Update Now installs on a machine: the archive with just the program.
 pub fn asset(os: &str, arch: &str) -> Option<&'static str> {
-    match (os, arch) {
-        _ => tarball(os, arch),
-    }
+    tarball(os, arch)
 }
 
 /// Built with cargo in a checkout: `…/target/release/`, `…/target/debug/`
@@ -400,13 +398,9 @@ mod tests {
     use super::*;
 
     fn assets() -> Vec<String> {
-        [
-            "tubevibe_amd64.deb",
-            "tubevibe-x86_64-linux.tar.gz",
-            "tubevibe-aarch64-linux.tar.gz",
-        ]
-        .map(String::from)
-        .to_vec()
+        ["tubevibe_amd64.deb", "tubevibe-x86_64-linux.tar.gz", "tubevibe-aarch64-linux.tar.gz"]
+            .map(String::from)
+            .to_vec()
     }
 
     fn how(exe: &str, os: &str, arch: &str) -> Install {
@@ -495,9 +489,10 @@ mod tests {
 
     #[test]
     fn no_prebuilt_file_on_macos_or_windows_says_build_from_source() {
-        let linux_only: Vec<String> = ["tubevibe-x86_64-linux.tar.gz", "tubevibe-aarch64-linux.tar.gz", "tubevibe_amd64.deb"]
-            .map(String::from)
-            .to_vec();
+        let linux_only: Vec<String> =
+            ["tubevibe-x86_64-linux.tar.gz", "tubevibe-aarch64-linux.tar.gz", "tubevibe_amd64.deb"]
+                .map(String::from)
+                .to_vec();
         for (exe, os, arch) in [
             ("/Users/u/bin/tubevibe", "macos", "aarch64"),
             (r"C:\Users\u\AppData\Local\Programs\tubevibe\tubevibe.exe", "windows", "x86_64"),

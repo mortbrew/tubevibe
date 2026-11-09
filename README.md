@@ -179,6 +179,43 @@ history and lists over, and leaves the tubetui folders alone.
 If tubevibe ever closes unexpectedly, the error is in
 `~/.cache/tubevibe/crash.log`.
 
+## Development
+
+```sh
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all --check
+cargo build --release
+```
+
+Tests run against fixtures and a fake server, never live YouTube.
+
+CI runs on every push and pull request to `main` and `dev`: `fmt` (rustfmt),
+`ci` (release build, tests, clippy), `msrv` (a build on the `rust-version` in
+`Cargo.toml`, so the README's minimum stays honest), `audit` (`cargo audit`
+against RustSec) and `codeql`. A pull request into `main` needs `fmt`, `ci` and
+`msrv` green before it can merge.
+
+### Branches
+
+`dev` is the default branch and the only one worked on. `main` is a release
+marker: it accepts changes only through a pull request (the "Protect main"
+ruleset), and `dev` is merged into it only to cut a release. Feature work
+targets `dev`.
+
+### Versions
+
+`dev`'s `Cargo.toml` version runs **ahead** of the newest published release
+(`0.9.1` while the latest release is `v0.9.0`). That is deliberate. The version
+string is drawn on the menu, the About panel and the status bar, so seeing
+`v0.9.1` confirms the running binary is a build from source rather than the
+released one.
+- Keep the bump in `Cargo.toml` only; `env!("CARGO_PKG_VERSION")` propagates it.
+  Update `Cargo.lock` with `cargo update --workspace --offline`, never by hand.
+- `CHANGES-TUBEVIBE.md` sections are historical records of shipped releases, so
+  they keep the version that shipped.
+- A source build reporting no update available is expected, not a bug.
+
 ## Credits and Licence
 
 tubevibe is built on [tubetui](https://github.com/polblancoo/tubetui) by

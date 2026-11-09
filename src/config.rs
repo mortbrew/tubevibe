@@ -786,9 +786,19 @@ pub fn set_value(path: &Path, table: &str, key: &str, value: impl Into<toml_edit
     std::fs::write(path, doc.to_string()).map_err(|e| error(e.to_string()))
 }
 
+/// `target/tmp/<name>`, created if needed, left as it is.
+#[cfg(test)]
+pub(crate) fn temp_dir_keep(name: &str) -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("tmp").join(name);
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// `target/tmp/<name>`, emptied and created. Keeps the suite from leaking a
+/// directory per test into `/tmp`, which is a small tmpfs on this machine.
 #[cfg(test)]
 pub(crate) fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("tubevibe-test-{}-{name}", std::process::id()));
+    let dir = temp_dir_keep(name);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -1119,7 +1129,11 @@ mod tests {
         let (c, w) = ui("thumbnails = \"hologram\"\nthumb_pixelation = \"high\"");
         assert_eq!((c.ui.thumbnails, c.ui.thumb_pixelation, w.len()), (ThumbMode::Picture, Pixelation::High, 1));
         assert!(ThumbMode::ALL.iter().all(|m| ui(&format!("thumbnails = \"{}\"", m.as_str())).0.ui.thumbnails == *m));
-        assert!(Pixelation::ALL.iter().all(|m| ui(&format!("thumb_pixelation = \"{}\"", m.as_str())).0.ui.thumb_pixelation == *m));
+        assert!(
+            Pixelation::ALL
+                .iter()
+                .all(|m| ui(&format!("thumb_pixelation = \"{}\"", m.as_str())).0.ui.thumb_pixelation == *m)
+        );
         assert_eq!(ThumbMode::Off.next(), ThumbMode::Picture);
         assert_eq!(Pixelation::ALL.map(Pixelation::grid), [None, Some(64), Some(32), Some(16), Some(8)]);
     }

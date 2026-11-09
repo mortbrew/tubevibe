@@ -286,16 +286,39 @@ impl Setting {
     /// The uppercase header the setting sits under (Spanish, English).
     pub fn section(self) -> (&'static str, &'static str) {
         match self {
-            Self::AppLang | Self::CheckUpdates | Self::RestoreTabs | Self::Mouse | Self::SystemCheck | Self::EditFile | Self::MenuEntry => ("TUBEVIBE", "TUBEVIBE"),
+            Self::AppLang
+            | Self::CheckUpdates
+            | Self::RestoreTabs
+            | Self::Mouse
+            | Self::SystemCheck
+            | Self::EditFile
+            | Self::MenuEntry => ("TUBEVIBE", "TUBEVIBE"),
             Self::Browser | Self::ImportCookies | Self::Refresh | Self::Logout => ("CUENTA", "ACCOUNT"),
-            Self::VideoMode | Self::Quality | Self::Language | Self::SubLang | Self::BackgroundAudio | Self::SponsorBlock | Self::Autoplay => ("REPRODUCCIÓN", "PLAYBACK"),
-            Self::HideWatched | Self::HideLater | Self::HideShorts | Self::NotifyNew | Self::FavoritesFirst | Self::DiscoverTopics => ("LISTAS", "FEEDS"),
-            Self::OmarchyTheme | Self::Icons | Self::BorderStyle | Self::Thumbnails | Self::ThumbPixelation | Self::MenuWidth | Self::PreviewWidth | Self::CommentsWidth => ("ASPECTO", "LOOK"),
+            Self::VideoMode
+            | Self::Quality
+            | Self::Language
+            | Self::SubLang
+            | Self::BackgroundAudio
+            | Self::SponsorBlock
+            | Self::Autoplay => ("REPRODUCCIÓN", "PLAYBACK"),
+            Self::HideWatched
+            | Self::HideLater
+            | Self::HideShorts
+            | Self::NotifyNew
+            | Self::FavoritesFirst
+            | Self::DiscoverTopics => ("LISTAS", "FEEDS"),
+            Self::OmarchyTheme
+            | Self::Icons
+            | Self::BorderStyle
+            | Self::Thumbnails
+            | Self::ThumbPixelation
+            | Self::MenuWidth
+            | Self::PreviewWidth
+            | Self::CommentsWidth => ("ASPECTO", "LOOK"),
             Self::Splash | Self::FxStartup | Self::FxPages | Self::FxDialogs => ("ANIMACIÓN", "ANIMATION"),
             Self::VideoDirs | Self::MusicDirs | Self::DownloadDir => ("CARPETAS", "FOLDERS"),
         }
     }
-
 
     pub fn label(self, lang: Lang) -> &'static str {
         let (es, en) = match self {
@@ -352,45 +375,119 @@ impl Setting {
     /// One line on what the setting does, under the list (Settings saves each change to config.toml).
     pub fn about(self, lang: Lang) -> &'static str {
         let (es, en) = match self {
-            Self::Browser => ("Lee la sesión de YouTube de un navegador donde ya entraste.", "Reads your YouTube login from a browser you're signed in to."),
-            Self::ImportCookies => ("Un cookies.txt exportado, para equipos sin navegador o por SSH.", "Uses an exported cookies.txt, for machines with no browser or over SSH."),
-            Self::Refresh => ("Vuelve a leer las cookies, si la sesión venció.", "Reads the cookies again, if the login expired."),
+            Self::Browser => (
+                "Lee la sesión de YouTube de un navegador donde ya entraste.",
+                "Reads your YouTube login from a browser you're signed in to.",
+            ),
+            Self::ImportCookies => (
+                "Un cookies.txt exportado, para equipos sin navegador o por SSH.",
+                "Uses an exported cookies.txt, for machines with no browser or over SSH.",
+            ),
+            Self::Refresh => {
+                ("Vuelve a leer las cookies, si la sesión venció.", "Reads the cookies again, if the login expired.")
+            }
             Self::Logout => ("Olvida la sesión de YouTube en tubevibe.", "Forgets the YouTube login in tubevibe."),
             Self::Language => ("El idioma de audio que se pide a YouTube.", "The audio language asked of YouTube."),
-            Self::SubLang => ("Idioma de subtítulos y de las pistas dobladas.", "The language for subtitles and dubbed audio tracks."),
-            Self::Quality => ("La resolución más alta que se reproduce y se descarga.", "The highest resolution played and downloaded."),
-            Self::VideoMode => ("Ventana, superpuesto o embebido (embebido solo en kitty).", "Window, overlay or embedded in the app (embedded needs kitty)."),
-            Self::BackgroundAudio => ("Qué hace el video al cambiar de pestaña.", "What the video does when you leave its tab."),
-            Self::SponsorBlock => ("Salta los patrocinios marcados en SponsorBlock.", "Skips sponsor segments marked on SponsorBlock."),
-            Self::Autoplay => ("Si Enter reproduce el video o abre su pestaña.", "Whether Enter plays the video or opens its tab."),
+            Self::SubLang => (
+                "Idioma de subtítulos y de las pistas dobladas.",
+                "The language for subtitles and dubbed audio tracks.",
+            ),
+            Self::Quality => (
+                "La resolución más alta que se reproduce y se descarga.",
+                "The highest resolution played and downloaded.",
+            ),
+            Self::VideoMode => (
+                "Ventana, superpuesto o embebido (embebido solo en kitty).",
+                "Window, overlay or embedded in the app (embedded needs kitty).",
+            ),
+            Self::BackgroundAudio => {
+                ("Qué hace el video al cambiar de pestaña.", "What the video does when you leave its tab.")
+            }
+            Self::SponsorBlock => {
+                ("Salta los patrocinios marcados en SponsorBlock.", "Skips sponsor segments marked on SponsorBlock.")
+            }
+            Self::Autoplay => {
+                ("Si Enter reproduce el video o abre su pestaña.", "Whether Enter plays the video or opens its tab.")
+            }
             Self::AppLang => ("Español o inglés. También L.", "Spanish or English. Also L."),
-            Self::Icons => ("Emoji, Nerd Font (necesita una instalada) o Unicode.", "Emoji, Nerd Font (needs one installed) or plain Unicode."),
+            Self::Icons => (
+                "Emoji, Nerd Font (necesita una instalada) o Unicode.",
+                "Emoji, Nerd Font (needs one installed) or plain Unicode.",
+            ),
             Self::BorderStyle => ("Cómo se dibujan los bordes de los paneles.", "How every pane's border is drawn."),
-            Self::MenuWidth => ("El ancho del menú, de 20 a 40 columnas. También { y }.", "The menu's width, 20 to 40 columns. Also { and }."),
-            Self::PreviewWidth => ("El ancho del panel de vista previa de las listas.", "The width of the preview pane beside lists."),
-            Self::CommentsWidth => ("El ancho de los comentarios en la pestaña del video.", "The width of the comments in a video tab."),
-            Self::RestoreTabs => ("Abre de nuevo las pestañas de la última vez.", "Opens the tabs from last time again."),
-            Self::OmarchyTheme => ("Usa los colores del tema actual de Omarchy.", "Uses your current Omarchy theme's colours."),
-            Self::Thumbnails => ("Imagen (kitty, sixel, iTerm2), bloques de color o nada.", "Picture (kitty, sixel, iTerm2), coloured half blocks, or Off."),
+            Self::MenuWidth => (
+                "El ancho del menú, de 20 a 40 columnas. También { y }.",
+                "The menu's width, 20 to 40 columns. Also { and }.",
+            ),
+            Self::PreviewWidth => {
+                ("El ancho del panel de vista previa de las listas.", "The width of the preview pane beside lists.")
+            }
+            Self::CommentsWidth => {
+                ("El ancho de los comentarios en la pestaña del video.", "The width of the comments in a video tab.")
+            }
+            Self::RestoreTabs => {
+                ("Abre de nuevo las pestañas de la última vez.", "Opens the tabs from last time again.")
+            }
+            Self::OmarchyTheme => {
+                ("Usa los colores del tema actual de Omarchy.", "Uses your current Omarchy theme's colours.")
+            }
+            Self::Thumbnails => (
+                "Imagen (kitty, sixel, iTerm2), bloques de color o nada.",
+                "Picture (kitty, sixel, iTerm2), coloured half blocks, or Off.",
+            ),
             Self::ThumbPixelation => ("Pixela las miniaturas a propósito.", "Makes the thumbnails blocky on purpose."),
-            Self::Mouse => ("Clics y rueda en la app; Shift para seleccionar texto.", "Clicks and wheel in the app; hold Shift to select text."),
+            Self::Mouse => (
+                "Clics y rueda en la app; Shift para seleccionar texto.",
+                "Clicks and wheel in the app; hold Shift to select text.",
+            ),
             Self::Splash => ("Muestra el logo al abrir.", "Shows the logo when tubevibe opens."),
             Self::FxStartup => ("La animación al abrir la app.", "The animation when the app starts."),
             Self::FxPages => ("La animación al cambiar de página.", "The animation when the page changes."),
-            Self::FxDialogs => ("La animación de la ayuda y las preguntas.", "The animation of Help and confirm boxes."),
-            Self::VideoDirs => ("Carpetas que lista Videos, separadas por comas.", "Folders listed under Videos, comma separated."),
-            Self::MusicDirs => ("Carpetas que lista Música, separadas por comas.", "Folders listed under Music, comma separated."),
+            Self::FxDialogs => {
+                ("La animación de la ayuda y las preguntas.", "The animation of Help and confirm boxes.")
+            }
+            Self::VideoDirs => {
+                ("Carpetas que lista Videos, separadas por comas.", "Folders listed under Videos, comma separated.")
+            }
+            Self::MusicDirs => {
+                ("Carpetas que lista Música, separadas por comas.", "Folders listed under Music, comma separated.")
+            }
             Self::DownloadDir => ("Dónde se guardan las descargas.", "Where downloads are saved."),
-            Self::DiscoverTopics => ("Los temas que busca Descubrir, separados por comas.", "The topics Discover searches, comma separated."),
-            Self::SystemCheck => ("Revisa mpv, yt-dlp y lo demás que usa tubevibe.", "Checks mpv, yt-dlp and the other tools tubevibe uses."),
-            Self::HideWatched => ("Oculta en los feeds lo que ya viste. v los muestra.", "Hides videos you've watched in feeds. v shows them."),
-            Self::HideLater => ("Oculta en Mis recomendados lo que está en Ver después.", "Hides your Watch Later videos in My Recommendations."),
+            Self::DiscoverTopics => (
+                "Los temas que busca Descubrir, separados por comas.",
+                "The topics Discover searches, comma separated.",
+            ),
+            Self::SystemCheck => (
+                "Revisa mpv, yt-dlp y lo demás que usa tubevibe.",
+                "Checks mpv, yt-dlp and the other tools tubevibe uses.",
+            ),
+            Self::HideWatched => (
+                "Oculta en los feeds lo que ya viste. v los muestra.",
+                "Hides videos you've watched in feeds. v shows them.",
+            ),
+            Self::HideLater => (
+                "Oculta en Mis recomendados lo que está en Ver después.",
+                "Hides your Watch Later videos in My Recommendations.",
+            ),
             Self::HideShorts => ("Deja los Shorts fuera de las listas.", "Leaves Shorts out of lists."),
-            Self::NotifyNew => ("Avisa cuando mis canales suben videos nuevos.", "Tells you when your channels post new videos."),
-            Self::FavoritesFirst => ("Pone primero los canales que más miras.", "Puts the channels you watch most first."),
-            Self::CheckUpdates => ("Pregunta a GitHub al abrir; Acerca de muestra la nueva.", "Asks GitHub when tubevibe opens; About shows the new version."),
-            Self::EditFile => ("Abre config.toml en $EDITOR y lo vuelve a leer al cerrar.", "Opens config.toml in $EDITOR and reads it again when you close it."),
-            Self::MenuEntry => ("Enter agrega o quita tubevibe.desktop, para que los lanzadores (walker) muestren tubevibe.", "Enter adds or removes tubevibe.desktop, so app launchers (walker on Omarchy) list tubevibe."),
+            Self::NotifyNew => {
+                ("Avisa cuando mis canales suben videos nuevos.", "Tells you when your channels post new videos.")
+            }
+            Self::FavoritesFirst => {
+                ("Pone primero los canales que más miras.", "Puts the channels you watch most first.")
+            }
+            Self::CheckUpdates => (
+                "Pregunta a GitHub al abrir; Acerca de muestra la nueva.",
+                "Asks GitHub when tubevibe opens; About shows the new version.",
+            ),
+            Self::EditFile => (
+                "Abre config.toml en $EDITOR y lo vuelve a leer al cerrar.",
+                "Opens config.toml in $EDITOR and reads it again when you close it.",
+            ),
+            Self::MenuEntry => (
+                "Enter agrega o quita tubevibe.desktop, para que los lanzadores (walker) muestren tubevibe.",
+                "Enter adds or removes tubevibe.desktop, so app launchers (walker on Omarchy) list tubevibe.",
+            ),
         };
         lang.pick(es, en)
     }
@@ -1473,19 +1570,22 @@ impl State {
             Setting::ImportCookies | Setting::Refresh | Setting::EditFile => String::new(),
             Setting::MenuEntry => {
                 let on = crate::desktop::applications_dir().is_some_and(|d| crate::desktop::installed(&d));
-                self.tr(if on { "Instalada" } else { "No instalada" }, if on { "Installed" } else { "Not Installed" }).into()
+                self.tr(if on { "Instalada" } else { "No instalada" }, if on { "Installed" } else { "Not Installed" })
+                    .into()
             }
             Setting::Language => language_label(player.language, lang).into(),
             Setting::SubLang => language_name(&player.sub_lang, lang),
             Setting::Quality => format!("{}p", player.max_height),
             Setting::VideoMode => {
                 let label: String = match player.mode {
-                PlayerMode::Auto => self.tr("Automático (integrado en kitty)", "Automatic (Embedded in kitty)").into(),
-                PlayerMode::Embedded => self.tr("Integrado", "Embedded").into(),
-                PlayerMode::Window => self.tr("Ventana aparte", "Separate Window").into(),
-                PlayerMode::Overlay => {
-                    self.tr("Superpuesto: ventana sobre la app (X11)", "Overlay: a Window over the App (X11)").into()
-                }
+                    PlayerMode::Auto => {
+                        self.tr("Automático (integrado en kitty)", "Automatic (Embedded in kitty)").into()
+                    }
+                    PlayerMode::Embedded => self.tr("Integrado", "Embedded").into(),
+                    PlayerMode::Window => self.tr("Ventana aparte", "Separate Window").into(),
+                    PlayerMode::Overlay => self
+                        .tr("Superpuesto: ventana sobre la app (X11)", "Overlay: a Window over the App (X11)")
+                        .into(),
                 };
                 label
             }
@@ -1613,9 +1713,7 @@ impl State {
         let title = Section::Inicio.label(self.lang());
         let new_login = effects.iter().any(|e| matches!(e, Effect::StartSession { .. }));
         self.session_loading |= new_login;
-        if new_login
-            || self.home_cache.as_ref().is_some_and(|(_, l)| l.title != title)
-        {
+        if new_login || self.home_cache.as_ref().is_some_and(|(_, l)| l.title != title) {
             self.home_cache = None;
         }
         // The cursor leaves a closed tab, and the menu once the list has the keys.
@@ -1662,7 +1760,11 @@ impl State {
                     self.tr("Ancho del menú", "Menu Width"),
                     self.tr("columnas ({ y } lo cambian)", "Columns ({ and } Change It)")
                 );
-                return vec![Effect::SaveSetting { table: "ui", key: size.key, value: SettingValue::Number(next.into()) }];
+                return vec![Effect::SaveSetting {
+                    table: "ui",
+                    key: size.key,
+                    value: SettingValue::Number(next.into()),
+                }];
             }
             Action::ToggleHelp => {
                 self.help = !self.help;
@@ -2795,7 +2897,8 @@ impl State {
     fn toggle_menu_entry(&mut self) {
         use crate::desktop;
         let Some(dir) = desktop::applications_dir() else {
-            self.status = self.tr("Sin carpeta personal: no hay entrada", "No home folder: can't add an app menu entry").into();
+            self.status =
+                self.tr("Sin carpeta personal: no hay entrada", "No home folder: can't add an app menu entry").into();
             return;
         };
         let home = std::env::var("HOME").unwrap_or_default();
@@ -3294,8 +3397,7 @@ impl State {
                 let mut effects = vec![Effect::SaveSubs(self.subs.clone())];
                 // History, and the feeds' hidden videos, were waiting for the login.
                 if let Some(id) = waiting.filter(|id| self.stack.iter().any(|l| l.more == Some(*id))) {
-                    self.status =
-                        self.tr("Trayendo tu historial de YouTube…", "Fetching your YouTube history…").into();
+                    self.status = self.tr("Trayendo tu historial de YouTube…", "Fetching your YouTube history…").into();
                     effects.push(Effect::YoutubeHistory { id, next: None });
                 }
                 if hide_history && self.logged_in() && !self.show_watched {
@@ -3485,12 +3587,7 @@ impl State {
                     items.push(item("Quitar del historial", "Remove from History", "X", Action::Trash));
                 }
                 if matches!(listing.kind, ListKind::Later | ListKind::Playlist(_) | ListKind::Saved) {
-                    items.push(item(
-                        "Quitar de la lista",
-                        "Remove From List",
-                        "X",
-                        Action::RemoveFromList,
-                    ));
+                    items.push(item("Quitar de la lista", "Remove From List", "X", Action::RemoveFromList));
                 }
             }
             Items::Channels(channels) if channels.get(selected).is_some() => {
@@ -3513,12 +3610,7 @@ impl State {
                 Some(DownloadState::Done(_)) => {
                     items.push(item("Ver", "Play", "Enter", Action::Enter));
                     items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
-                    items.push(item(
-                        "A la papelera",
-                        "Trash",
-                        "X",
-                        Action::Trash,
-                    ));
+                    items.push(item("A la papelera", "Trash", "X", Action::Trash));
                 }
                 Some(_) => {
                     items.push(item("Marcar / desmarcar", "Mark / Unmark", space, Action::ToggleMark));
@@ -3572,11 +3664,8 @@ impl State {
     /// Subscribe to (or leave) the selected channel, if there is one.
     fn subscribe_item(&self) -> Option<MenuItem> {
         let (id, ..) = self.selected_channel()?;
-        let (es, en) = if self.subs.contains(&id) {
-            ("Desuscribirse", "Unsubscribe")
-        } else {
-            ("Suscribirse", "Subscribe")
-        };
+        let (es, en) =
+            if self.subs.contains(&id) { ("Desuscribirse", "Unsubscribe") } else { ("Suscribirse", "Subscribe") };
         Some(MenuItem { label: self.tr(es, en), key: "s", action: Action::ToggleSubscription })
     }
 

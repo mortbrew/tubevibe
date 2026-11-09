@@ -115,10 +115,12 @@ impl Thumbnails {
     /// Downloads these thumbnails, in order, unless they are here or on the way.
     pub fn want<'a>(&mut self, ids: impl IntoIterator<Item = &'a str>) {
         for id in ids {
-            if !id.is_empty() && !self.cache.contains_key(id) && self.requested.insert(id.to_owned()) {
-                if let Some(jobs) = &self.jobs {
-                    let _ = jobs.send((id.to_owned(), false));
-                }
+            if !id.is_empty()
+                && !self.cache.contains_key(id)
+                && self.requested.insert(id.to_owned())
+                && let Some(jobs) = &self.jobs
+            {
+                let _ = jobs.send((id.to_owned(), false));
             }
         }
     }
@@ -126,10 +128,12 @@ impl Thumbnails {
     /// Downloads the big thumbnail of `id` (for a big area), unless here or on the way.
     pub fn want_big(&mut self, id: &str) {
         let key = format!("{id}#hd");
-        if !id.is_empty() && !self.cache.get(id).is_some_and(|c| c.1) && self.requested.insert(key) {
-            if let Some(jobs) = &self.jobs {
-                let _ = jobs.send((id.to_owned(), true));
-            }
+        if !id.is_empty()
+            && !self.cache.get(id).is_some_and(|c| c.1)
+            && self.requested.insert(key)
+            && let Some(jobs) = &self.jobs
+        {
+            let _ = jobs.send((id.to_owned(), true));
         }
     }
 
@@ -192,7 +196,14 @@ impl Thumbnails {
         self.draw_at(frame, target, mode, pixelation, Instant::now());
     }
 
-    fn draw_at(&self, frame: &mut Frame, target: Option<(String, Rect)>, mode: ThumbMode, pixelation: Pixelation, now: Instant) {
+    fn draw_at(
+        &self,
+        frame: &mut Frame,
+        target: Option<(String, Rect)>,
+        mode: ThumbMode,
+        pixelation: Pixelation,
+        now: Instant,
+    ) {
         let target = target.filter(|(id, area)| {
             mode != ThumbMode::Off
                 && self.cache.contains_key(id)
@@ -207,7 +218,8 @@ impl Thumbnails {
         let big = self.cache[&id].1;
         let mut shown = self.shown.borrow_mut();
         let same_video = shown.as_ref().is_some_and(|s| s.id == id);
-        let current = shown.as_ref().is_some_and(|s| s.id == id && s.mode == mode && s.pixelation == pixelation && s.big == big);
+        let current =
+            shown.as_ref().is_some_and(|s| s.id == id && s.mode == mode && s.pixelation == pixelation && s.big == big);
         if !current {
             if !same_video {
                 let mut pending = self.pending.borrow_mut();
@@ -397,10 +409,13 @@ mod tests {
         // A painted cell shows as '▀' (half blocks may draw a flat cell as a
         // coloured space, so count colours, not glyphs).
         let buf = terminal.backend().buffer();
-        buf.content.iter().map(|c| {
-            use ratatui::style::Color;
-            if c.fg != Color::Reset || c.bg != Color::Reset { "▀" } else { " " }
-        }).collect()
+        buf.content
+            .iter()
+            .map(|c| {
+                use ratatui::style::Color;
+                if c.fg != Color::Reset || c.bg != Color::Reset { "▀" } else { " " }
+            })
+            .collect()
     }
 
     #[test]
@@ -432,7 +447,7 @@ mod tests {
 
     #[test]
     fn the_disk_cache_is_trimmed_oldest_first() {
-        let dir = std::env::temp_dir().join(format!("tubevibe-thumbs-{}", std::process::id()));
+        let dir = crate::config::temp_dir("thumbs");
         std::fs::create_dir_all(&dir).unwrap();
         for (i, name) in ["a", "b", "c"].iter().enumerate() {
             let p = dir.join(name);
@@ -470,7 +485,9 @@ mod tests {
         let area = Rect::new(3, 2, 64, 18);
         let t = Instant::now();
         for now in [t, t + SETTLE] {
-            terminal.draw(|f| thumbs.draw_at(f, Some(("a".into(), area)), ThumbMode::Blocks, Pixelation::Off, now)).unwrap();
+            terminal
+                .draw(|f| thumbs.draw_at(f, Some(("a".into(), area)), ThumbMode::Blocks, Pixelation::Off, now))
+                .unwrap();
         }
         let cells = painted(&terminal);
         let (x0, y0) = (cells.iter().map(|c| c.0).min().unwrap(), cells.iter().map(|c| c.1).min().unwrap());
@@ -490,14 +507,19 @@ mod tests {
         let t = Instant::now();
         for area in [Rect::new(2, 1, 60, 30), Rect::new(2, 1, 90, 20)] {
             for now in [t, t + SETTLE] {
-                terminal.draw(|f| thumbs.draw_at(f, Some(("a".into(), area)), ThumbMode::Blocks, Pixelation::Off, now)).unwrap();
+                terminal
+                    .draw(|f| thumbs.draw_at(f, Some(("a".into(), area)), ThumbMode::Blocks, Pixelation::Off, now))
+                    .unwrap();
             }
             let cells = painted(&terminal);
             let (x0, y0) = (cells.iter().map(|c| c.0).min().unwrap(), cells.iter().map(|c| c.1).min().unwrap());
             let (x1, y1) = (cells.iter().map(|c| c.0).max().unwrap(), cells.iter().map(|c| c.1).max().unwrap());
             let (left, right) = (x0 - area.x, area.right() - 1 - x1);
             let (above, below) = (y0 - area.y, area.bottom() - 1 - y1);
-            assert!(left.abs_diff(right) <= 1 && above.abs_diff(below) <= 1, "{area:?}: {left}/{right} {above}/{below}");
+            assert!(
+                left.abs_diff(right) <= 1 && above.abs_diff(below) <= 1,
+                "{area:?}: {left}/{right} {above}/{below}"
+            );
             assert!(above > 0 || left > 0, "{area:?}: there was room to centre in");
         }
     }
@@ -511,7 +533,9 @@ mod tests {
         let area = Rect::new(0, 0, 32, 9);
         let t = Instant::now();
         let mut draw = |id: &str, now: Instant| {
-            terminal.draw(|f| thumbs.draw_at(f, Some((id.into(), area)), ThumbMode::Blocks, Pixelation::Off, now)).unwrap();
+            terminal
+                .draw(|f| thumbs.draw_at(f, Some((id.into(), area)), ThumbMode::Blocks, Pixelation::Off, now))
+                .unwrap();
         };
         draw("a", t);
         draw("a", t + SETTLE);

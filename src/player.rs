@@ -1049,7 +1049,12 @@ mod tests {
 
     #[test]
     fn dubbed_prefers_audio_in_sub_lang() {
-        let config = PlayerConfig { language: Language::Dubbed, prefer_codec: String::new(), sub_lang: "es".into(), ..Default::default() };
+        let config = PlayerConfig {
+            language: Language::Dubbed,
+            prefer_codec: String::new(),
+            sub_lang: "es".into(),
+            ..Default::default()
+        };
         assert_eq!(
             ytdl_format(&config, Mode::Window),
             "bv*[height<=720]+ba[language^=es]/bv*[height<=720]+ba/b[height<=720]/b",

@@ -451,7 +451,9 @@ impl Runtime {
                             .chain(self.state.videos_from_selection(THUMBS_AHEAD).iter().map(|v| v.id.as_str())),
                     );
                 }
-                let target = thumbnails.then(|| ui::thumbnail_area(&self.state, terminal.size().map(Rect::from).unwrap_or_default())).flatten();
+                let target = thumbnails
+                    .then(|| ui::thumbnail_area(&self.state, terminal.size().map(Rect::from).unwrap_or_default()))
+                    .flatten();
                 // A big area (a video tab, a large preview) gets the big picture.
                 if let Some((id, area)) = &target
                     && area.height >= BIG_THUMB_ROWS

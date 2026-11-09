@@ -1,0 +1,72 @@
+---
+description: How tubevibe is tested and versioned — always run from the repo, never outside it.
+alwaysApply: true
+---
+
+# Testing and versions
+
+The project facts live in the README's **Development** section (Branches,
+Versions). This file is the agent-facing framing of them.
+
+## Never test outside the local repo
+
+Toby only ever runs tubevibe from the source tree (`cargo run`, `./target/debug/tubevibe`,
+`./target/release/tubevibe`). He does **not** install it to `~/.local/bin`, `~/.cargo/bin`, or a
+package, and does not test an installed copy.
+
+- Don't suggest installing, copying to `PATH`, or packaging as a testing step.
+- Don't mention a stale binary at `~/.local/bin/tubevibe`, or suggest updating it — testing never uses it.
+- "Self-update could overwrite an installed build" is not a concern here; source builds under
+  `target/` are already dev builds (`update::is_dev_build`, `src/main.rs`).
+
+## Keep builds and test files under `target/`
+
+`/tmp` on this machine is a 7.7 GB tmpfs, and the sandbox points `CARGO_TARGET_DIR` at a
+per-session directory inside it. A debug build is about 4 GB, so a session or two fills `/tmp`
+and unrelated tests start failing with `Disk quota exceeded (os error 122)`.
+
+- Run cargo with `CARGO_TARGET_DIR=$PWD/target` so builds land in the repo, not the tmpfs.
+- The tests write their scratch directories under `target/tmp` themselves
+  (`config::temp_dir`), so the suite does not leak a directory per test into `/tmp`.
+- Do **not** set `TMPDIR` in `.cargo/config.toml`. It applies to every cargo command including
+  rustc, and on a fresh checkout `target/tmp` does not exist yet, so the build dies with
+  `couldn't create a temp dir: No such file or directory`. That broke the MSRV job once.
+- `cargo clean` therefore clears both. Nothing else needs cleaning up.
+
+## Don't "fix" the version
+
+`dev` carries a higher version than the latest release on purpose, so the version on screen
+confirms which build is running. Don't revert the bump, don't flag About reporting no update
+available as a bug, and don't hand-edit `Cargo.lock`. See the README's **Versions** for the
+details.
+
+## Branches
+
+`dev` is the default branch and the only one worked on. `main` accepts changes only through a
+pull request; `dev` is merged into it only to cut a release. Feature PRs target `dev`.
+
+## Before merging or releasing, read every check
+
+The "Protect main" ruleset only *requires* `fmt`, `ci` and `msrv`, so a pull request can merge
+with other checks red. That happened once: `CodeQL` was failing on the release PR and the merge
+went ahead because only the required three were looked at.
+
+- Run `gh pr checks <n>` and read **all** of it, not just the required contexts. Anything not
+  `pass` is a blocker until it is understood.
+- `CodeQL` failing means new code-scanning alerts. Read them with
+  `gh api repos/mortbrew/tubevibe/code-scanning/alerts?state=open` and fix or dismiss each one
+  with a reason; do not merge on top of them.
+- After a release, bump `dev`'s version ahead of the tag that was just cut.
+
+## Ask before anything outward-facing
+
+Anything a third party can see needs Toby's approval **before** it happens, not after. Show the
+exact text or the exact command and wait.
+
+- Public comments on issues and pull requests, and closing, reopening, labeling or assigning
+  them. "Can we post a response to that issue?" is permission to *draft* one, not to publish it.
+- Releases, tags, and pushes to `main`.
+- Force-pushes, branch deletion, and anything that rewrites published history.
+
+Local work — editing files, running tests, committing and pushing to `dev` — does not need this
+approval.

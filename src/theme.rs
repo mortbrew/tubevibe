@@ -444,8 +444,7 @@ mod tests {
 
     #[test]
     fn the_watcher_follows_theme_switches() {
-        let root = std::env::temp_dir().join(format!("tubevibe-theme-test-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = crate::config::temp_dir("theme-watch");
         let themes = root.join("themes");
         for theme in ["gruvbox", "rose-pine"] {
             std::fs::create_dir_all(themes.join(theme)).unwrap();
