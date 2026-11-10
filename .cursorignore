@@ -1,0 +1,26 @@
+# Build output
+target/
+dist/
+
+# Packaging artifacts
+*.deb
+*.tar.gz
+*.AppImage
+packaging/windows/
+
+# Large binaries and screenshots
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4
+*.webm
+
+# Cookies and caches (never index account data)
+**/*cookie*
+**/*cookies*
+**/cache/
+**/.cache/
+crash.log
+latest-release.txt
