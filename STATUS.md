@@ -19,5 +19,6 @@ Ideas for **0.9.1**:
 
 ## Decisions
 
+- Adopted `vision.md` at the repo root.
 - Screenshots use Nerd Font icons.
 - No copying of upstream tubetui code (v0.8.5+ is AGPL; this repo stays MIT / Apache-2.0).

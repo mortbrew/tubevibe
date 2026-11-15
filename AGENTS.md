@@ -51,3 +51,4 @@ The library core is pure: `app::State::update` turns an `Action` into state plus
 - Keep YouTube calls minimal. Reuse a reply already in hand; do not add a request for something the screen does not show.
 - Never copy code from upstream tubetui v0.8.5 or later. That line is AGPL. tubevibe stays on the MIT / Apache-2.0 base it forked.
 - Git: commit on `dev` only. `main` changes only through a pull request, and only one `dev` → `main` pull request is open at a time (a release). Feature work targets `dev`. See `docs/setup.md`.
+- Check vision.md before deciding a change; escalate anything it doesn't clearly cover (Captain decision hold).
